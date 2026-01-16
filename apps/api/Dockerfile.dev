@@ -1,0 +1,39 @@
+FROM node:22-slim
+
+WORKDIR /workspace
+
+# Install pnpm and NestJS CLI globally (only once)
+RUN npm install -g pnpm@latest @nestjs/cli
+
+# Install small utilities used by nest/watch script inside the container and postgresql-client for pg_dump
+RUN apt-get update && apt-get install -y procps postgresql-client --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
+# Copy lockfiles and root package.json for caching
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+
+# Install all workspace dependencies using pnpm (single install for entire workspace)
+# This installs dependencies for both api and web packages
+RUN pnpm install --frozen-lockfile
+
+# Copy rest of repo (source code)
+COPY . /workspace
+
+# Reinstall after copying repo to ensure workspace packages (and types) are available for the apps/api runtime.
+# This avoids cases where a cached layer didn't include certain subpackage changes.
+RUN pnpm install --frozen-lockfile
+
+# Set working directory to the API app
+WORKDIR /workspace/apps/api
+
+EXPOSE 3000
+
+# Keep node_modules for both workspace root and app-local in container to avoid clashes
+# Avoid creating VOLUME for node_modules — when Docker creates a volume it can hide
+# installed node_modules from the image and lead to MODULE_NOT_FOUND errors.
+
+COPY ./apps/api/docker-entrypoint.sh /workspace/apps/api/docker-entrypoint.sh
+RUN chmod +x /workspace/apps/api/docker-entrypoint.sh
+
+CMD ["/workspace/apps/api/docker-entrypoint.sh"]

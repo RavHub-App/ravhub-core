@@ -1,0 +1,25 @@
+FROM node:20-slim
+
+
+WORKDIR /workspace
+
+# Install pnpm globally
+RUN npm install -g pnpm@latest
+
+# Copy lockfiles & minimal package manifests first so images cache layer when deps don't change
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json /workspace/
+COPY apps/web/package.json /workspace/apps/web/package.json
+
+# Install all workspace deps using pnpm (keeps correct hoisted structure for workspace)
+RUN pnpm install --frozen-lockfile --silent --shamefully-hoist
+
+# Copy rest of repository into the image
+COPY . /workspace
+
+WORKDIR /workspace/apps/web
+
+ENV NODE_ENV=development
+EXPOSE 5173
+
+# Start dev server using the local vite in the workspace (hot reload)
+CMD ["pnpm", "run", "dev"]

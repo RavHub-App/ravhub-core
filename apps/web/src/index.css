@@ -1,0 +1,52 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Global CSS custom properties used across the UI */
+:root {
+  /* width of the main sidebar on desktop */
+  --Sidebar-width: 220px;
+  /* helper for slide-in state when opening the sidebar on small screens */
+  --SideNavigation-slideIn: 0;
+
+  /* Primary palette (updated to #566ACD and derived shades) */
+  --joy-palette-primary-50: #f3f5ff;
+  --joy-palette-primary-100: #e8edff;
+  --joy-palette-primary-200: #d0d8ff;
+  --joy-palette-primary-300: #aeb6ff;
+  --joy-palette-primary-400: #8093f4;
+  --joy-palette-primary-500: #566acd; /* base / primary */
+  --joy-palette-primary-600: #3f4db3;
+  --joy-palette-primary-700: #2e398f;
+  --joy-palette-primary-800: #222a6f;
+  --joy-palette-primary-900: #171d4f;
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+body {
+  margin: 0;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica",
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code,
+pre {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New",
+    monospace;
+}

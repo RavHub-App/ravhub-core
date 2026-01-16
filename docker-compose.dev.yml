@@ -1,0 +1,115 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    volumes:
+      # persist storage dir onto host so uploaded artifacts are visible and survive container restarts
+      - ./data/storage:/data/storage
+      # Mount source code for hot reload
+      - ./apps/api/src:/workspace/apps/api/src
+
+
+    ports:
+      - '3000:3000'
+      # Expose ports for Docker registries (5000-5010)
+      - '5000-5100:5000-5100'
+    env_file:
+      - ./apps/api/.env
+    environment:
+      - NODE_ENV=development
+      # API_URL should be http://api:3000 when accessed from other containers within Docker network
+      - API_URL=http://localhost:3000
+      # Public host for rewriting URLs in metadata (e.g. tarballs, NuGet resources)
+      - API_HOST=localhost:5173
+      # Ensure registry challenge 'service' matches the reachable host from other containers
+      - REGISTRY_HOST=localhost
+      # Frontend should call backend on host:3000 (mapped by compose '3000:3000')
+      - VITE_API_URL=http://localhost:3000
+      # License validation (optional in dev, required in prod)
+      - LICENSE_KEY=${LICENSE_KEY:-}
+      - LICENSE_VALIDATION_URL=${LICENSE_VALIDATION_URL:-https://portal.ravhub.app/api/validate}
+      # Point to local license portal for development
+      - LICENSE_PORTAL_URL=http://host.docker.internal:3001
+      # Ensure storage service uses the persisted volume
+      - STORAGE_PATH=/data/storage
+      - DEBUG_DOCKER_PLUGIN=false
+      - DEBUG_PROXY=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # working_dir must point to the package folder so npm scripts run with the right context
+    working_dir: /workspace/apps/api
+    # Use the entrypoint script which handles migrations, seeds, and starting the API
+    command: [ "/workspace/apps/api/docker-entrypoint.sh" ]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./apps/web/src:/workspace/apps/web/src:delegated
+      # Temporarily commented out to fix mount issues
+      # - ./apps/web/index.html:/workspace/apps/web/index.html:ro
+      # - ./apps/web/package.json:/workspace/apps/web/package.json:ro
+      # - ./apps/web/vite.config.ts:/workspace/apps/web/vite.config.ts:ro
+      # Protect node_modules from being overwritten by host mounts
+      # keep node modules inside the image to avoid masking by host folders
+    environment:
+      - NODE_ENV=development
+      # The Vite server runs inside the `web` container — its proxy needs a
+      # target reachable from the container network. Use the `api` service
+      # hostname so the proxy connects to the API container:3000.
+      - VITE_API_URL=http://api:3000
+      # Point to local license portal for development (browser access)
+      - VITE_LICENSE_PORTAL_URL=http://localhost:3001
+    depends_on:
+      - api
+      - postgres
+    # working_dir must point to the package folder so npm scripts run with the right context
+    working_dir: /workspace/apps/web
+    # run the web package dev script from the pnpm workspace (avoids relying on global vite)
+    command: [ "pnpm", "run", "dev" ]
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    env_file:
+      - ./apps/api/.env
+    environment:
+      - POSTGRES_USER=postgres
+    volumes:
+      - postgres-data-dev:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data-dev:
+
+    # Named volumes for node_modules to avoid bind-mounting host paths which
+    # can mask the image's preinstalled dependencies. Using named volumes lets
+    # Docker populate them from the image on first use, ensuring the built
+    # node_modules are available at runtime.
+    # No node_modules named volumes here — node_modules are provided by the image.
