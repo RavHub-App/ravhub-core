@@ -4,7 +4,7 @@
 
 ### Self-Hosted Package Registry for Modern Teams
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Node.js](https://img.shields.io/badge/Node.js-22+-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
@@ -243,7 +243,7 @@ git push origin feature/amazing-feature
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -379,7 +379,7 @@ pnpm --filter api test:e2e
 
 ## 📄 Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
+Este proyecto está licenciado bajo la Licencia GNU Affero General Public License v3.0 - ver el archivo [LICENSE](LICENSE) para más detalles.
 
 ---
 
