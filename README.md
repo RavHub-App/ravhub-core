@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="apps/web/public/logo.png" alt="RavHub Logo" width="200"/>
+
 # 📦 RavHub
 
 ### Self-Hosted Package Registry for Modern Teams
@@ -25,17 +27,17 @@ RavHub is a **self-hosted package registry** that allows you to host, proxy, and
 
 ### ✨ Key Features
 
-| Feature                    | Description                                      |
-| -------------------------- | ------------------------------------------------ |
-| 🐳 **Docker Registry**     | Full OCI-compliant registry for container images |
-| 📦 **NPM Registry**        | Host private npm packages or proxy npmjs.com     |
-| ☕ **Maven Repository**    | Manage Java/Kotlin artifacts with Maven/Gradle   |
-| 🐍 **PyPI Repository**     | Host Python packages or proxy pypi.org           |
-| 🔷 **NuGet Repository**    | .NET package management                          |
-| 🎼 **Composer Repository** | PHP packages for your Laravel/Symfony projects   |
-| ⚓ **Helm Charts**         | Kubernetes Helm chart repository                 |
-| 🦀 **Cargo Registry**      | Rust crates management                           |
-| 📁 **Raw Repository**      | Store any binary artifacts                       |
+| Feature                    | Description                                      | Status  |
+| -------------------------- | ------------------------------------------------ | :-----: |
+| 📦 **NPM Registry**        | Host private npm packages or proxy npmjs.com     |   ✅    |
+| ☕ **Maven Repository**    | Manage Java/Kotlin artifacts with Maven/Gradle   |   ✅    |
+| 🐍 **PyPI Repository**     | Host Python packages or proxy pypi.org           |   ✅    |
+| 🔷 **NuGet Repository**    | .NET package management                          |   ✅    |
+| 🎼 **Composer Repository** | PHP packages for your Laravel/Symfony projects   |   ✅    |
+| 🦀 **Cargo Registry**      | Rust crates management                           |   ✅    |
+| 📁 **Raw Repository**      | Store any binary artifacts                       |   ✅    |
+| � **Docker Registry**      | Full OCI-compliant registry for container images | 🚧 Soon |
+| ⚓ **Helm Charts**         | Kubernetes Helm chart repository                 | 🚧 Soon |
 
 ### 🏗️ Repository Types
 
@@ -261,17 +263,17 @@ RavHub es un **registro de paquetes self-hosted** que te permite alojar, hacer p
 
 ### ✨ Características Principales
 
-| Característica              | Descripción                                               |
-| --------------------------- | --------------------------------------------------------- |
-| 🐳 **Registro Docker**      | Registro compatible con OCI para imágenes de contenedores |
-| 📦 **Registro NPM**         | Aloja paquetes npm privados o haz proxy de npmjs.com      |
-| ☕ **Repositorio Maven**    | Gestiona artefactos Java/Kotlin con Maven/Gradle          |
-| 🐍 **Repositorio PyPI**     | Aloja paquetes Python o haz proxy de pypi.org             |
-| 🔷 **Repositorio NuGet**    | Gestión de paquetes .NET                                  |
-| 🎼 **Repositorio Composer** | Paquetes PHP para tus proyectos Laravel/Symfony           |
-| ⚓ **Charts de Helm**       | Repositorio de charts Helm para Kubernetes                |
-| 🦀 **Registro Cargo**       | Gestión de crates de Rust                                 |
-| 📁 **Repositorio Raw**      | Almacena cualquier artefacto binario                      |
+| Característica              | Descripción                                               |     Estado      |
+| --------------------------- | --------------------------------------------------------- | :-------------: |
+| 📦 **Registro NPM**         | Aloja paquetes npm privados o haz proxy de npmjs.com      |       ✅        |
+| ☕ **Repositorio Maven**    | Gestiona artefactos Java/Kotlin con Maven/Gradle          |       ✅        |
+| 🐍 **Repositorio PyPI**     | Aloja paquetes Python o haz proxy de pypi.org             |       ✅        |
+| 🔷 **Repositorio NuGet**    | Gestión de paquetes .NET                                  |       ✅        |
+| 🎼 **Repositorio Composer** | Paquetes PHP para tus proyectos Laravel/Symfony           |       ✅        |
+| 🦀 **Registro Cargo**       | Gestión de crates de Rust                                 |       ✅        |
+| 📁 **Repositorio Raw**      | Almacena cualquier artefacto binario                      |       ✅        |
+| 🐳 **Registro Docker**      | Registro compatible con OCI para imágenes de contenedores | 🚧 Próximamente |
+| ⚓ **Charts de Helm**       | Repositorio de charts Helm para Kubernetes                | 🚧 Próximamente |
 
 ### 🏗️ Tipos de Repositorio
 
