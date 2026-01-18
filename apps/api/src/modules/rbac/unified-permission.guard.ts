@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   CanActivate,
   Injectable,
@@ -32,7 +46,7 @@ export class UnifiedPermissionGuard implements CanActivate {
     private reflector: Reflector,
     private repoPermissionService?: RepositoryPermissionService,
     private reposService?: ReposService,
-  ) { }
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Get required permissions from @Permissions() decorator
@@ -264,7 +278,8 @@ export class UnifiedPermissionGuard implements CanActivate {
 
     if (!repositoryId.match(/^[0-9a-f-]{36}$/i)) {
       try {
-        const repo = req.repository || (await this.reposService.findOne(repositoryId));
+        const repo =
+          req.repository || (await this.reposService.findOne(repositoryId));
         if (repo) {
           req.repository = repo; // Cache for controller
           repoId = repo.id;

@@ -200,7 +200,7 @@ export async function putManifest(
     const digests: string[] = [];
     const isManifestList =
       manifest.mediaType ===
-      'application/vnd.docker.distribution.manifest.list.v2+json' ||
+        'application/vnd.docker.distribution.manifest.list.v2+json' ||
       manifest.mediaType === 'application/vnd.oci.image.index.v1+json' ||
       Array.isArray(manifest.manifests);
 
@@ -237,7 +237,9 @@ export async function putManifest(
         // However, if we are missing the referenced manifest, the client might fail to pull it later.
         // For now, we warn but proceed for hosted.
         if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-          console.warn(`[PUT MANIFEST] missing referenced item ${d} in hosted repo`);
+          console.warn(
+            `[PUT MANIFEST] missing referenced item ${d} in hosted repo`,
+          );
         continue;
       }
 
@@ -335,18 +337,22 @@ export async function putManifest(
           totalSize += manifest.config.size;
         }
 
-        await indexArtifact(repo, {
-          ok: true,
-          id: `${name}:${tag}`,
-          metadata: {
-            name,
-            version: tag,
-            storageKey: key,
-            digest: manifestDigest,
-            size: totalSize,
-            type: 'docker/manifest',
+        await indexArtifact(
+          repo,
+          {
+            ok: true,
+            id: `${name}:${tag}`,
+            metadata: {
+              name,
+              version: tag,
+              storageKey: key,
+              digest: manifestDigest,
+              size: totalSize,
+              type: 'docker/manifest',
+            },
           },
-        }, userId);
+          userId,
+        );
       } catch (err: any) {
         console.warn('[PUT MANIFEST] Failed to index artifact:', err.message);
       }

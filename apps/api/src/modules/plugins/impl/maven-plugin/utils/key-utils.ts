@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 export function sanitizeSegment(segment) {
   if (!segment) return '';
   return encodeURIComponent(String(segment));
@@ -10,7 +24,9 @@ export function buildKey(...segments) {
     let seg = String(segRaw);
     try {
       seg = decodeURIComponent(seg);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
     const sub = seg.split(/\/|,/).filter(Boolean);
     for (const s of sub) {
       parts.push(sanitizeSegment(s));
@@ -26,7 +42,7 @@ export function tryNormalizeRepoNames(candidate) {
   variants.add(raw);
   try {
     variants.add(decodeURIComponent(raw));
-  } catch (e) { }
+  } catch (e) {}
   if (raw.includes(',')) variants.add(raw.replace(/,/g, '/'));
   if (raw.includes('/')) variants.add(raw.replace(/[ / ]/g, ','));
   return Array.from(variants);
@@ -42,7 +58,9 @@ export function normalizeStorageKey(key) {
     const commaParts = t.split(',').filter(Boolean);
     for (const cp of commaParts) {
       let dec = String(cp);
-      try { dec = decodeURIComponent(dec); } catch (e) { }
+      try {
+        dec = decodeURIComponent(dec);
+      } catch (e) {}
       const finalParts = dec.split('/').filter(Boolean);
       for (const f of finalParts) outParts.push(sanitizeSegment(f));
     }

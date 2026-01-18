@@ -59,7 +59,12 @@ async function getUploadMeta(uuid: string): Promise<any> {
 
 async function setUploadMeta(uuid: string, meta: any): Promise<void> {
   if (redis && redis.isEnabled()) {
-    await redis.set(`docker:plugin:upload-meta:${uuid}`, JSON.stringify(meta), 'EX', 86400);
+    await redis.set(
+      `docker:plugin:upload-meta:${uuid}`,
+      JSON.stringify(meta),
+      'EX',
+      86400,
+    );
   }
 }
 
@@ -68,7 +73,6 @@ async function deleteUploadMeta(uuid: string): Promise<void> {
     await redis.del(`docker:plugin:upload-meta:${uuid}`);
   }
 }
-
 
 // Target tracking for group routing (unchanged logic mostly)
 async function getUploadTarget(uuid: string): Promise<any> {
@@ -114,11 +118,6 @@ export async function initiateUpload(repo: Repository, name: string) {
 
   // GROUP ROUTING (Delegation Logic)
   if ((repo?.type || '').toString().toLowerCase() === 'group') {
-    // ... (Group logic same as original, omitted for brevity but preserved in principle)
-    // For brevity of this rewrite, I assuming group logic delegates to initiateUpload recursively.
-    // To fully robustly support group writes I would need to copy the ~100 lines of group logic.
-    // I WILL INCLUDE IT to avoid breaking group writes.
-
     const cfg = (repo?.config || {}) as any;
     const writePolicy = (cfg.writePolicy || 'none').toString().toLowerCase();
     const members: string[] = Array.isArray(cfg.members) ? cfg.members : [];
@@ -137,7 +136,8 @@ export async function initiateUpload(repo: Repository, name: string) {
     if (writePolicy === 'preferred') {
       // ... (simplified check)
       const preferredWriter = cfg.preferredWriter;
-      if (!preferredWriter) return { ok: false, message: 'preferredWriter missing' };
+      if (!preferredWriter)
+        return { ok: false, message: 'preferredWriter missing' };
       const targetRepo = await getRepo?.(preferredWriter);
       if (!targetRepo) return { ok: false, message: 'target not found' };
 
@@ -151,8 +151,6 @@ export async function initiateUpload(repo: Repository, name: string) {
       }
       return result;
     }
-    // ... (For brevity, assuming 'first' or 'preferred' is most common. 
-    // If I truncate this, group uploads might fail. I'll restore full logic below.)
   }
 
   // Full Group Logic Restore:
@@ -161,7 +159,8 @@ export async function initiateUpload(repo: Repository, name: string) {
     const cfg = (repo?.config || {}) as any;
     const writePolicy = (cfg.writePolicy || 'none').toString().toLowerCase();
 
-    if (writePolicy === 'none') return { ok: false, message: 'group writePolicy is none' };
+    if (writePolicy === 'none')
+      return { ok: false, message: 'group writePolicy is none' };
 
     // ... Implement 'first' policy shorthand
     if (writePolicy === 'first') {
@@ -171,7 +170,11 @@ export async function initiateUpload(repo: Repository, name: string) {
         if (child && child.type === 'hosted') {
           const result = await initiateUpload(child, name);
           if (result.ok) {
-            await setUploadTarget(result.uuid, { groupId: repo.id, targets: [{ repoId: mid, uuid: result.uuid }], policy: writePolicy });
+            await setUploadTarget(result.uuid, {
+              groupId: repo.id,
+              targets: [{ repoId: mid, uuid: result.uuid }],
+              policy: writePolicy,
+            });
             return result;
           }
         }
@@ -216,7 +219,7 @@ export async function appendUpload(
       tracking.targets.map(async (t: any) => {
         const targetRepo = await getRepo?.(t.repoId);
         if (!targetRepo) return { ok: false, message: 'Target repo not found' };
-        // Pass stream only to FIRST target? 
+        // Pass stream only to FIRST target?
         // Streaming to multiple targets is hard (need PassThrough).
         // For now, Group + Streaming Monolithic is edge case.
         // We will pass undefined for stream in group delegation to avoid complexity,
@@ -274,7 +277,7 @@ export async function finalizeUpload(
       tracking.targets.map(async (t: any) => {
         const targetRepo = await getRepo?.(t.repoId);
         if (!targetRepo) return { ok: false, message: 'Target repo not found' };
-        // Pass stream only to FIRST target? 
+        // Pass stream only to FIRST target?
         // Streaming to multiple targets is hard (need PassThrough).
         // For now, Group + Streaming Monolithic is edge case.
         // We will pass undefined for stream in group delegation to avoid complexity,
@@ -319,18 +322,6 @@ export async function finalizeUpload(
   const hash = crypto.createHash('sha256');
   const size = fs.statSync(filePath).size;
 
-  // We need to read the file twice? One for hash, one for storage?
-  // Optimized storage.saveStream can take a stream. 
-  // If we pipe file -> hash AND file -> storage simultaneously?
-  // We can use PassThrough.
-
-  const readStream = fs.createReadStream(filePath);
-
-  // But we need the digest BEFORE saving to key 'blobs/<digest>'?
-  // If client provided digest, we blindly trust it for the KEY, but verify content.
-  // If client didn't provide digest, we MUST read once to calc digest, then read again to stream-save.
-  // Or saves to a temporary key then move? S3 doesn't support move efficiently.
-
   let idToUse = digest;
 
   if (!idToUse) {
@@ -338,7 +329,7 @@ export async function finalizeUpload(
     // Fast path: Just read to calculate hash.
     const hashStream = fs.createReadStream(filePath);
     await new Promise((resolve, reject) => {
-      hashStream.on('data', d => hash.update(d));
+      hashStream.on('data', (d) => hash.update(d));
       hashStream.on('end', () => resolve(null));
       hashStream.on('error', reject);
     });
@@ -347,7 +338,7 @@ export async function finalizeUpload(
   } else {
     // Client provided digest. Verify it while streaming if possible?
     // For now, let's assume client is honest for the Key, and we verify later or async.
-    // But verify check at end: 
+    // But verify check at end:
     // To strictly verify, we should hash while streaming.
   }
 
@@ -362,10 +353,7 @@ export async function finalizeUpload(
       // This will use pipeline internally or adapter implementation
       savedResult = await storage.saveStream(key, uploadStream);
     } else {
-      // Fallback (should not happen in this optimized version if adapter supports it)
-      // Load file to buffer? No, avoid that. 
-      // If adapter doesn't support stream, we are out of luck for memory.
-      // But our FileSystem adapter DOES support stream.
+      // Fallback: load to memory (not recommended for large files)
       const fullBuf = fs.readFileSync(filePath);
       savedResult = await storage.save(key, fullBuf);
     }
@@ -381,10 +369,9 @@ export async function finalizeUpload(
         storageKey: key,
         digest: idToUse,
         size: savedResult.size ?? size,
-        contentHash: savedResult.contentHash // Adapter often returns hash
-      }
+        contentHash: savedResult.contentHash, // Adapter often returns hash
+      },
     };
-
   } catch (err: any) {
     return { ok: false, message: String(err) };
   }

@@ -1,11 +1,31 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { buildKey } from '../utils/key-utils';
 import { PluginContext, Repository } from '../utils/types';
-import { mergeMetadata, createInitialMetadata, NpmMetadata } from '../utils/metadata';
+import {
+  mergeMetadata,
+  createInitialMetadata,
+  NpmMetadata,
+} from '../utils/metadata';
 
 async function streamToBuffer(req: any): Promise<Buffer> {
   const chunks: Buffer[] = [];
   return await new Promise((resolve, reject) => {
-    req.on('data', (c: Buffer) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    req.on('data', (c: Buffer) =>
+      chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)),
+    );
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
@@ -19,7 +39,11 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     return await storage.save(key, data);
   };
 
-  const saveFileStream = async (repo: Repository, path: string, stream: any) => {
+  const saveFileStream = async (
+    repo: Repository,
+    path: string,
+    stream: any,
+  ) => {
     const key = buildKey('npm', repo.id, path);
     if (typeof storage.saveStream === 'function') {
       return await storage.saveStream(key, stream);
@@ -37,7 +61,11 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     return await storage.get(keyName);
   };
 
-  const handlePut = async (repo: Repository, path: string, req: any): Promise<any> => {
+  const handlePut = async (
+    repo: Repository,
+    path: string,
+    req: any,
+  ): Promise<any> => {
     if (repo.type === 'group') {
       const writePolicy = repo.config?.writePolicy || 'none';
       const members = repo.config?.members || [];
@@ -79,7 +107,9 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         const hosted = await getHostedMembers();
         if (hosted.length === 0)
           return { ok: false, message: 'No hosted members' };
-        const results = await Promise.all(hosted.map((m) => handlePut(m, path, req)));
+        const results = await Promise.all(
+          hosted.map((m) => handlePut(m, path, req)),
+        );
         const success = results.find((r) => r.ok);
         if (success) return success;
         return { ok: false, message: 'Mirror write failed on all members' };
@@ -89,14 +119,25 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     }
 
     // Optimization: Stream .tgz files directly to storage (bypass memory buffer)
-    if (path.includes('/-/') && !req.body && (!req.buffer || req.buffer.length === 0)) {
+    if (
+      path.includes('/-/') &&
+      !req.body &&
+      (!req.buffer || req.buffer.length === 0)
+    ) {
       const res = await saveFileStream(repo, path, req);
-      return { ok: res.ok, message: 'File uploaded (stream)', metadata: { ...res, storageKey: res.path } };
+      return {
+        ok: res.ok,
+        message: 'File uploaded (stream)',
+        metadata: { ...res, storageKey: res.path },
+      };
     }
 
     let buffer: Buffer;
     // If body is already parsed by NestJS/Express (e.g. application/json)
-    if (req.body && (Object.keys(req.body).length > 0 || Buffer.isBuffer(req.body))) {
+    if (
+      req.body &&
+      (Object.keys(req.body).length > 0 || Buffer.isBuffer(req.body))
+    ) {
       if (Buffer.isBuffer(req.body)) {
         buffer = req.body;
       } else if (typeof req.body === 'object') {
@@ -124,9 +165,10 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
 
     // If path is a package name, store as package.json inside the directory
     // This avoids conflict with the directory created for attachments (pkg/-/)
-    const metaPath = (!path.includes('/-/') && !path.endsWith('.tgz'))
-      ? `${path}/package.json`
-      : path;
+    const metaPath =
+      !path.includes('/-/') && !path.endsWith('.tgz')
+        ? `${path}/package.json`
+        : path;
 
     const metadata = await getFile(repo, metaPath);
     let current: NpmMetadata | undefined;
@@ -138,31 +180,59 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
       }
     }
 
-    const merged = mergeMetadata(current || createInitialMetadata(incoming.name), incoming);
+    const merged = mergeMetadata(
+      current || createInitialMetadata(incoming.name),
+      incoming,
+    );
 
     // Handle attachments from metadata (if any)
     let lastAttachmentResult: any;
     if (incoming._attachments) {
-      for (const [filename, attachment] of Object.entries(incoming._attachments)) {
+      for (const [filename, attachment] of Object.entries(
+        incoming._attachments,
+      )) {
         const attachmentData = Buffer.from(attachment.data, 'base64');
         const attachmentPath = `${merged.name}/-/${filename}`;
-        lastAttachmentResult = await saveFile(repo, attachmentPath, attachmentData);
+        lastAttachmentResult = await saveFile(
+          repo,
+          attachmentPath,
+          attachmentData,
+        );
       }
     }
 
-    const metaResult = await saveFile(repo, metaPath, Buffer.from(JSON.stringify(merged, null, 2)));
+    const metaResult = await saveFile(
+      repo,
+      metaPath,
+      Buffer.from(JSON.stringify(merged, null, 2)),
+    );
 
-    return {
+    const result = {
       ok: true,
       message: 'Package published',
       metadata: {
         name: merged.name,
-        version: merged['dist-tags']?.latest || Object.keys(merged.versions).pop() || '0.0.0',
+        version:
+          merged['dist-tags']?.latest ||
+          Object.keys(merged.versions).pop() ||
+          '0.0.0',
         storageKey: metaPath,
         size: lastAttachmentResult?.size ?? metaResult.size,
-        contentHash: lastAttachmentResult?.contentHash ?? metaResult.contentHash
-      }
+        contentHash:
+          lastAttachmentResult?.contentHash ?? metaResult.contentHash,
+      },
     };
+
+    // Index artifact in DB for UI listing
+    if (context.indexArtifact) {
+      try {
+        await context.indexArtifact(repo, result);
+      } catch (e) {
+        console.error('[NPM] Failed to index artifact:', e);
+      }
+    }
+
+    return result;
   };
 
   const download = async (repo: Repository, path: string): Promise<any> => {
@@ -189,7 +259,8 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
               return {
                 ok: true,
                 data: res.body,
-                contentType: res.headers?.['content-type'] || 'application/octet-stream'
+                contentType:
+                  res.headers?.['content-type'] || 'application/octet-stream',
               };
             }
           }
@@ -208,7 +279,8 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         return {
           ok: true,
           data: res.body,
-          contentType: res.headers?.['content-type'] || 'application/octet-stream'
+          contentType:
+            res.headers?.['content-type'] || 'application/octet-stream',
         };
       }
       return { ok: false, message: 'Not found in upstream' };
@@ -217,9 +289,10 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     // Hosted logic
     // If path is a package name, read package.json
     const cleanPath = path.split('?')[0].split('#')[0];
-    const storagePath = (!cleanPath.includes('/-/') && !cleanPath.endsWith('.tgz'))
-      ? `${cleanPath}/package.json`
-      : cleanPath;
+    const storagePath =
+      !cleanPath.includes('/-/') && !cleanPath.endsWith('.tgz')
+        ? `${cleanPath}/package.json`
+        : cleanPath;
 
     const data = await getFile(repo, storagePath);
 
@@ -227,7 +300,9 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
       return {
         ok: true,
         data,
-        contentType: path.endsWith('.tgz') ? 'application/octet-stream' : 'application/json'
+        contentType: path.endsWith('.tgz')
+          ? 'application/octet-stream'
+          : 'application/json',
       };
     }
     return { ok: false, message: 'Not found' };
@@ -237,6 +312,6 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     saveFile,
     getFile,
     handlePut,
-    download
+    download,
   };
 }

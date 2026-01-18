@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { PluginContext, Repository } from '../utils/types';
 import { buildKey } from '../utils/key-utils';
 
@@ -17,7 +31,8 @@ export function initPackages(context: PluginContext) {
       groupId = parts.join('/');
     }
 
-    if (!groupId || !artifactId) return { ok: false, message: 'Invalid package name format' };
+    if (!groupId || !artifactId)
+      return { ok: false, message: 'Invalid package name format' };
 
     const groupPath = groupId.replace(/\./g, '/');
     const artifactPath = `${groupPath}/${artifactId}`;
@@ -27,7 +42,12 @@ export function initPackages(context: PluginContext) {
       // Try standard hosted path
       const prefix = buildKey('maven', repoIdOrName, artifactPath);
       // Try proxy cache path
-      const proxyPrefix = buildKey('maven', repoIdOrName, 'proxy', artifactPath);
+      const proxyPrefix = buildKey(
+        'maven',
+        repoIdOrName,
+        'proxy',
+        artifactPath,
+      );
 
       const prefixes = [prefix, proxyPrefix];
 
@@ -51,7 +71,14 @@ export function initPackages(context: PluginContext) {
             if (parts.length > 0) {
               const version = parts[0];
               // Filter out metadata files at the artifact root level
-              if (version && version !== 'maven-metadata.xml' && !version.endsWith('.xml') && !version.endsWith('.asc') && !version.endsWith('.sha1') && !version.endsWith('.md5')) {
+              if (
+                version &&
+                version !== 'maven-metadata.xml' &&
+                !version.endsWith('.xml') &&
+                !version.endsWith('.asc') &&
+                !version.endsWith('.sha1') &&
+                !version.endsWith('.md5')
+              ) {
                 // Check if it looks like a version directory (should contain files)
                 // But storage.list returns files, so if we see version/file, then version is a directory.
                 if (parts.length > 1) {

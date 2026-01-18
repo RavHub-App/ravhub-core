@@ -43,8 +43,15 @@ export function checkTokenAllows(
       // Basic auth without JWT is not supported - must use JWT tokens
       // keep minimal logging for failed auth attempts
       if (process.env.DEBUG_REGISTRY_AUTH === 'true')
-        console.debug('[BASIC AUTH] Rejected - use JWT tokens', { username, action, name });
-      return { allowed: false, reason: 'basic auth not supported, use JWT token' };
+        console.debug('[BASIC AUTH] Rejected - use JWT tokens', {
+          username,
+          action,
+          name,
+        });
+      return {
+        allowed: false,
+        reason: 'basic auth not supported, use JWT token',
+      };
     }
   } else {
     return { allowed: false, reason: 'invalid auth type' };

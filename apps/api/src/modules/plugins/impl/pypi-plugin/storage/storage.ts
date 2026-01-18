@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { buildKey } from '../utils/key-utils';
 import { PluginContext, Repository } from '../utils/types';
 import { proxyFetchWithAuth } from '../../../../../plugins-core/proxy-helper';
@@ -89,7 +103,7 @@ export function initStorage(context: PluginContext) {
 
     try {
       const result = await storage.save(keyId, buf);
-      return {
+      const artifactResult = {
         ok: true,
         id: `${name}:${version}`,
         metadata: {
@@ -100,6 +114,16 @@ export function initStorage(context: PluginContext) {
           contentHash: result.contentHash,
         },
       };
+
+      if (context.indexArtifact) {
+        try {
+          await context.indexArtifact(repo, artifactResult);
+        } catch (e) {
+          console.error('[PyPIPlugin] Failed to index artifact:', e);
+        }
+      }
+
+      return artifactResult;
     } catch (err: any) {
       return { ok: false, message: String(err) };
     }
@@ -139,11 +163,18 @@ export function initStorage(context: PluginContext) {
 
     try {
       let result: any;
-      if (typeof storage.saveStream === 'function' && !req.body && !req.buffer) {
+      if (
+        typeof storage.saveStream === 'function' &&
+        !req.body &&
+        !req.buffer
+      ) {
         result = await storage.saveStream(keyId, req);
       } else {
         let buf: Buffer;
-        if (req.body && (Object.keys(req.body).length > 0 || Buffer.isBuffer(req.body))) {
+        if (
+          req.body &&
+          (Object.keys(req.body).length > 0 || Buffer.isBuffer(req.body))
+        ) {
           if (Buffer.isBuffer(req.body)) {
             buf = req.body;
           } else if (typeof req.body === 'object') {
@@ -162,7 +193,7 @@ export function initStorage(context: PluginContext) {
         result = { ok: true, size: buf.length };
       }
 
-      return {
+      const artifactResult = {
         ok: true,
         id: `${name}:${version}`,
         metadata: {
@@ -173,21 +204,28 @@ export function initStorage(context: PluginContext) {
           contentHash: result.contentHash,
         },
       };
+
+      if (context.indexArtifact) {
+        try {
+          await context.indexArtifact(repo, artifactResult);
+        } catch (e) {
+          console.error('[PyPIPlugin] Failed to index artifact:', e);
+        }
+      }
+
+      return artifactResult;
     } catch (err: any) {
       return { ok: false, message: String(err) };
     }
   };
 
   const download = async (repo: Repository, name: string, version?: string) => {
-    console.log(`[PyPI] Download request: repo=${repo.name}, name=${name}, version=${version}`);
-
     if (!version) {
       // Try to parse from name (path)
       const parts = name.split('/');
       if (parts.length >= 2) {
         version = parts.pop();
         name = parts.join('/');
-        console.log(`[PyPI] Parsed from path: name=${name}, version=${version}`);
       } else {
         return { ok: false, message: 'Version required for download' };
       }
@@ -208,7 +246,6 @@ export function initStorage(context: PluginContext) {
 
     const storageKeyId = buildKey('pypi', repo.id, name, version);
     const storageKeyName = buildKey('pypi', repo.name, name, version);
-    console.log(`[PyPI] Checking storage key: ${storageKeyId} or ${storageKeyName}`);
 
     // Check storage
     try {
@@ -221,34 +258,33 @@ export function initStorage(context: PluginContext) {
         const listId = await storage.list(storageKeyId);
         if (listId && listId.length > 0) {
           // Pick the first file found in the version directory
-          // TODO: If multiple files exist (whl, tar.gz), we might want to prefer one or allow specifying filename in download args
-          console.log(`[PyPI] Found files in version dir: ${listId.join(', ')}`);
-          data = await storage.get(listId[0]);
+          // Prefer .whl (binary) over .tar.gz (source), otherwise take first available
+          const preferred =
+            listId.find((f: string) => f.endsWith('.whl')) ||
+            listId.find((f: string) => f.endsWith('.tar.gz')) ||
+            listId[0];
+          data = await storage.get(preferred);
         }
       }
 
       if (!data) {
         const listName = await storage.list(storageKeyName);
         if (listName && listName.length > 0) {
-          console.log(`[PyPI] Found files in version dir (by name): ${listName.join(', ')}`);
           data = await storage.get(listName[0]);
         }
       }
 
       if (data) {
-        console.log(`[PyPI] Found in storage`);
         return {
           ok: true,
           data,
           contentType: 'application/octet-stream',
         };
       } else {
-        console.log(`[PyPI] Not found in storage`);
       }
     } catch (err) {
-      console.log(`[PyPI] Storage error: ${err}`);
       // ignore
-    }    // Proxy Logic
+    } // Proxy Logic
     if (repo.type === 'proxy') {
       const upstreamUrl = repo.config?.proxyUrl || repo.config?.url;
       if (upstreamUrl) {
@@ -280,8 +316,8 @@ export function initStorage(context: PluginContext) {
                     name,
                     version,
                     storageKey: proxyKey,
-                    size: (res.body as Buffer).length
-                  }
+                    size: (res.body as Buffer).length,
+                  },
                 });
               } catch (e) {
                 // ignore

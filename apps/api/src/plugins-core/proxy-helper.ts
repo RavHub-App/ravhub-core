@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
+import { Logger } from '@nestjs/common';
+
 type BasicAuth = { type: 'basic'; username: string; password?: string };
 type BearerAuth = { type: 'bearer'; token: string };
 type GenericAuth = {
@@ -33,44 +49,43 @@ export type ProxyFetchOptions = {
   stream?: boolean;
   headers?: Record<string, string>;
   maxRetries?: number;
-  // allow callers to override the timeout and stream threshold if desired
   timeoutMs?: number;
   streamThresholdBytes?: number;
-  // if true, return raw Buffer even for JSON/text content
   buffer?: boolean;
 };
 export type ProxyFetchResult<T = unknown> =
   | {
-    ok: true;
-    status: number;
-    headers: Record<string, string>;
-    body?: T;
-    skipCache?: boolean;
-    message?: string;
-  }
+      ok: true;
+      status: number;
+      headers: Record<string, string>;
+      body?: T;
+      skipCache?: boolean;
+      message?: string;
+    }
   | {
-    ok: false;
-    status: number;
-    headers?: Record<string, string>;
-    body?: unknown;
-    skipCache?: boolean;
-    message?: string;
-  }
+      ok: false;
+      status: number;
+      headers?: Record<string, string>;
+      body?: unknown;
+      skipCache?: boolean;
+      message?: string;
+    }
   | {
-    ok: boolean;
-    status: number;
-    headers?: Record<string, string>;
-    stream?: NodeJS.ReadableStream | ReadableStream | null;
-    skipCache?: boolean;
-    message?: string;
-  };
+      ok: boolean;
+      status: number;
+      headers?: Record<string, string>;
+      stream?: NodeJS.ReadableStream | ReadableStream | null;
+      skipCache?: boolean;
+      message?: string;
+    };
 
 export async function proxyFetchWithAuth(
   repo: RepoLike,
   url: string,
   opts?: ProxyFetchOptions,
 ): Promise<ProxyFetchResult> {
-  // configurable timeout (ms)
+  const logger = new Logger('ProxyFetchHelper');
+
   const defaultTimeout = Number(process.env.PROXY_FETCH_TIMEOUT_MS || 30_000);
   const maxRetriesDefault = Number(process.env.PROXY_FETCH_RETRIES || 2);
   try {
@@ -93,7 +108,7 @@ export async function proxyFetchWithAuth(
       'User-Agent': 'RavHub-Proxy/1.0',
       ...(opts?.headers || {}),
     };
-    // Support auth at multiple locations: config.docker.auth, config.auth, or auth
+
     const auth =
       repo?.config?.docker?.auth ?? repo?.config?.auth ?? repo?.auth ?? null;
     if (auth) {
@@ -113,7 +128,6 @@ export async function proxyFetchWithAuth(
       }
     }
 
-    // retry loop with simple exponential backoff
     const retries = opts?.maxRetries ?? maxRetriesDefault;
     let attempt = 0;
     let lastErr: unknown = null;
@@ -126,21 +140,28 @@ export async function proxyFetchWithAuth(
         opts?.timeoutMs ?? defaultTimeout,
       );
       try {
-        // DEBUG: log outgoing request headers to help test diagnosis
-
-        console.log('[PROXY_FETCH_HELPER] fetching', { targetUrl, headers, method: opts?.method || 'GET' });
+        logger.debug(`Fetching ${targetUrl}`, {
+          headers,
+          method: opts?.method || 'GET',
+        });
         const r = await fetch(targetUrl, {
           method: opts?.method || 'GET',
           headers,
           signal: controller.signal,
-          redirect: 'follow', // Explicitly follow redirects
+          redirect: 'follow',
         });
 
-        if (r.status >= 400 && r.url !== targetUrl && headers['Authorization']) {
+        if (
+          r.status >= 400 &&
+          r.url !== targetUrl &&
+          headers['Authorization']
+        ) {
           const originalHost = new URL(targetUrl).hostname;
           const finalHost = new URL(r.url).hostname;
           if (originalHost !== finalHost) {
-            console.warn('[PROXY_FETCH_HELPER] Redirected with Auth header and got error. Retrying without Auth...', { finalHost, status: r.status });
+            logger.warn(
+              `Redirected with Auth header and got error. Retrying without Auth... finalHost=${finalHost}, status=${r.status}`,
+            );
             const headersNoAuth = { ...headers };
             delete headersNoAuth['Authorization'];
             return fetch(r.url, {
@@ -165,7 +186,7 @@ export async function proxyFetchWithAuth(
       } catch (err: unknown) {
         lastErr = err;
         attempt += 1;
-        // exponential backoff (jitter)
+
         const backoff = Math.min(2000 * Math.pow(2, attempt), 30_000);
         await new Promise((r) =>
           setTimeout(r, backoff + Math.floor(Math.random() * 250)),
@@ -174,7 +195,6 @@ export async function proxyFetchWithAuth(
     }
 
     if (!res && lastErr) {
-      // Normalize unknown error to Error when throwing
       if (lastErr instanceof Error) throw lastErr;
       throw new Error(String(lastErr));
     }
@@ -183,13 +203,11 @@ export async function proxyFetchWithAuth(
       return { ok: false, status: 500, body: { message: 'no response' } };
     }
 
-    // Handle Docker/OCI registry authentication challenge (401 with Www-Authenticate header)
     if (res.status === 401) {
       const wwwAuth = res.headers.get('www-authenticate');
-      console.log('[PROXY_FETCH_HELPER] 401 Challenge received', { wwwAuth });
+      logger.debug(`401 Challenge received: ${wwwAuth}`);
       if (wwwAuth && wwwAuth.toLowerCase().startsWith('bearer')) {
         try {
-          // Parse the WWW-Authenticate header to get token service URL
           const realmMatch = wwwAuth.match(/realm="([^"]+)"/);
           const serviceMatch = wwwAuth.match(/service="([^"]+)"/);
           const scopeMatch = wwwAuth.match(/scope="([^"]+)"/);
@@ -200,12 +218,10 @@ export async function proxyFetchWithAuth(
               tokenUrl.searchParams.set('service', serviceMatch[1]);
             if (scopeMatch) tokenUrl.searchParams.set('scope', scopeMatch[1]);
 
-            console.log(
-              '[PROXY_FETCH_HELPER] Registry auth challenge, fetching token from:',
-              tokenUrl.toString(),
+            logger.debug(
+              `Registry auth challenge, fetching token from: ${tokenUrl.toString()}`,
             );
 
-            // Fetch token (anonymous for public images, or with credentials if configured)
             const tokenHeaders: Record<string, string> = {};
             if (
               auth &&
@@ -218,8 +234,9 @@ export async function proxyFetchWithAuth(
               tokenHeaders['Authorization'] = `Basic ${token}`;
             }
 
-            // CONSUME the 401 body to avoid socket hangs
-            try { await res.arrayBuffer(); } catch (e) { }
+            try {
+              await res.arrayBuffer();
+            } catch (e) {}
 
             const tokenRes = await fetch(tokenUrl.toString(), {
               headers: tokenHeaders,
@@ -232,58 +249,54 @@ export async function proxyFetchWithAuth(
               const token = tokenData.token || tokenData.access_token;
 
               if (token) {
-                console.log(
-                  '[PROXY_FETCH_HELPER] Got registry token, retrying original request',
-                );
-                // Retry original request with the token
+                logger.debug('Got registry token, retrying original request');
                 headers['Authorization'] = `Bearer ${token}`;
                 res = await fetchOnce();
-                console.log('[PROXY_FETCH_HELPER] retry result status:', res.status);
+                logger.debug(`retry result status: ${res.status}`);
               }
             } else {
-              console.error('[PROXY_FETCH_HELPER] token fetch failed:', tokenRes.status);
+              logger.error(`token fetch failed: ${tokenRes.status}`);
             }
           }
         } catch (err) {
-          console.error(
-            '[PROXY_FETCH_HELPER] Failed to handle Docker Hub auth:',
-            err,
-          );
-          // Continue with original 401 response
+          logger.error(`Failed to handle Docker Hub auth: ${err}`);
         }
       }
     }
 
     const ct = (res.headers.get('content-type') || '').toLowerCase();
-    // copy response headers back to caller (useful for some proxies)
+
     const respHeaders: Record<string, string> = {};
     res.headers.forEach((v, k) => {
-      // Filter out headers that might conflict with the new response
-      if (!['content-length', 'content-encoding', 'transfer-encoding', 'connection'].includes(k.toLowerCase())) {
+      if (
+        ![
+          'content-length',
+          'content-encoding',
+          'transfer-encoding',
+          'connection',
+        ].includes(k.toLowerCase())
+      ) {
         respHeaders[k] = v;
       }
     });
 
-    // handle common response types: json, text, binary
     let body: unknown;
     const wantStream = Boolean(opts?.stream);
-    // if content-length large and not requesting full body, return stream
+
     const contentLengthHeader = res.headers.get('content-length');
     const contentLength = contentLengthHeader
       ? Number(contentLengthHeader)
       : NaN;
     const streamThreshold = Number(
       opts?.streamThresholdBytes ??
-      Number(process.env.PROXY_FETCH_STREAM_THRESHOLD_BYTES || 1_000_000),
-    ); // default 1MB
+        Number(process.env.PROXY_FETCH_STREAM_THRESHOLD_BYTES || 1_000_000),
+    );
 
     if (
       !Number.isNaN(contentLength) &&
       contentLength > streamThreshold &&
       !wantStream
     ) {
-      // fallback: still read whole body by default, but warn (keep backward compat)
-      // for large content, we can choose to return a stream if caller requested it
     }
 
     if (
@@ -292,11 +305,7 @@ export async function proxyFetchWithAuth(
         contentLength > streamThreshold &&
         opts?.stream)
     ) {
-      // return the underlying Node.js stream where available
-      // convert WHATWG ReadableStream (fetch) to Node Readable if needed
       const bodyStream: NodeJS.ReadableStream | ReadableStream | null =
-        // node-fetch / native fetch web stream
-
         ((res as any).body as NodeJS.ReadableStream | ReadableStream | null) ||
         null;
       return {
@@ -309,14 +318,25 @@ export async function proxyFetchWithAuth(
 
     if (opts?.buffer) {
       const buf = await res.arrayBuffer();
-      return { ok: res.ok, status: res.status, body: Buffer.from(buf), headers: respHeaders, message: (body as any)?.message };
+      return {
+        ok: res.ok,
+        status: res.status,
+        body: Buffer.from(buf),
+        headers: respHeaders,
+        message: (body as any)?.message,
+      };
     }
 
-    const isDocker = (headers['Accept'] || '').includes('application/vnd.docker') || targetUrl.includes('/v2/');
+    const isDocker =
+      (headers['Accept'] || '').includes('application/vnd.docker') ||
+      targetUrl.includes('/v2/');
 
-    if (!isDocker && (ct.includes('application/json') || ct.includes('+json'))) {
+    if (
+      !isDocker &&
+      (ct.includes('application/json') || ct.includes('+json'))
+    ) {
       body = await res.json();
-      console.log('[PROXY_FETCH_HELPER] Parsed JSON body for', targetUrl);
+      logger.debug(`Parsed JSON body for ${targetUrl}`);
     } else if (
       ct.startsWith('text/') ||
       ct.includes('xml') ||
@@ -324,16 +344,25 @@ export async function proxyFetchWithAuth(
       ct.includes('javascript')
     ) {
       body = await res.text();
-      console.log('[PROXY_FETCH_HELPER] Parsed text body for', targetUrl, (body as string).length, 'bytes');
+      logger.debug(
+        `Parsed text body for ${targetUrl} (${(body as string).length} bytes)`,
+      );
     } else {
-      // binary or unknown: return Buffer
-      console.log('[PROXY_FETCH_HELPER] Downloading binary body for', targetUrl, 'type:', ct);
+      logger.debug(`Downloading binary body for ${targetUrl} type: ${ct}`);
       const buf = await res.arrayBuffer();
       body = Buffer.from(buf);
-      console.log('[PROXY_FETCH_HELPER] Downloaded binary body for', targetUrl, (body as Buffer).length, 'bytes');
+      logger.debug(
+        `Downloaded binary body for ${targetUrl} (${(body as Buffer).length} bytes)`,
+      );
     }
 
-    return { ok: res.ok, status: res.status, body, headers: respHeaders, message: (body as any)?.message };
+    return {
+      ok: res.ok,
+      status: res.status,
+      body,
+      headers: respHeaders,
+      message: (body as any)?.message,
+    };
   } catch (err: any) {
     const castErr = err as unknown;
     const msg =

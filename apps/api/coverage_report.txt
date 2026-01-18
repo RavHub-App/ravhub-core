@@ -1,0 +1,818 @@
+
+> api@0.0.1 test:cov /home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api
+> jest --coverage
+
+[31m[Nest] 67367  - [39m18/01/2026, 13:37:49 [31m  ERROR[39m [38;5;3m[UpstreamPingService] [39m[31mUpstream ping failed for test-repo: Network error[39m
+PASS test/unit/modules/plugins/upstream-ping.service.spec.ts
+PASS test/unit/modules/plugins/proxy-cache.service.spec.ts
+PASS test/unit/modules/storage/storage.service.spec.ts
+[95m[Nest] 67367  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[UpstreamPingService] [39m[95mUpstream ping for test-repo: OK (200)[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67326  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ProxyCacheService] [39m[32mCleared 2 proxy cache entries for repository repo1[39m
+[32m[Nest] 67326  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ProxyCacheService] [39m[32mCleared 2 proxy cache entries for repository repo1[39m
+[95m[Nest] 67367  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[UpstreamPingService] [39m[95mUpstream ping for test-repo: OK (200)[39m
+[32m[Nest] 67326  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ProxyCacheService] [39m[32mCleared all 2 proxy cache entries[39m
+[95m[Nest] 67367  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[UpstreamPingService] [39m[95mUpstream ping for test-repo: OK (200)[39m
+[32m[Nest] 67326  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ProxyCacheService] [39m[32mCleared all 3 proxy cache entries[39m
+[95m[Nest] 67367  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[UpstreamPingService] [39m[95mUpstream ping for test-repo: OK (200)[39m
+[95m[Nest] 67326  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[ProxyCacheService] [39m[95mCleaning proxy cache for test-repo: removing files older than 1 days (cacheEnabled: true)[39m
+[32m[Nest] 67326  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ProxyCacheService] [39m[32mCleaned 1 cached files for proxy repository test-repo[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[95m[Nest] 67326  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[ProxyCacheService] [39m[95mCleaning proxy cache for docker-repo: removing files older than 1 days (cacheEnabled: true)[39m
+[32m[Nest] 67326  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ProxyCacheService] [39m[32mCleaned 2 cached files for proxy repository docker-repo[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mMigrating prefix from oldId to newId[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mFound 2 files to migrate for prefix[39m
+[95m[Nest] 67368  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[StorageService] [39m[95mMigrated (buffer) file1.bin[39m
+[95m[Nest] 67368  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[StorageService] [39m[95mMigrated (buffer) file2.bin[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mMigration of prefix completed.[39m
+[32m[Nest] 67368  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+PASS test/unit/modules/rbac/permissions.guard.spec.ts
+PASS test/unit/plugins.conformance.spec.ts
+PASS test/unit/modules/jobs/job.service.spec.ts
+PASS test/unit/modules/rbac/permission.service.spec.ts
+[95m[Nest] 67311  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[PermissionsGuard] [39m[95mPermissionsGuard roles from header: superadmin[39m
+[95m[Nest] 67311  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[PermissionsGuard] [39m[95mPermissionsGuard fast-path perms=*[39m
+[95m[Nest] 67311  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[PermissionsGuard] [39m[95mPermissionsGuard roles from header: reader[39m
+[95m[Nest] 67311  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[PermissionsGuard] [39m[95mPermissionsGuard fast-path perms=repo.read[39m
+[32m[Nest] 67229  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[StorageService] [39m[32mUsing Filesystem Storage Adapter as default[39m
+[32m[Nest] 67339  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[AuditService] [39m[32mDeleted 5 audit logs older than 30 days[39m
+PASS test/unit/modules/audit/audit.service.spec.ts
+PASS test/unit/storage/storage.service.spec.ts
+PASS test/unit/modules/auth/auth.service.spec.ts
+PASS test/unit/plugins.upstream.spec.ts
+PASS test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts
+  ● Console
+
+    console.error
+      [NPM] Invalid JSON metadata SyntaxError: Unexpected token 'i', "invalid json" is not valid JSON
+          at JSON.parse (<anonymous>)
+          at Object.parse [as handlePut] (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/src/modules/plugins/impl/npm-plugin/storage/storage.ts:119:23)
+          at Object.<anonymous> (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts:118:49)
+          at Promise.finally.completed (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+          at _callCircusTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at _runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+          at /home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at run (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+          at runAndTransformResultsToJestFormat (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+          at jestAdapter (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/runner.js:101:19)
+          at runTestInternal (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:275:16)
+          at runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:343:7)
+          at Object.worker (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:497:12)
+
+      119 |       incoming = JSON.parse(buffer.toString());
+      120 |     } catch (e) {
+    > 121 |       console.error('[NPM] Invalid JSON metadata', e);
+          |               ^
+      122 |       return { ok: false, message: 'Invalid JSON' };
+      123 |     }
+      124 |
+
+      at Object.error [as handlePut] (src/modules/plugins/impl/npm-plugin/storage/storage.ts:121:15)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts:118:49)
+
+    console.error
+      [NPM] Failed to index artifact: Error: fail
+          at Object.<anonymous> (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts:187:69)
+          at Promise.finally.completed (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+          at _callCircusTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+          at _runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+          at /home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at run (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+          at runAndTransformResultsToJestFormat (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+          at jestAdapter (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/runner.js:101:19)
+          at runTestInternal (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:275:16)
+          at runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:343:7)
+          at Object.worker (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:497:12)
+
+      170 |         await context.indexArtifact(repo, result);
+      171 |       } catch (e) {
+    > 172 |         console.error('[NPM] Failed to index artifact:', e);
+          |                 ^
+      173 |       }
+      174 |     }
+      175 |
+
+      at Object.error [as handlePut] (src/modules/plugins/impl/npm-plugin/storage/storage.ts:172:17)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts:189:28)
+
+PASS test/unit/modules/monitor/monitor.service.spec.ts
+PASS test/unit/modules/cleanup/cleanup.controller.spec.ts
+PASS test/unit/modules/users/users.service.spec.ts
+PASS test/unit/modules/plugins/impl/helm-plugin/storage/storage.spec.ts
+PASS test/unit/modules/plugins/impl/docker-plugin/storage/download.spec.ts
+  ● Console
+
+    console.warn
+      [PROXY REVALIDATE TAG FAILED - download] { status: 500, message: undefined }
+
+      76 |           // If proxy fetch failed with a definitive error (not network issue), return the error
+      77 |           if (fetched && !fetched.ok && fetched.status) {
+    > 78 |             console.warn('[PROXY REVALIDATE TAG FAILED - download]', {
+         |                     ^
+      79 |               status: fetched.status,
+      80 |               message: fetched.message,
+      81 |             });
+
+      at warn (src/modules/plugins/impl/docker-plugin/storage/download.ts:78:21)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/docker-plugin/storage/download.spec.ts:64:28)
+
+    console.warn
+      [PROXY REVALIDATE TAG FAILED - download] { status: 404, message: 'gone' }
+
+      76 |           // If proxy fetch failed with a definitive error (not network issue), return the error
+      77 |           if (fetched && !fetched.ok && fetched.status) {
+    > 78 |             console.warn('[PROXY REVALIDATE TAG FAILED - download]', {
+         |                     ^
+      79 |               status: fetched.status,
+      80 |               message: fetched.message,
+      81 |             });
+
+      at warn (src/modules/plugins/impl/docker-plugin/storage/download.ts:78:21)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/docker-plugin/storage/download.spec.ts:73:28)
+
+    console.warn
+      [PROXY REVALIDATE TAG ERROR] crash
+
+      177 |       }
+      178 |     } catch (e: any) {
+    > 179 |       console.warn('[PROXY REVALIDATE TAG ERROR]', e.message);
+          |               ^
+      180 |       // ignore and fallback to cache below
+      181 |     }
+      182 |   }
+
+      at warn (src/modules/plugins/impl/docker-plugin/storage/download.ts:179:15)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/docker-plugin/storage/download.spec.ts:109:28)
+
+    console.warn
+      [PROXY FETCH BLOB ERROR] crash
+
+      282 |         }
+      283 |       } catch (err: any) {
+    > 284 |         console.warn('[PROXY FETCH BLOB ERROR]', err.message);
+          |                 ^
+      285 |         // continue to return not found below
+      286 |       }
+      287 |     }
+
+      at warn (src/modules/plugins/impl/docker-plugin/storage/download.ts:284:17)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/docker-plugin/storage/download.spec.ts:109:28)
+
+[95m[Nest] 67292  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[AuthService] [39m[95mJWT verify failed: fail[39m
+[33m[Nest] 67326  - [39m18/01/2026, 13:37:49 [33m   WARN[39m [38;5;3m[ArtifactIndexService] [39m[33mDB not ready, queuing artifact for later indexing[39m
+[95m[Nest] 67326  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[ArtifactIndexService] [39m[95mNo metadata to index[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mExecuting cleanup policy: Policy 1 (p1)[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mDeleted artifact: undefined/undefined[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mExecuting cleanup policy: Policy 1 (p1)[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mDeleted artifact: r1/undefined[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mExecuting cleanup policy: Policy 1 (p1)[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mDeleted artifact: undefined/undefined[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mDeleted artifact: undefined/undefined[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32m✓ Created cleanup job for policy: test[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mProcessing cleanup job j1 (test)[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mExecuting cleanup policy: undefined (p1)[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32m✓ Completed cleanup job j1: deleted 0 items, freed 0.00 MB[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mExecuting cleanup policy: docker (p1)[39m
+[33m[Nest] 67290  - [39m18/01/2026, 13:37:49 [33m   WARN[39m [38;5;3m[CleanupService] [39m[33mCleanup policy 'docker' (target: docker-blobs) skipped. Native Docker Garbage Collection is not yet implemented for the embedded registry. The legacy 'docker exec' implementation was removed as it is incompatible with HA/Kubernetes environments.[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mExecuting cleanup policy: undefined (p1)[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mDeleted artifact: undefined/dev[39m
+[32m[Nest] 67290  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[CleanupService] [39m[32mExecuting cleanup policy: undefined (p1)[39m
+PASS test/unit/modules/plugins/impl/docker-plugin/storage/manifest.spec.ts
+  ● Console
+
+    console.warn
+      [PUT MANIFEST] Failed to index artifact: index-fail
+
+      349 |         }, userId);
+      350 |       } catch (err: any) {
+    > 351 |         console.warn('[PUT MANIFEST] Failed to index artifact:', err.message);
+          |                 ^
+      352 |       }
+      353 |     }
+      354 |
+
+      at warn (src/modules/plugins/impl/docker-plugin/storage/manifest.ts:351:17)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/docker-plugin/storage/manifest.spec.ts:86:28)
+
+PASS test/unit/modules/plugins/artifact-index.service.spec.ts
+PASS test/unit/modules/redis/redlock.service.spec.ts
+PASS test/unit/modules/plugins/impl/nuget-plugin/storage/storage.spec.ts
+  ● Console
+
+    console.error
+      [NuGetPlugin] Failed to index artifact: Error: index-fail
+          at Object.<anonymous> (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/test/unit/modules/plugins/impl/nuget-plugin/storage/storage.spec.ts:294:53)
+          at Promise.finally.completed (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+          at _callCircusTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at _runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+          at /home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at run (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+          at runAndTransformResultsToJestFormat (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+          at jestAdapter (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/runner.js:101:19)
+          at runTestInternal (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:275:16)
+          at runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:343:7)
+          at Object.worker (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:497:12)
+
+      595 |           await context.indexArtifact(repo, artifactResult);
+      596 |         } catch (je) {
+    > 597 |           console.error('[NuGetPlugin] Failed to index artifact:', je);
+          |                   ^
+      598 |         }
+      599 |       }
+      600 |
+
+      at Object.error [as handlePut] (src/modules/plugins/impl/nuget-plugin/storage/storage.ts:597:19)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/nuget-plugin/storage/storage.spec.ts:298:28)
+
+[31m[Nest] 67317  - [39m18/01/2026, 13:38:19 [31m  ERROR[39m [38;5;3m[ProxyCacheJobService] [39m[31mFailed to process proxy cache cleanup job 1: Cannot read properties of undefined (reading 'catch')[39m
+PASS test/unit/modules/plugins/impl/docker-plugin/packages/list.spec.ts
+  ● Console
+
+    console.warn
+      [LIST PACKAGES GROUP] WARNING: Group undefined has no members configured
+
+      37 |
+      38 |       if (members.length === 0) {
+    > 39 |         console.warn(
+         |                 ^
+      40 |           `[LIST PACKAGES GROUP] WARNING: Group ${repo.name} has no members configured`,
+      41 |         );
+      42 |         return { ok: true, packages: [] };
+
+      at warn (src/modules/plugins/impl/docker-plugin/packages/list.ts:39:17)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/docker-plugin/packages/list.spec.ts:78:46)
+
+PASS test/unit/modules/plugins/impl/maven-plugin/storage/storage.spec.ts
+PASS test/unit/modules/cleanup/cleanup.service.spec.ts
+PASS test/unit/modules/plugins/impl/pypi-plugin/storage/storage.spec.ts
+PASS test/unit/modules/plugins/impl/composer-plugin/proxy/fetch.spec.ts
+  ● Console
+
+    console.error
+      [ComposerPlugin] Error processing metadata: Error: Processing error
+          at Object.<anonymous> (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/test/unit/modules/plugins/impl/composer-plugin/proxy/fetch.spec.ts:182:62)
+          at Promise.finally.completed (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+          at _callCircusTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at _runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+          at /home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at run (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+          at runAndTransformResultsToJestFormat (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+          at jestAdapter (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/runner.js:101:19)
+          at runTestInternal (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:275:16)
+          at runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:343:7)
+          at Object.worker (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:497:12)
+
+      125 |               };
+      126 |             } catch (e) {
+    > 127 |               console.error('[ComposerPlugin] Error processing metadata:', e);
+          |                       ^
+      128 |             }
+      129 |           }
+      130 |         } else if (response.body && context.storage) {
+
+      at Object.error [as proxyFetch] (src/modules/plugins/impl/composer-plugin/proxy/fetch.ts:127:23)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/composer-plugin/proxy/fetch.spec.ts:188:28)
+
+    console.error
+      [ComposerPlugin] Failed to process cached metadata: Error: Processing error
+          at Object.<anonymous> (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/test/unit/modules/plugins/impl/composer-plugin/proxy/fetch.spec.ts:182:62)
+          at Promise.finally.completed (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+          at _callCircusTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at _runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+          at /home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at run (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+          at runAndTransformResultsToJestFormat (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+          at jestAdapter (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/runner.js:101:19)
+          at runTestInternal (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:275:16)
+          at runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:343:7)
+          at Object.worker (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:497:12)
+
+      23 |             body = Buffer.from(processed);
+      24 |           } catch (e) {
+    > 25 |             console.error('[ComposerPlugin] Failed to process cached metadata:', e);
+         |                     ^
+      26 |             // Fallback to cached raw if processing fails
+      27 |           }
+      28 |         }
+
+      at Object.error [as proxyFetch] (src/modules/plugins/impl/composer-plugin/proxy/fetch.ts:25:21)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/composer-plugin/proxy/fetch.spec.ts:198:28)
+
+PASS test/unit/modules/plugins/impl/docker-plugin/storage/upload.spec.ts
+PASS test/unit/modules/plugins/impl/composer-plugin/storage/storage.spec.ts
+PASS test/unit/plugins/impl/docker-plugin/auth/auth.spec.ts
+  ● Console
+
+    console.error
+      [DOCKER PLUGIN] JWT_SECRET not configured
+
+      48 |
+      49 |     if (!secret) {
+    > 50 |       console.error('[DOCKER PLUGIN] JWT_SECRET not configured');
+         |               ^
+      51 |       return { ok: false, message: 'server misconfigured' };
+      52 |     }
+      53 |
+
+      at error (src/modules/plugins/impl/docker-plugin/auth/auth.ts:50:15)
+      at Object.<anonymous> (test/unit/plugins/impl/docker-plugin/auth/auth.spec.ts:44:40)
+
+PASS test/unit/modules/plugins/impl/helm-plugin/proxy/fetch.spec.ts
+  ● Console
+
+    console.warn
+      [HELM_PROXY] Revalidation error. Serving cache as fallback.
+
+      48 |                 }
+      49 |               } catch (revalErr) {
+    > 50 |                 console.warn(`[HELM_PROXY] Revalidation error. Serving cache as fallback.`);
+         |                         ^
+      51 |                 return {
+      52 |                   ok: true,
+      53 |                   status: 200,
+
+      at Object.warn [as proxyFetch] (src/modules/plugins/impl/helm-plugin/proxy/fetch.ts:50:25)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/helm-plugin/proxy/fetch.spec.ts:82:28)
+
+    console.error
+      Error rewriting index.yaml YAMLException {
+        name: 'YAMLException',
+        reason: 'bad indentation of a mapping entry',
+        mark: {
+          name: null,
+          buffer: 'invalid: yaml: [\n',
+          position: 13,
+          line: 0,
+          column: 13,
+          snippet: ' 1 | invalid: yaml: [\n------------------^'
+        },
+        message: 'bad indentation of a mapping entry (1:14)\n' +
+          '\n' +
+          ' 1 | invalid: yaml: [\n' +
+          '------------------^'
+      }
+
+      193 |           }
+      194 |         } catch (e) {
+    > 195 |           console.error('Error rewriting index.yaml', e);
+          |                   ^
+      196 |         }
+      197 |       }
+      198 |
+
+      at Object.error [as proxyFetch] (src/modules/plugins/impl/helm-plugin/proxy/fetch.ts:195:19)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/helm-plugin/proxy/fetch.spec.ts:223:28)
+
+PASS test/unit/modules/license/license.guard.spec.ts
+PASS test/unit/modules/plugins/proxy-cache-job.service.spec.ts
+PASS test/unit/plugins/impl/docker-plugin/storage/manifest.spec.ts
+PASS test/unit/modules/plugins/impl/npm-plugin/proxy/metadata.spec.ts
+  ● Console
+
+    console.error
+      [NPM] Failed to parse metadata JSON: SyntaxError: Unexpected token 'o', "not valid json" is not valid JSON
+          at JSON.parse (<anonymous>)
+          at Object.parse [as processMetadata] (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/src/modules/plugins/impl/npm-plugin/proxy/metadata.ts:16:29)
+          at Object.<anonymous> (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/test/unit/modules/plugins/impl/npm-plugin/proxy/metadata.spec.ts:111:44)
+          at Promise.finally.completed (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+          at _callCircusTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+          at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          at _runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+          at /home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+          at run (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+          at runAndTransformResultsToJestFormat (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+          at jestAdapter (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/runner.js:101:19)
+          at runTestInternal (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:275:16)
+          at runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:343:7)
+          at Object.worker (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/testWorker.js:497:12)
+
+      19 |             }
+      20 |         } catch (e) {
+    > 21 |             console.error('[NPM] Failed to parse metadata JSON:', e);
+         |                     ^
+      22 |             return content;
+      23 |         }
+      24 |
+
+      at Object.error [as processMetadata] (src/modules/plugins/impl/npm-plugin/proxy/metadata.ts:21:21)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/npm-plugin/proxy/metadata.spec.ts:111:44)
+
+PASS test/unit/modules/auth/auth.controller.spec.ts
+PASS test/unit/plugins/impl/helm-plugin/packages/list.spec.ts
+PASS test/unit/modules/plugins/impl/docker-plugin/auth/auth.spec.ts
+  ● Console
+
+    console.error
+      [DOCKER PLUGIN] JWT_SECRET not configured
+
+      48 |
+      49 |     if (!secret) {
+    > 50 |       console.error('[DOCKER PLUGIN] JWT_SECRET not configured');
+         |               ^
+      51 |       return { ok: false, message: 'server misconfigured' };
+      52 |     }
+      53 |
+
+      at error (src/modules/plugins/impl/docker-plugin/auth/auth.ts:50:15)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/docker-plugin/auth/auth.spec.ts:122:47)
+
+PASS test/unit/plugins/impl/helm-plugin/index.spec.ts
+PASS test/unit/modules/plugins/impl/npm-plugin/npm.plugin.spec.ts
+PASS test/unit/modules/plugins/impl/docker-plugin/docker.plugin.spec.ts
+PASS test/unit/modules/plugins/impl/maven-plugin/utils/maven.spec.ts
+PASS test/unit/modules/plugins/impl/npm-plugin/proxy/fetch.spec.ts
+  ● Console
+
+    console.warn
+      [NPM] Revalidation failed (status 500). Serving cache as fallback.
+
+      55 |               }
+      56 |             } else {
+    > 57 |               console.warn(`[NPM] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`);
+         |                       ^
+      58 |               return {
+      59 |                 ok: true,
+      60 |                 status: 200,
+
+      at Object.warn [as proxyFetch] (src/modules/plugins/impl/npm-plugin/proxy/fetch.ts:57:23)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/npm-plugin/proxy/fetch.spec.ts:125:28)
+
+PASS test/unit/modules/plugins/impl/npm-plugin/utils/key-utils.spec.ts
+PASS test/unit/modules/plugins/impl/nuget-plugin/utils/key-utils.spec.ts
+PASS test/unit/plugins/impl/composer-plugin/storage/storage.spec.ts
+PASS test/unit/modules/plugins/impl/maven-plugin/proxy/fetch.spec.ts
+PASS test/unit/modules/plugins/impl/docker-plugin/registry/server.spec.ts
+PASS test/unit/modules/plugins/impl/helm-plugin/utils/key-utils.spec.ts
+PASS test/unit/modules/plugins/impl/docker-plugin/utils/key-utils.spec.ts
+PASS test/unit/modules/plugins/impl/docker-plugin/utils/helpers.spec.ts
+PASS test/unit/modules/plugins/impl/maven-plugin/auth/auth.spec.ts
+PASS test/unit/plugins/impl/composer-plugin/packages/list.spec.ts
+PASS test/unit/modules/plugins/impl/composer-plugin/packages/list.spec.ts
+PASS test/unit/modules/license/license.service.spec.ts
+PASS test/unit/plugins/impl/docker-plugin/storage/upload.spec.ts
+PASS test/unit/storage/key-utils.spec.ts
+PASS test/unit/plugins/impl/composer-plugin/proxy/metadata.spec.ts
+PASS test/unit/plugins/impl/composer-plugin/utils/key-utils.spec.ts
+PASS test/unit/plugins/impl/docker-plugin/packages/list.spec.ts
+PASS test/unit/modules/plugins/impl/composer-plugin/utils/key-utils.spec.ts
+PASS test/unit/modules/plugins/impl/npm-plugin/packages/list.spec.ts
+PASS test/unit/plugins/impl/helm-plugin/utils/key-utils.spec.ts
+PASS test/unit/modules/plugins/impl/helm-plugin/packages/list.spec.ts
+PASS test/unit/modules/plugins/impl/pypi-plugin/utils/key-utils.spec.ts
+PASS test/unit/modules/plugins/impl/composer-plugin/auth/auth.spec.ts
+PASS test/unit/modules/plugins/impl/helm-plugin/auth/auth.spec.ts
+PASS test/unit/plugins/impl/docker-plugin/index.spec.ts
+PASS test/unit/modules/plugins/impl/maven-plugin/packages/list.spec.ts
+PASS test/unit/plugins/impl/composer-plugin/auth/auth.spec.ts
+PASS test/unit/modules/plugins/impl/npm-plugin/auth/auth.spec.ts
+PASS test/unit/plugins/impl/docker-plugin/utils/helpers.spec.ts
+PASS test/unit/modules/plugins/impl/docker-plugin/proxy/fetch.spec.ts
+PASS test/unit/plugins/impl/helm-plugin/auth/auth.spec.ts
+PASS test/unit/modules/plugins/impl/maven-plugin/utils/key-utils.spec.ts
+PASS test/unit/modules/plugins/impl/composer-plugin/proxy/metadata.spec.ts
+PASS test/unit/modules/license/features.spec.ts
+PASS test/unit/modules/plugins/impl/composer-plugin/composer.plugin.spec.ts
+PASS test/unit/modules/health/health.controller.spec.ts
+[95m[Nest] 67242  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[PluginDelegatorService] [39m[95mno plugin loaded for manager unknown[39m
+[33m[Nest] 67242  - [39m18/01/2026, 13:37:49 [33m   WARN[39m [38;5;3m[PluginDelegatorService] [39m[33mFeature enterprise requested for repository test-repo but is disabled by license[39m
+[95m[Nest] 67242  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[PluginDelegatorService] [39m[95mno plugin loaded for manager npm[39m
+[95m[Nest] 67242  - [39m18/01/2026, 13:37:49 [95m  DEBUG[39m [38;5;3m[PluginDelegatorService] [39m[95mno plugin loaded for manager npm[39m
+[32m[Nest] 67275  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[PluginsService] [39m[32m🔄 Reloading plugins...[39m
+PASS test/unit/modules/plugins/plugin-manager.service.spec.ts
+PASS test/unit/modules/plugins/plugins.service.spec.ts
+PASS test/unit/modules/plugins/plugin-delegator.service.spec.ts
+PASS test/unit/modules/plugins/plugins.controller.spec.ts
+[32m[Nest] 67262  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ReposService] [39m[32mRestarting 1 Docker registries...[39m
+[32m[Nest] 67262  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ReposService] [39m[32mInitial artifact scan completed. Found 0 new artifacts.[39m
+[32m[Nest] 67262  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ReposService] [39m[32mDeleting 1 artifacts for repository my-repo[39m
+[32m[Nest] 67262  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ReposService] [39m[32mDeleting storage files for repository my-repo (prefix: npm/my-repo)[39m
+[32m[Nest] 67262  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ReposService] [39m[32mFound 1 files to delete in npm/my-repo[39m
+[32m[Nest] 67262  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ReposService] [39m[32mDeleting storage files for repository my-repo (prefix: npm/r1)[39m
+[32m[Nest] 67262  - [39m18/01/2026, 13:37:49 [32m    LOG[39m [38;5;3m[ReposService] [39m[32mFound 1 files to delete in npm/r1[39m
+PASS test/unit/app.controller.spec.ts
+PASS test/unit/modules/repos/repos.service.spec.ts
+PASS test/unit/modules/repos/docker.controller.spec.ts
+PASS test/unit/modules/repos/repos.controller.spec.ts
+---------------------------------------------------|---------|----------|---------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+File                                               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                                                                                                                                                                                        
+---------------------------------------------------|---------|----------|---------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+All files                                          |   50.33 |    40.72 |   45.32 |   51.25 |                                                                                                                                                                                                                                                                                                          
+ src                                               |   27.05 |    33.89 |      20 |   25.92 |                                                                                                                                                                                                                                                                                                          
+  app.controller.ts                                |     100 |     62.5 |     100 |     100 | 6-9                                                                                                                                                                                                                                                                                                      
+  app.module.ts                                    |       0 |        0 |       0 |       0 | 1-61                                                                                                                                                                                                                                                                                                     
+  app.service.ts                                   |     100 |     62.5 |     100 |     100 | 21-32                                                                                                                                                                                                                                                                                                    
+  data-source.ts                                   |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  main.ts                                          |       0 |        0 |       0 |       0 | 1-43                                                                                                                                                                                                                                                                                                     
+  run-migrations.ts                                |       0 |        0 |       0 |       0 | 1-160                                                                                                                                                                                                                                                                                                    
+ src/entities                                      |   93.77 |    71.02 |       0 |   92.95 |                                                                                                                                                                                                                                                                                                          
+  artifact.entity.ts                               |   94.73 |    68.75 |       0 |   94.11 | 19                                                                                                                                                                                                                                                                                                       
+  audit-log.entity.ts                              |   94.44 |    66.66 |       0 |   93.75 | 19                                                                                                                                                                                                                                                                                                       
+  backup-schedule.entity.ts                        |   91.66 |       75 |       0 |    90.9 | 43,70                                                                                                                                                                                                                                                                                                    
+  backup.entity.ts                                 |   92.59 |       75 |       0 |      92 | 42,85                                                                                                                                                                                                                                                                                                    
+  cleanup-policy.entity.ts                         |      96 |       75 |       0 |   95.65 | 72                                                                                                                                                                                                                                                                                                       
+  index.ts                                         |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  job.entity.ts                                    |     100 |       75 |     100 |     100 | 47-62                                                                                                                                                                                                                                                                                                    
+  license.entity.ts                                |     100 |    66.66 |     100 |     100 | 24-48                                                                                                                                                                                                                                                                                                    
+  metric.entity.ts                                 |     100 |       75 |     100 |     100 | 20                                                                                                                                                                                                                                                                                                       
+  permission.entity.ts                             |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  plugin.entity.ts                                 |     100 |       50 |     100 |     100 | 15                                                                                                                                                                                                                                                                                                       
+  repository-permission.entity.ts                  |   84.21 |       75 |       0 |   82.35 | 20,28,35                                                                                                                                                                                                                                                                                                 
+  repository.entity.ts                             |    92.3 |       50 |       0 |    90.9 | 24                                                                                                                                                                                                                                                                                                       
+  role.entity.ts                                   |   85.71 |      100 |       0 |   83.33 | 17,25                                                                                                                                                                                                                                                                                                    
+  storage-config.entity.ts                         |   85.71 |    66.66 |       0 |   83.33 | 29,32                                                                                                                                                                                                                                                                                                    
+  user.entity.ts                                   |    90.9 |      100 |       0 |   88.88 | 24                                                                                                                                                                                                                                                                                                       
+ src/migrations                                    |   13.33 |        0 |       0 |   13.33 |                                                                                                                                                                                                                                                                                                          
+  1701163200000-InitialMigration.ts                |    7.14 |      100 |       0 |    7.14 | 5-67                                                                                                                                                                                                                                                                                                     
+  1701163300000-AddManagerToRepositories.ts        |   33.33 |      100 |       0 |   33.33 | 5-11                                                                                                                                                                                                                                                                                                     
+  1701163400000-add-permissions.ts                 |      20 |      100 |       0 |      20 | 5-26                                                                                                                                                                                                                                                                                                     
+  1701163500000-add-user-passwordHash.ts           |   33.33 |      100 |       0 |   33.33 | 5-11                                                                                                                                                                                                                                                                                                     
+  1701163600000-add-repository-roles.ts            |   33.33 |      100 |       0 |   33.33 | 5-17                                                                                                                                                                                                                                                                                                     
+  1701163700000-add-storage-configs.ts             |   33.33 |      100 |       0 |   33.33 | 5-19                                                                                                                                                                                                                                                                                                     
+  1701163800000-create-artifacts-table.ts          |   18.18 |        0 |       0 |   18.18 | 10-90                                                                                                                                                                                                                                                                                                    
+  1733320800000-add-lastAccessedAt-to-artifacts.ts |      50 |      100 |       0 |      50 | 5-16                                                                                                                                                                                                                                                                                                     
+  1733500000000-AddUserAndRolePermissions.ts       |      20 |      100 |       0 |      20 | 6-39                                                                                                                                                                                                                                                                                                     
+  1733510000000-AddBackupPermissions.ts            |      20 |      100 |       0 |      20 | 6-37                                                                                                                                                                                                                                                                                                     
+  1733520000000-CreateBackupTables.ts              |    7.69 |      100 |       0 |    7.69 | 6-77                                                                                                                                                                                                                                                                                                     
+  1733530000000-CreateRepositoryPermissions.ts     |    12.5 |      100 |       0 |    12.5 | 5-48                                                                                                                                                                                                                                                                                                     
+  1733540000000-AddDefaultStorageConfig.ts         |       0 |      100 |       0 |       0 | 3-22                                                                                                                                                                                                                                                                                                     
+  1733550000000-CreateJobsTable.ts                 |       0 |      100 |       0 |       0 | 3-39                                                                                                                                                                                                                                                                                                     
+  1733560000000-CreateCleanupPoliciesTable.ts      |       0 |      100 |       0 |       0 | 3-37                                                                                                                                                                                                                                                                                                     
+  1733560100000-AddCleanupPermissions.ts           |       0 |      100 |       0 |       0 | 3-27                                                                                                                                                                                                                                                                                                     
+  1733560200000-UpdateCleanupPolicyFields.ts       |       0 |      100 |       0 |       0 | 3-23                                                                                                                                                                                                                                                                                                     
+  1733570000000-AddAuditLogs.ts                    |       0 |      100 |       0 |       0 | 3-48                                                                                                                                                                                                                                                                                                     
+  1733580000000-CreateLicensesTable.ts             |       0 |      100 |       0 |       0 | 3-33                                                                                                                                                                                                                                                                                                     
+  1733580500000-CreateLicensesTable.ts             |       0 |      100 |       0 |       0 | 3-24                                                                                                                                                                                                                                                                                                     
+  1733585000000-CreatePluginInstallationsTable.ts  |       0 |      100 |       0 |       0 | 1-88                                                                                                                                                                                                                                                                                                     
+  1733590000000-AddSignedTokenToLicenses.ts        |       0 |      100 |       0 |       0 | 1-16                                                                                                                                                                                                                                                                                                     
+  1733950000000-AddPluginsStorageConfig.ts         |   33.33 |      100 |       0 |   33.33 | 7-23                                                                                                                                                                                                                                                                                                     
+  1733950100000-AddUsageToStorageConfig.ts         |      25 |      100 |       0 |      25 | 5-19                                                                                                                                                                                                                                                                                                     
+  1733950200000-UpdatePluginsStorageUsage.ts       |      25 |      100 |       0 |      25 | 6-17                                                                                                                                                                                                                                                                                                     
+  1733950300000-AddBackupStorageConfig.ts          |      20 |        0 |       0 |      20 | 6-27                                                                                                                                                                                                                                                                                                     
+  1734100000001-AddRefreshTokenToUsers.ts          |      50 |      100 |       0 |      50 | 6-14                                                                                                                                                                                                                                                                                                     
+  1735900000000-AddTypeToLicenses.ts               |       0 |        0 |       0 |       0 | 3-16                                                                                                                                                                                                                                                                                                     
+  1736070000000-AddPathAndHashToArtifacts.ts       |   33.33 |      100 |       0 |   33.33 | 5-25                                                                                                                                                                                                                                                                                                     
+  1736340000000-CleanupPluginsOnPremise.ts         |       0 |      100 |       0 |       0 | 3-9                                                                                                                                                                                                                                                                                                      
+ src/modules/audit                                 |   52.54 |    40.42 |      70 |   58.33 |                                                                                                                                                                                                                                                                                                          
+  audit.controller.ts                              |       0 |        0 |       0 |       0 | 1-40                                                                                                                                                                                                                                                                                                     
+  audit.module.ts                                  |       0 |      100 |     100 |       0 | 1-14                                                                                                                                                                                                                                                                                                     
+  audit.service.ts                                 |   81.57 |    57.57 |     100 |   90.32 | 46-47,84                                                                                                                                                                                                                                                                                                 
+ src/modules/auth                                  |   58.57 |    51.35 |   63.63 |   58.37 |                                                                                                                                                                                                                                                                                                          
+  api.module.ts                                    |       0 |      100 |       0 |       0 | 1-20                                                                                                                                                                                                                                                                                                     
+  auth.controller.ts                               |   84.87 |    66.25 |      90 |   84.82 | 65,70-78,102-110,129,137,152,191,215-219,251                                                                                                                                                                                                                                                             
+  auth.guard.ts                                    |       0 |        0 |       0 |       0 | 1-116                                                                                                                                                                                                                                                                                                    
+  auth.service.ts                                  |   81.25 |    76.66 |   71.42 |   80.95 | 47-61,78-79                                                                                                                                                                                                                                                                                              
+  current-user.decorator.ts                        |       0 |      100 |       0 |       0 | 1-6                                                                                                                                                                                                                                                                                                      
+ src/modules/cleanup                               |   75.12 |    71.42 |   62.85 |   75.26 |                                                                                                                                                                                                                                                                                                          
+  cleanup.controller.ts                            |      85 |    71.87 |   57.14 |   83.33 | 31,63,69                                                                                                                                                                                                                                                                                                 
+  cleanup.module.ts                                |       0 |        0 |       0 |       0 | 1-30                                                                                                                                                                                                                                                                                                     
+  cleanup.service.ts                               |   81.52 |    73.87 |   69.23 |   81.16 | 106,136,217,237-243,289-290,318,346-382,405-406                                                                                                                                                                                                                                                          
+ src/modules/health                                |      96 |    85.71 |     100 |   95.65 |                                                                                                                                                                                                                                                                                                          
+  health.controller.ts                             |      96 |    85.71 |     100 |   95.65 | 36                                                                                                                                                                                                                                                                                                       
+ src/modules/jobs                                  |   61.84 |    58.33 |      40 |   65.21 |                                                                                                                                                                                                                                                                                                          
+  job.service.ts                                   |   68.11 |    58.33 |      40 |   70.31 | 19-20,81-83,164-192                                                                                                                                                                                                                                                                                      
+  jobs.module.ts                                   |       0 |      100 |     100 |       0 | 1-11                                                                                                                                                                                                                                                                                                     
+ src/modules/license                               |   71.79 |       80 |    87.5 |   73.33 |                                                                                                                                                                                                                                                                                                          
+  features.ts                                      |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  license.decorator.ts                             |       0 |      100 |       0 |       0 | 1-5                                                                                                                                                                                                                                                                                                      
+  license.guard.ts                                 |     100 |       80 |     100 |     100 | 7                                                                                                                                                                                                                                                                                                        
+  license.module.ts                                |       0 |      100 |     100 |       0 | 1-9                                                                                                                                                                                                                                                                                                      
+  license.service.ts                               |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/monitor                               |   66.96 |       40 |   76.92 |   68.93 |                                                                                                                                                                                                                                                                                                          
+  monitor.controller.ts                            |       0 |        0 |       0 |       0 | 1-14                                                                                                                                                                                                                                                                                                     
+  monitor.module.ts                                |       0 |      100 |     100 |       0 | 1-15                                                                                                                                                                                                                                                                                                     
+  monitor.service.ts                               |   83.33 |    44.44 |    90.9 |   83.52 | 75-84,121,156,174,201                                                                                                                                                                                                                                                                                    
+ src/modules/plugins                               |      73 |    66.48 |   74.32 |   73.52 |                                                                                                                                                                                                                                                                                                          
+  artifact-index.service.ts                        |   38.63 |    15.15 |     100 |   35.71 | 28-78,87-93                                                                                                                                                                                                                                                                                              
+  plugin-delegator.service.ts                      |   92.95 |    81.81 |     100 |   92.64 | 107,120,124,137,141                                                                                                                                                                                                                                                                                      
+  plugin-manager.service.ts                        |   95.45 |       75 |   69.23 |   94.11 | 32                                                                                                                                                                                                                                                                                                       
+  plugins.controller.ts                            |   69.23 |    44.44 |   77.77 |   67.64 | 28-45,50-52                                                                                                                                                                                                                                                                                              
+  plugins.module.ts                                |       0 |      100 |       0 |       0 | 1-40                                                                                                                                                                                                                                                                                                     
+  plugins.service.ts                               |   71.12 |    67.56 |   66.66 |   72.93 | 42-96,127-128,151,158-159,175-178,184-185,213,286,314                                                                                                                                                                                                                                                    
+  proxy-cache-job.service.ts                       |   75.58 |    68.75 |   55.55 |   77.77 | 18-19,23-24,64-65,92,104,119,133-134,138-141,186,202-206                                                                                                                                                                                                                                                 
+  proxy-cache.service.ts                           |   83.87 |    78.18 |   85.71 |   84.16 | 147,153,170,177,187-214                                                                                                                                                                                                                                                                                  
+  upstream-ping.service.ts                         |   66.07 |    70.58 |      60 |      66 | 85-113                                                                                                                                                                                                                                                                                                   
+ src/modules/plugins/impl/composer-plugin          |   79.16 |    84.61 |      40 |   79.16 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   79.16 |    84.61 |      40 |   79.16 | 62,75-79                                                                                                                                                                                                                                                                                                 
+ src/modules/plugins/impl/composer-plugin/auth     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/composer-plugin/config   |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/composer-plugin/packages |     100 |     62.5 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |     100 |     62.5 |     100 |     100 | 27-64,80-81                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/composer-plugin/proxy    |   76.87 |    63.63 |     100 |   79.02 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |    94.2 |    73.13 |     100 |    94.2 | 69-71,88-89                                                                                                                                                                                                                                                                                              
+  metadata.ts                                      |   61.53 |    51.85 |     100 |   64.86 | 23,60-68,73-78,84-103,132-133,152-158                                                                                                                                                                                                                                                                    
+ src/modules/plugins/impl/composer-plugin/storage  |   76.77 |    69.82 |   92.85 |   78.07 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |   76.77 |    69.82 |   92.85 |   78.07 | 11,41,58,97,109-143,150-154,227-229,243,271,276-277,286-290,298-303,318                                                                                                                                                                                                                                  
+ src/modules/plugins/impl/composer-plugin/utils    |   91.48 |    70.58 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |   91.48 |    70.58 |     100 |     100 | 23-41                                                                                                                                                                                                                                                                                                    
+ src/modules/plugins/impl/docker-plugin            |   77.47 |    52.27 |   20.68 |   78.89 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   77.47 |    52.27 |   20.68 |   78.89 | 79-80,154,182,231-243,258-259,299-304,340-346                                                                                                                                                                                                                                                            
+ src/modules/plugins/impl/docker-plugin/auth       |    92.3 |    92.85 |     100 |    92.3 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |    92.3 |    92.85 |     100 |    92.3 | 82-83                                                                                                                                                                                                                                                                                                    
+ src/modules/plugins/impl/docker-plugin/config     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/docker-plugin/packages   |    77.3 |    64.88 |   88.88 |   80.92 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |    77.3 |    64.88 |   88.88 |   80.92 | 34,48-51,54,59,71,79,88,96,102,140,145-146,163,175,191-195,232,284,299-310,337                                                                                                                                                                                                                           
+ src/modules/plugins/impl/docker-plugin/proxy      |   32.93 |    18.82 |   36.36 |   33.95 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |   32.93 |    18.82 |   36.36 |   33.95 | 17,36,49,60-94,107,112-115,130-132,150-183,195-228,238-352,358,363,389,400,414-416                                                                                                                                                                                                                       
+ src/modules/plugins/impl/docker-plugin/registry   |    2.27 |        0 |    2.94 |    2.33 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |    4.44 |        0 |       0 |    4.76 | 14-72,85-93                                                                                                                                                                                                                                                                                              
+  port-manager.ts                                  |     2.7 |        0 |       0 |    2.85 | 14-72                                                                                                                                                                                                                                                                                                    
+  server.ts                                        |    1.69 |        0 |    4.76 |    1.72 | 41-961,969-983                                                                                                                                                                                                                                                                                           
+  utils.ts                                         |   10.52 |        0 |       0 |   11.76 | 9-13,27-38                                                                                                                                                                                                                                                                                               
+ src/modules/plugins/impl/docker-plugin/storage    |   74.59 |    53.86 |   76.47 |   76.47 |                                                                                                                                                                                                                                                                                                          
+  download.ts                                      |   86.66 |     54.7 |     100 |   88.11 | 52,60,85,99,115,121,131,162,205,222,255,269                                                                                                                                                                                                                                                              
+  manifest.ts                                      |   74.85 |    53.07 |   88.88 |      75 | 73,83,101,107,111,118,136,147,161,168,185-187,224,230-293,360,379,410                                                                                                                                                                                                                                    
+  upload.ts                                        |   66.66 |     53.9 |   63.15 |   70.19 | 47-57,68,76-77,84-89,95-99,124-131,178,211-226,251,269-287,296-298,307,311                                                                                                                                                                                                                               
+ src/modules/plugins/impl/docker-plugin/utils      |     100 |    95.83 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  helpers.ts                                       |     100 |    93.54 |     100 |     100 | 16,23                                                                                                                                                                                                                                                                                                    
+  key-utils.ts                                     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/helm-plugin              |   53.84 |        0 |      40 |      56 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   53.84 |        0 |      40 |      56 | 18-37,73-77                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/helm-plugin/auth         |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/helm-plugin/config       |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/helm-plugin/packages     |     100 |    76.47 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |     100 |    76.47 |     100 |     100 | 17-19,36-37                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/helm-plugin/proxy        |   90.17 |    73.86 |     100 |   90.65 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |   90.17 |    73.86 |     100 |   90.65 | 41-42,94,104,131-134,149,162,187,215                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/helm-plugin/storage      |   75.43 |    65.71 |    87.5 |   83.33 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |   75.43 |    65.71 |    87.5 |   83.33 | 11-23,50,59-60,99,176,194,224,233-242,254-256                                                                                                                                                                                                                                                            
+ src/modules/plugins/impl/helm-plugin/utils        |   91.48 |    70.58 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |   91.48 |    70.58 |     100 |     100 | 27-45                                                                                                                                                                                                                                                                                                    
+ src/modules/plugins/impl/maven-plugin             |      32 |        0 |       0 |      32 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |      32 |        0 |       0 |      32 | 13-62,73-80                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/maven-plugin/auth        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/maven-plugin/config      |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/maven-plugin/packages    |     100 |    77.77 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |     100 |    77.77 |     100 |     100 | 48-51,57-76,82-86,92                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/maven-plugin/proxy       |    86.3 |    72.97 |     100 |   87.32 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |    86.3 |    72.97 |     100 |   87.32 | 76-77,100,124-127,135,159                                                                                                                                                                                                                                                                                
+ src/modules/plugins/impl/maven-plugin/storage     |   49.67 |    43.61 |   57.14 |   54.16 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |   49.67 |    43.61 |   57.14 |   54.16 | 10-13,29-42,49-53,66-76,85-90,100-149,160,203,217,233,247,254-300,350,356,389-392,397-406,412,415,422,426-429,461-468,492                                                                                                                                                                                
+ src/modules/plugins/impl/maven-plugin/utils       |   90.35 |    81.96 |     100 |   92.85 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |   95.74 |    82.35 |     100 |     100 | 30-36                                                                                                                                                                                                                                                                                                    
+  maven.ts                                         |   86.56 |    81.81 |     100 |   88.33 | 45,57-58,60-61,63-64                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/npm-plugin               |   58.33 |        0 |      40 |   58.33 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   58.33 |        0 |      40 |   58.33 | 21-38,72-76                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/npm-plugin/auth          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/npm-plugin/config        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/npm-plugin/packages      |     100 |       75 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |     100 |       75 |     100 |     100 | 17,37-38                                                                                                                                                                                                                                                                                                 
+ src/modules/plugins/impl/npm-plugin/proxy         |    96.8 |    83.52 |     100 |    96.8 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |   94.91 |    87.27 |     100 |   94.91 | 69-70,85                                                                                                                                                                                                                                                                                                 
+  metadata.ts                                      |     100 |    76.66 |     100 |     100 | 5-6,26,33-35,40-45                                                                                                                                                                                                                                                                                       
+ src/modules/plugins/impl/npm-plugin/storage       |   87.59 |    71.55 |    92.3 |   88.88 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |   87.59 |    71.55 |    92.3 |   88.88 | 65,71,74,81,85,101,108,184,191,197-211                                                                                                                                                                                                                                                                   
+ src/modules/plugins/impl/npm-plugin/utils         |      75 |       48 |   66.66 |   81.63 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |   91.48 |    70.58 |     100 |     100 | 23-41                                                                                                                                                                                                                                                                                                    
+  metadata.ts                                      |   15.38 |        0 |       0 |   18.18 | 25-46,50                                                                                                                                                                                                                                                                                                 
+ src/modules/plugins/impl/nuget-plugin             |   33.33 |        0 |       0 |   33.33 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   33.33 |        0 |       0 |   33.33 | 13-62,75-79                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/nuget-plugin/auth        |      25 |        0 |       0 |      25 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |      25 |        0 |       0 |      25 | 2-8                                                                                                                                                                                                                                                                                                      
+ src/modules/plugins/impl/nuget-plugin/config      |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/nuget-plugin/packages    |    8.33 |        0 |       0 |    8.33 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |    8.33 |        0 |       0 |    8.33 | 5-66                                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/nuget-plugin/proxy       |    3.01 |        0 |       0 |    3.04 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |    2.75 |        0 |       0 |    2.79 | 7-328                                                                                                                                                                                                                                                                                                    
+  metadata.ts                                      |    4.76 |        0 |       0 |    4.76 | 4-39                                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/nuget-plugin/storage     |   86.08 |    72.61 |   89.47 |   88.65 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |   86.08 |    72.61 |   89.47 |   88.65 | 14,35-38,51,70,234-238,248,317,387,416,438-446,470,504,510,513,520,526,534-537,554-556,570                                                                                                                                                                                                               
+ src/modules/plugins/impl/nuget-plugin/utils       |   34.04 |    29.41 |      50 |    42.1 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |   34.04 |    29.41 |      50 |    42.1 | 27-36,40-54                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/pypi-plugin              |   33.33 |        0 |       0 |   33.33 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   33.33 |        0 |       0 |   33.33 | 13-62,75-79                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/pypi-plugin/auth         |      25 |        0 |       0 |      25 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |      25 |        0 |       0 |      25 | 2-8                                                                                                                                                                                                                                                                                                      
+ src/modules/plugins/impl/pypi-plugin/config       |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/pypi-plugin/packages     |    7.14 |        0 |       0 |    7.14 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |    7.14 |        0 |       0 |    7.14 | 5-66                                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/pypi-plugin/proxy        |    4.72 |        0 |       0 |    4.76 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |    3.66 |        0 |       0 |     3.7 | 7-259                                                                                                                                                                                                                                                                                                    
+  metadata.ts                                      |   11.11 |        0 |       0 |   11.11 | 5-58                                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/pypi-plugin/storage      |   53.61 |    41.66 |      60 |   55.12 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |   53.61 |    41.66 |      60 |   55.12 | 11-57,72,108,114,129-133,141-143,153,159-169,191,197,205-210,216-224,243,252,277                                                                                                                                                                                                                         
+ src/modules/plugins/impl/pypi-plugin/utils        |   91.48 |    70.58 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |   91.48 |    70.58 |     100 |     100 | 9,34-45                                                                                                                                                                                                                                                                                                  
+ src/modules/plugins/impl/raw-plugin               |   46.66 |      100 |       0 |   46.66 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   46.66 |      100 |       0 |   46.66 | 12-33,46-50                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/raw-plugin/auth          |      50 |      100 |       0 |      50 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |      50 |      100 |       0 |      50 | 4                                                                                                                                                                                                                                                                                                        
+ src/modules/plugins/impl/raw-plugin/config        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/raw-plugin/packages      |      10 |        0 |       0 |      10 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |      10 |        0 |       0 |      10 | 5-52                                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/raw-plugin/storage       |    1.09 |        0 |       0 |    1.19 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |    1.09 |        0 |       0 |    1.19 | 5-327                                                                                                                                                                                                                                                                                                    
+ src/modules/plugins/impl/raw-plugin/utils         |    8.51 |        0 |       0 |   10.52 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |    8.51 |        0 |       0 |   10.52 | 2-3,7-19,23-32,36-50                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/rust-plugin              |   33.33 |        0 |       0 |   33.33 |                                                                                                                                                                                                                                                                                                          
+  index.ts                                         |   33.33 |        0 |       0 |   33.33 | 13-62,75-79                                                                                                                                                                                                                                                                                              
+ src/modules/plugins/impl/rust-plugin/auth         |      25 |        0 |       0 |      25 |                                                                                                                                                                                                                                                                                                          
+  auth.ts                                          |      25 |        0 |       0 |      25 | 2-8                                                                                                                                                                                                                                                                                                      
+ src/modules/plugins/impl/rust-plugin/config       |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  schema.ts                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+ src/modules/plugins/impl/rust-plugin/packages     |    8.33 |        0 |       0 |    8.33 |                                                                                                                                                                                                                                                                                                          
+  list.ts                                          |    8.33 |        0 |       0 |    8.33 | 5-57                                                                                                                                                                                                                                                                                                     
+ src/modules/plugins/impl/rust-plugin/proxy        |    1.69 |        0 |       0 |     1.7 |                                                                                                                                                                                                                                                                                                          
+  fetch.ts                                         |    1.69 |        0 |       0 |     1.7 | 5-252                                                                                                                                                                                                                                                                                                    
+ src/modules/plugins/impl/rust-plugin/storage      |    2.45 |        0 |       0 |       3 |                                                                                                                                                                                                                                                                                                          
+  storage.ts                                       |    2.45 |        0 |       0 |       3 | 9-313                                                                                                                                                                                                                                                                                                    
+ src/modules/plugins/impl/rust-plugin/utils        |    8.51 |        0 |       0 |   10.52 |                                                                                                                                                                                                                                                                                                          
+  key-utils.ts                                     |    8.51 |        0 |       0 |   10.52 | 2-3,7-19,23-32,36-50                                                                                                                                                                                                                                                                                     
+ src/modules/rbac                                  |   41.73 |    33.44 |      40 |   40.36 |                                                                                                                                                                                                                                                                                                          
+  permission.service.ts                            |   95.91 |       75 |     100 |   98.79 | 171                                                                                                                                                                                                                                                                                                      
+  permissions.decorator.ts                         |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  permissions.guard.ts                             |   47.19 |    35.52 |      50 |   46.83 | 43-46,54-87,122-138,145-150,158-184                                                                                                                                                                                                                                                                      
+  rbac.controller.ts                               |       0 |        0 |       0 |       0 | 1-53                                                                                                                                                                                                                                                                                                     
+  rbac.module.ts                                   |       0 |      100 |       0 |       0 | 1-24                                                                                                                                                                                                                                                                                                     
+  rbac.service.ts                                  |       0 |        0 |       0 |       0 | 1-114                                                                                                                                                                                                                                                                                                    
+  unified-permission.guard.ts                      |   12.37 |     8.91 |   14.28 |   10.52 | 39-328                                                                                                                                                                                                                                                                                                   
+ src/modules/redis                                 |    41.5 |    30.95 |   27.77 |   39.77 |                                                                                                                                                                                                                                                                                                          
+  redis.module.ts                                  |       0 |      100 |     100 |       0 | 1-10                                                                                                                                                                                                                                                                                                     
+  redis.service.ts                                 |    8.47 |        0 |       0 |       6 | 6-96                                                                                                                                                                                                                                                                                                     
+  redlock.service.ts                               |   95.12 |    81.25 |   83.33 |   94.11 | 32,88                                                                                                                                                                                                                                                                                                    
+ src/modules/repos                                 |   42.86 |     34.1 |   46.34 |   45.05 |                                                                                                                                                                                                                                                                                                          
+  docker.controller.ts                             |   33.81 |    30.33 |   55.17 |   34.87 | 36,42-45,51,68-71,79,82,95-97,124,141-147,153-170,182-184,205-231,242-282,293,336-357,369-638,649-675,693,701-703,706-710,716,724,737,752,762-764,769-780,788,808,828-830,836-838,843-854,863,876,889,900,916,924-933,948,955-957,962-973,978,990-1012,1029-1041,1048,1063-1065,1073-1086,1092-1104,1114 
+  repos.controller.ts                              |   38.16 |    26.77 |   36.11 |   41.11 | 50-68,87-89,100,115-127,210,215-226,236-244,259-310,319-329,339-341,357,361,372,385,403,431-434,468-472,485-494,512-517,523-539,546-557,572,586-591,603,618,633,643-660,673-687,701-702,712-713,729-738,752-800,811-815,828-832                                                                          
+  repos.module.ts                                  |       0 |      100 |     100 |       0 | 1-58                                                                                                                                                                                                                                                                                                     
+  repos.service.ts                                 |   70.94 |    54.87 |      60 |   75.21 | 56,76-80,88,116,120-124,148-152,158,181,187-191,224-228,270-274,308-311,330-338,383,394,422-425,457,498-505,541-547,557,609-625,683-686,710,716,720,728,761,785,803,816-865                                                                                                                              
+  repository-permission.decorator.ts               |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                                                                                          
+  repository-permission.guard.ts                   |       0 |        0 |       0 |       0 | 1-121                                                                                                                                                                                                                                                                                                    
+  repository-permission.service.ts                 |   13.55 |     9.37 |       0 |      12 | 12-183                                                                                                                                                                                                                                                                                                   
+ src/modules/storage                               |    38.7 |    36.41 |   30.76 |   39.25 |                                                                                                                                                                                                                                                                                                          
+  storage-config.controller.ts                     |       0 |        0 |       0 |       0 | 1-49                                                                                                                                                                                                                                                                                                     
+  storage-config.service.ts                        |       0 |        0 |       0 |       0 | 1-160                                                                                                                                                                                                                                                                                                    
+  storage.module.ts                                |       0 |      100 |       0 |       0 | 1-22                                                                                                                                                                                                                                                                                                     
+  storage.service.ts                               |   55.46 |    45.22 |      50 |      56 | 45-90,116,125,127,134-144,160-189,219-220,227-241,302,316-331,381-389,400,406,409-410,417-423,430,434-436,444-460,466-475,499-500,508-511,521                                                                                                                                                            
+ src/modules/users                                 |   23.36 |    22.91 |   36.84 |   24.46 |                                                                                                                                                                                                                                                                                                          
+  user-permission.decorator.ts                     |       0 |      100 |       0 |       0 | 1-13                                                                                                                                                                                                                                                                                                     
+  users.controller.ts                              |       0 |        0 |       0 |       0 | 1-118                                                                                                                                                                                                                                                                                                    
+  users.module.ts                                  |       0 |      100 |       0 |       0 | 1-19                                                                                                                                                                                                                                                                                                     
+  users.service.ts                                 |     100 |    78.57 |   77.77 |     100 | 11-12                                                                                                                                                                                                                                                                                                    
+ src/plugins-core                                  |     2.5 |        0 |       0 |    2.56 |                                                                                                                                                                                                                                                                                                          
+  proxy-helper.ts                                  |     2.5 |        0 |       0 |    2.56 | 73-328                                                                                                                                                                                                                                                                                                   
+ src/seeds                                         |       0 |        0 |       0 |       0 |                                                                                                                                                                                                                                                                                                          
+  seed-defaults.ts                                 |       0 |        0 |       0 |       0 | 1-184                                                                                                                                                                                                                                                                                                    
+ src/storage                                       |   55.17 |    51.92 |      50 |   59.37 |                                                                                                                                                                                                                                                                                                          
+  filesystem-storage.adapter.ts                    |   36.95 |    41.93 |   33.33 |   38.09 | 29,37-77,108-161                                                                                                                                                                                                                                                                                         
+  key-utils.ts                                     |   86.79 |    66.66 |     100 |     100 | 2-36,49,55-73                                                                                                                                                                                                                                                                                            
+---------------------------------------------------|---------|----------|---------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Test Suites: 1 skipped, 86 passed, 86 of 87 total
+Tests:       11 skipped, 651 passed, 662 total
+Snapshots:   0 total
+Time:        2.879 s
+Ran all test suites.

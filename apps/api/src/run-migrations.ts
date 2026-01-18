@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import 'reflect-metadata';
 import { AppDataSource } from './data-source';
 import * as fs from 'fs';
@@ -17,7 +31,6 @@ async function runMigrations() {
     await AppDataSource.initialize();
     console.log('✓ Data source initialized successfully\n');
 
-    // 1. Scan migrations directory
     const migrationsDir = path.join(__dirname, 'migrations');
     const files = fs
       .readdirSync(migrationsDir)
@@ -25,7 +38,6 @@ async function runMigrations() {
       .filter((f) => !f.endsWith('.map'))
       .filter((f) => !f.endsWith('.d.ts'));
 
-    // 2. Parse and sort migrations by timestamp
     const migrations: MigrationFile[] = files
       .map((file) => {
         const match = file.match(/^(\d+)-(.+)\.(ts|js)$/);
@@ -51,7 +63,6 @@ async function runMigrations() {
       console.log(`  ${i + 1}. [${m.timestamp}] ${m.name}`);
     });
 
-    // 3. Get executed migrations from database
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
 
@@ -79,7 +90,6 @@ async function runMigrations() {
       });
     }
 
-    // 4. Execute pending migrations
     const pendingMigrations = migrations.filter(
       (m) => !executedTimestamps.has(m.timestamp.toString()),
     );
@@ -101,7 +111,6 @@ async function runMigrations() {
       console.log(`⏳ Executing [${migration.timestamp}] ${migration.name}...`);
 
       try {
-        // Import migration class
         const migrationModule = await import(migration.filePath);
         const MigrationClass = migrationModule[migration.className];
 
@@ -111,16 +120,13 @@ async function runMigrations() {
           );
         }
 
-        // Create instance and run up() method
         const instance = new MigrationClass();
 
-        // Start transaction
         await queryRunner.startTransaction();
 
         try {
           await instance.up(queryRunner);
 
-          // Register migration as executed
           await queryRunner.query(
             `INSERT INTO migrations (timestamp, name) VALUES ($1, $2)`,
             [migration.timestamp.toString(), migration.name],

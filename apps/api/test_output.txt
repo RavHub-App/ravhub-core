@@ -1,0 +1,100 @@
+[95m[Nest] 81289  - [39m18/01/2026, 13:44:19 [95m  DEBUG[39m [38;5;3m[ProxyFetchHelper] [39m[95mFetching http://upstream/f[39m
+[95m[Nest] 81289  - [39m18/01/2026, 13:44:19 [95m  DEBUG[39m [38;5;3m[ProxyFetchHelper] [39mObject(2) {
+  headers: {
+    [32m'User-Agent'[39m: [32m'RavHub-Proxy/1.0'[39m
+  },
+  method: [32m'GET'[39m
+}
+[95m[Nest] 81289  - [39m18/01/2026, 13:44:23 [95m  DEBUG[39m [38;5;3m[ProxyFetchHelper] [39m[95mFetching http://upstream/f[39m
+[95m[Nest] 81289  - [39m18/01/2026, 13:44:23 [95m  DEBUG[39m [38;5;3m[ProxyFetchHelper] [39mObject(2) {
+  headers: {
+    [32m'User-Agent'[39m: [32m'RavHub-Proxy/1.0'[39m
+  },
+  method: [32m'GET'[39m
+}
+FAIL test/unit/modules/plugins/impl/raw-plugin/storage/storage.spec.ts (5.194 s)
+  RawPlugin Storage
+    upload
+      ✓ should save raw content (1 ms)
+      ✓ should handle group write policies
+      ✓ should block redeployment if disabled (1 ms)
+    handlePut
+      ✕ should handle stream upload (1 ms)
+      ✕ should handle mirror write policy with stream buffering (1 ms)
+      ✓ should use saveStream if available (1 ms)
+      ✓ should handle buffer/object body
+    download
+      ✓ should download from hosted
+      ✓ should handle group reading
+      ✓ should handle proxy cache hit (66 ms)
+      ✕ should fetch from upstream and cache (5000 ms)
+    group policies edge cases
+      ✓ should reject if writePolicy is none
+      ✓ should handle preferred writer
+
+  ● RawPlugin Storage › handlePut › should handle stream upload
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      86 |         mockReq,
+      87 |       );
+    > 88 |       expect(result.ok).toBe(true);
+         |                         ^
+      89 |       expect(context.storage.save).toHaveBeenCalled();
+      90 |     });
+      91 |
+
+      at Object.<anonymous> (test/unit/modules/plugins/impl/raw-plugin/storage/storage.spec.ts:88:25)
+
+  ● RawPlugin Storage › handlePut › should handle mirror write policy with stream buffering
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      114 |         mockReq,
+      115 |       );
+    > 116 |       expect(result.ok).toBe(true);
+          |                         ^
+      117 |     });
+      118 |
+      119 |     it('should use saveStream if available', async () => {
+
+      at Object.<anonymous> (test/unit/modules/plugins/impl/raw-plugin/storage/storage.spec.ts:116:25)
+
+  ● RawPlugin Storage › download › should fetch from upstream and cache
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      163 |     });
+      164 |
+    > 165 |     it('should fetch from upstream and cache', async () => {
+          |     ^
+      166 |       const proxyRepo = {
+      167 |         id: 'p1',
+      168 |         type: 'proxy',
+
+      at test/unit/modules/plugins/impl/raw-plugin/storage/storage.spec.ts:165:5
+      at test/unit/modules/plugins/impl/raw-plugin/storage/storage.spec.ts:132:3
+      at Object.<anonymous> (test/unit/modules/plugins/impl/raw-plugin/storage/storage.spec.ts:17:1)
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 10 passed, 13 total
+Snapshots:   0 total
+Time:        5.22 s
+Ran all test suites matching test/unit/modules/plugins/impl/raw-plugin/storage/storage.spec.ts.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.
+[95m[Nest] 81289  - [39m18/01/2026, 13:44:31 [95m  DEBUG[39m [38;5;3m[ProxyFetchHelper] [39m[95mFetching http://upstream/f[39m
+[95m[Nest] 81289  - [39m18/01/2026, 13:44:31 [95m  DEBUG[39m [38;5;3m[ProxyFetchHelper] [39mObject(2) {
+  headers: {
+    [32m'User-Agent'[39m: [32m'RavHub-Proxy/1.0'[39m
+  },
+  method: [32m'GET'[39m
+}

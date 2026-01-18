@@ -19,7 +19,8 @@ export function createMavenPlugin(context: PluginContext) {
    */
   const pingUpstream = async (repo: any, context: PluginContext) => {
     const target = repo.config?.proxyUrl || 'https://repo1.maven.org/maven2';
-    const proxyFetchWithAuth = require('../../../../plugins-core/proxy-helper').default;
+    const proxyFetchWithAuth =
+      require('../../../../plugins-core/proxy-helper').default;
 
     try {
       const res = await proxyFetchWithAuth(repo, target, {
@@ -32,7 +33,9 @@ export function createMavenPlugin(context: PluginContext) {
         ok: res.ok || (res.status > 0 && res.status < 500),
         status: res.status,
         reachable: res.status > 0 && res.status < 500,
-        message: res.ok ? undefined : (res.body as any)?.message || 'Upstream returned error status'
+        message: res.ok
+          ? undefined
+          : res.body?.message || 'Upstream returned error status',
       };
     } catch (err: any) {
       return { ok: false, message: String(err?.message ?? err) };
@@ -43,8 +46,8 @@ export function createMavenPlugin(context: PluginContext) {
     metadata: {
       key: 'maven',
       name: 'Maven',
-      description: 'Official Maven plugin for RavHub. Supports proxying and local storage.',
-      version: '1.2.0',
+      description:
+        'Official Maven plugin for RavHub. Supports proxying and local storage.',
       requiresLicense: true,
       licenseType: 'enterprise',
       configSchema,
@@ -69,7 +72,6 @@ const defaultExport = {
     key: 'maven',
     name: 'Maven',
     description: 'Maven Repository Plugin',
-    version: '1.2.0',
     configSchema,
   },
   authenticate: () => ({ ok: false, message: 'Plugin not initialized' }),

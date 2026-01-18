@@ -10,7 +10,9 @@ import type { Repository } from '../utils/types';
 let storage: any = null;
 let indexArtifact: any = null;
 
-function loadProxyFetchWithAuth(): ((repo: Repository, url: string, opts?: any) => Promise<any>) | null {
+function loadProxyFetchWithAuth():
+  | ((repo: Repository, url: string, opts?: any) => Promise<any>)
+  | null {
   try {
     return require('../../../../../plugins-core/proxy-helper').default;
   } catch {
@@ -41,12 +43,13 @@ export async function proxyFetch(repo: Repository, urlStr: string) {
     }
 
     const headers: any = {
-      'Accept': 'application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, */*',
+      Accept:
+        'application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, */*',
     };
 
     let res = await proxyFetchWithAuth(repo, urlStr, { stream: true, headers });
     if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
-      console.log('[PROXY FETCH RESULT]', {
+      console.debug('[PROXY FETCH result]', {
         ok: res?.ok,
         status: res?.status,
         hasStream: !!res?.stream,
@@ -115,8 +118,6 @@ export async function proxyFetch(repo: Repository, urlStr: string) {
         key = buildKey('docker', repo.id, 'manifests', maniMatch[1]);
       }
     }
-    if (process.env.DEBUG_DOCKER_PLUGIN === 'true' || process.env.DEBUG_PROXY === 'true')
-      console.log('[PROXY FETCH KEY]', { key, pathStr });
 
     const cacheEnabled = repo.config?.cacheEnabled !== false;
 
@@ -139,11 +140,13 @@ export async function proxyFetch(repo: Repository, urlStr: string) {
                 'content-type': pathStr.includes('/manifests/')
                   ? 'application/vnd.docker.distribution.manifest.v2+json'
                   : 'application/octet-stream',
-                'x-proxy-cache': 'HIT'
-              }
+                'x-proxy-cache': 'HIT',
+              },
             };
           }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+          /* ignore */
+        }
       }
 
       // if underlying response provides a stream, prefer saving via stream-to-buffer
@@ -357,9 +360,21 @@ export async function proxyFetch(repo: Repository, urlStr: string) {
 
     try {
       const url = await storage.getUrl(key);
-      return { ok: true, url, storageKey: key, status: res.status, body: savedBuffer };
+      return {
+        ok: true,
+        url,
+        storageKey: key,
+        status: res.status,
+        body: savedBuffer,
+      };
     } catch (err: any) {
-      return { ok: true, url: urlStr, storageKey: key, status: res.status, body: savedBuffer };
+      return {
+        ok: true,
+        url: urlStr,
+        storageKey: key,
+        status: res.status,
+        body: savedBuffer,
+      };
     }
   } catch (err: any) {
     return { ok: false, status: 500, message: String(err?.message ?? err) };
@@ -388,7 +403,10 @@ export async function pingUpstream(repo: any, _context?: any) {
 
     const proxyFetchWithAuth = loadProxyFetchWithAuth();
     if (!proxyFetchWithAuth) {
-      return { ok: false, message: 'proxy-helper not found (plugins-core/proxy-helper)' };
+      return {
+        ok: false,
+        message: 'proxy-helper not found (plugins-core/proxy-helper)',
+      };
     }
 
     let res: any;
@@ -409,7 +427,9 @@ export async function pingUpstream(repo: any, _context?: any) {
         status: res.status,
         reachable: res.status < 500,
         url: pingUrl,
-        message: res.ok ? undefined : (res.body as any)?.message || 'Upstream returned error status'
+        message: res.ok
+          ? undefined
+          : res.body?.message || 'Upstream returned error status',
       };
     }
 

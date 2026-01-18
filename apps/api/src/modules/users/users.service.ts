@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,7 +25,7 @@ export class UsersService {
     @InjectRepository(User) private repo: Repository<User>,
     private readonly auditService: AuditService,
     private readonly licenseService: LicenseService,
-  ) { }
+  ) {}
 
   async findAll() {
     return await this.repo.find({ relations: ['roles', 'roles.permissions'] });
@@ -32,11 +46,9 @@ export class UsersService {
   }
 
   async create(data: Partial<User>): Promise<User> {
-    // ensure we create a single user entity (avoid array overloads)
     const u = this.repo.create(data as any) as unknown as User;
     const saved = await this.repo.save(u as any);
 
-    // Log audit event
     await this.auditService
       .logSuccess({
         action: 'user.create',
@@ -44,9 +56,8 @@ export class UsersService {
         entityId: saved.id,
         details: { username: saved.username },
       })
-      .catch(() => { });
+      .catch(() => {});
 
-    // Reload with relations to return complete user object
     return this.findOne(saved.id) as Promise<User>;
   }
 
@@ -59,7 +70,6 @@ export class UsersService {
     const user = await this.findOne(id);
     await this.repo.delete(id);
 
-    // Log audit event
     if (user) {
       await this.auditService
         .logSuccess({
@@ -68,7 +78,7 @@ export class UsersService {
           entityId: id,
           details: { username: user.username },
         })
-        .catch(() => { });
+        .catch(() => {});
     }
   }
 }

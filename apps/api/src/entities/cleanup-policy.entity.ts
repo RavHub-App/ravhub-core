@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -32,24 +46,18 @@ export class CleanupPolicy {
   @Column({ type: 'varchar', length: 50 })
   strategy: CleanupStrategy;
 
-  // Age-based: delete artifacts older than X days
   @Column({ type: 'integer', nullable: true, name: 'max_age_days' })
   maxAgeDays: number;
 
-  // Count-based: keep only last X artifacts per repository
   @Column({ type: 'integer', nullable: true, name: 'max_count' })
   maxCount: number;
 
-  // Size-based: delete when total size exceeds X MB
   @Column({ type: 'bigint', nullable: true, name: 'max_size_bytes' })
   maxSizeBytes: number;
 
-  // Filter by repository pattern (glob pattern, e.g., "myrepo/*", "*-dev", etc.)
-  // Selected repository IDs to apply cleanup
   @Column({ type: 'jsonb', nullable: true, name: 'repository_ids' })
   repositoryIds: string[];
 
-  // Keep artifacts that match tag pattern (e.g., "v*", "latest", etc.)
   @Column({
     type: 'varchar',
     length: 255,
@@ -58,11 +66,9 @@ export class CleanupPolicy {
   })
   keepTagPattern: string;
 
-  // Schedule frequency: daily, weekly, monthly
   @Column({ type: 'varchar', length: 50, name: 'frequency' })
   frequency: 'daily' | 'weekly' | 'monthly';
 
-  // Time to run (HH:mm format)
   @Column({ type: 'varchar', length: 5, name: 'schedule_time' })
   scheduleTime: string;
 

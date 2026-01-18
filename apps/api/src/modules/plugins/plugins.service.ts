@@ -1,26 +1,35 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  Inject,
-  forwardRef,
-} from '@nestjs/common';
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { IPlugin } from '../../plugins-core/plugin.interface';
 import AppDataSource from '../../data-source';
 import { StorageService } from '../storage/storage.service';
-import { Plugin } from '../../entities/plugin.entity';
 import { RepositoryEntity } from '../../entities/repository.entity';
-import { Artifact } from '../../entities/artifact.entity';
 import { AuditService } from '../audit/audit.service';
-import { MonitorService } from '../monitor/monitor.service';
 import { RedisService } from '../redis/redis.service';
 import { RedlockService } from '../redis/redlock.service';
 
-// Static Imports for Built-in Features (Local Implementations)
 import npmPlugin from './impl/npm-plugin';
 import pypiPlugin from './impl/pypi-plugin';
 import dockerPlugin from './impl/docker-plugin';
 import mavenPlugin from './impl/maven-plugin';
+import composerPlugin from './impl/composer-plugin';
+import nugetPlugin from './impl/nuget-plugin';
+import rustPlugin from './impl/rust-plugin';
+import rawPlugin from './impl/raw-plugin';
+import helmPlugin from './impl/helm-plugin';
 
 import * as path from 'path';
 import * as fs from 'fs';
@@ -32,15 +41,12 @@ export class PluginsService implements OnModuleInit {
 
   constructor(
     private readonly storage: StorageService,
-    @Inject(forwardRef(() => MonitorService))
-    private readonly monitor: MonitorService,
     private readonly auditService: AuditService,
     private readonly redis: RedisService,
     private readonly redlock: RedlockService,
-  ) { }
+  ) {}
 
   async onModuleInit() {
-    // Initialize AppDataSource before loading features so they can use it
     if (!AppDataSource.isInitialized) {
       try {
         this.logger.debug('Initializing AppDataSource...');
@@ -61,73 +67,38 @@ export class PluginsService implements OnModuleInit {
   }
 
   /**
-   * Initialize and register built-in features (previously plugins)
+   * Initialize and register built-in features - all plugins now included in core
    */
   private async loadBuiltInFeatures() {
-    let features: any[] = [
+    const features: any[] = [
       npmPlugin,
       pypiPlugin,
       dockerPlugin,
       mavenPlugin,
+      composerPlugin,
+      nugetPlugin,
+      rustPlugin,
+      rawPlugin,
+      helmPlugin,
     ];
 
-    const enterprisePlugins = [
-      'nuget-plugin',
-      'composer-plugin',
-      'helm-plugin',
-      'rust-plugin',
-      'raw-plugin',
-    ];
-
-    for (const pName of enterprisePlugins) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const p = require(`./impl/${pName}`).default;
-        if (p) features.push(p);
-      } catch (e) {
-        // Plugin not found (Community Edition)
-      }
-    }
-
-    // Check for active license to determine available features
-    const { License } = await import('../../entities/license.entity');
-    const licenseRepo = AppDataSource.getRepository(License);
-    const activeLicense = await licenseRepo.findOne({
-      where: { isActive: true },
-      order: { createdAt: 'DESC' },
-    });
-
-    const isEnterprise = !!activeLicense;
-
-    if (!isEnterprise) {
-      const allowedCommunityPlugins = ['npm', 'pypi', 'docker', 'maven'];
-      const restrictedCount = features.length;
-      features = features.filter(p => allowedCommunityPlugins.includes(p.metadata.key));
-      this.logger.warn(`⚠️  No active license found. Running in Community Edition.`);
-      this.logger.warn(`ℹ️  Restricted ${restrictedCount - features.length} Enterprise plugins. Allowed: ${allowedCommunityPlugins.join(', ')}`);
-    } else {
-      this.logger.log(`✅ Enterprise License Active: Enabling full plugin suite.`);
-    }
-
-    this.logger.log(`Initializing ${features.length} built-in features...`);
+    this.logger.log(`Initializing ${features.length} built-in plugins...`);
     const context = this.getPluginContext();
 
     for (const plugin of features) {
       try {
-        if (!this.isPluginConformant(plugin as any)) {
+        if (!this.isPluginConformant(plugin)) {
           this.logger.warn(
             `Feature ${plugin.metadata.key} failed conformance - skipping`,
           );
           continue;
         }
 
-        await this.registerPluginInDb(plugin as any);
-
-        if (typeof (plugin as any).init === 'function') {
-          await (plugin as any).init(context);
+        if (typeof plugin.init === 'function') {
+          await plugin.init(context);
         }
 
-        this.loaded.set(plugin.metadata.key, plugin as any);
+        this.loaded.set(plugin.metadata.key, plugin);
         this.logger.log(`Feature loaded: ${plugin.metadata.key}`);
       } catch (err: any) {
         this.logger.error(
@@ -138,38 +109,32 @@ export class PluginsService implements OnModuleInit {
   }
 
   /**
-   * Reload plugins dynamically after license activation
-   * This allows enabling enterprise plugins without requiring a restart
+   * Reload plugins dynamically
    */
-  async reloadPlugins(): Promise<{ ok: boolean; message: string; newPlugins: string[] }> {
+  async reloadPlugins(): Promise<{
+    ok: boolean;
+    message: string;
+    newPlugins: string[];
+  }> {
     try {
-      this.logger.log('🔄 Reloading plugins after license change...');
+      this.logger.log('🔄 Reloading plugins...');
 
       const previousPlugins = Array.from(this.loaded.keys());
 
-      // Clear current loaded plugins
       this.loaded.clear();
 
-      // Reload with updated license check
       await this.loadBuiltInFeatures();
 
       const currentPlugins = Array.from(this.loaded.keys());
-      const newPlugins = currentPlugins.filter(p => !previousPlugins.includes(p));
+      const newPlugins = currentPlugins.filter(
+        (p) => !previousPlugins.includes(p),
+      );
 
-      if (newPlugins.length > 0) {
-        this.logger.log(`✅ Enabled ${newPlugins.length} new plugins: ${newPlugins.join(', ')}`);
-        return {
-          ok: true,
-          message: `Successfully enabled ${newPlugins.length} enterprise plugins`,
-          newPlugins,
-        };
-      } else {
-        return {
-          ok: true,
-          message: 'No new plugins to enable',
-          newPlugins: [],
-        };
-      }
+      return {
+        ok: true,
+        message: 'Plugins reloaded successfully',
+        newPlugins,
+      };
     } catch (err: any) {
       this.logger.error(`Failed to reload plugins: ${err.message}`);
       return {
@@ -183,7 +148,6 @@ export class PluginsService implements OnModuleInit {
   private getPluginContext() {
     return {
       storage: this.storage,
-      dataSource: AppDataSource,
       redis: this.redis,
       redlock: this.redlock,
       getRepo: async (id: string) => {
@@ -205,27 +169,6 @@ export class PluginsService implements OnModuleInit {
         } catch (err: any) {
           this.logger.error(`getRepo error: ${err.message}`);
           throw err;
-        }
-      },
-      trackDownload: async (repo: any, name: string, version?: string) => {
-        try {
-          await this.monitor.increment(`downloads.${repo.id || repo.name}`);
-          if (AppDataSource?.isInitialized) {
-            const artifactRepo = AppDataSource.getRepository(Artifact);
-            await artifactRepo
-              .createQueryBuilder()
-              .update(Artifact)
-              .set({ lastAccessedAt: new Date() })
-              .where('repositoryId = :repoId', { repoId: repo.id })
-              .andWhere('packageName = :name', { name })
-              .andWhere(
-                version ? 'version = :version' : '1=1',
-                version ? { version } : {},
-              )
-              .execute();
-          }
-        } catch (err: any) {
-          // Silent fail
         }
       },
       indexArtifact: async (
@@ -252,9 +195,7 @@ export class PluginsService implements OnModuleInit {
           if (typeof metadata === 'string') {
             try {
               metadata = JSON.parse(metadata);
-            } catch (e) {
-              // ignore
-            }
+            } catch (e) {}
           }
 
           let packageName =
@@ -285,7 +226,10 @@ export class PluginsService implements OnModuleInit {
 
           if (!packageName) return;
 
-          const { buildKey, normalizeStorageKey } = require('../../storage/key-utils');
+          const {
+            buildKey,
+            normalizeStorageKey,
+          } = require('../../storage/key-utils');
           const storageKeyRaw =
             metadata.storageKey || normalizedResult.id || null;
           const storageKey = storageKeyRaw
@@ -296,8 +240,8 @@ export class PluginsService implements OnModuleInit {
             artifactPath ||
             metadata.path ||
             (normalizedResult.id &&
-              typeof normalizedResult.id === 'string' &&
-              normalizedResult.id.includes('/')
+            typeof normalizedResult.id === 'string' &&
+            normalizedResult.id.includes('/')
               ? normalizedResult.id
               : null);
 
@@ -350,7 +294,7 @@ export class PluginsService implements OnModuleInit {
                 source: 'plugin-context',
               },
             })
-            .catch(() => { });
+            .catch(() => {});
         } catch (err: any) {
           this.logger.error(`indexArtifact error: ${err.message}`);
         }
@@ -358,38 +302,10 @@ export class PluginsService implements OnModuleInit {
     };
   }
 
-  async registerPluginInDb(plugin: IPlugin) {
-    if (!AppDataSource.isInitialized) {
-      this.logger.debug(
-        'AppDataSource is not initialized; skipping DB registration for feature ' +
-        plugin.metadata.key,
-      );
-      return;
-    }
-    const repo = AppDataSource.getRepository(Plugin);
-    const existing = await repo.findOneBy({ key: plugin.metadata.key });
-    if (!existing) {
-      const entity = repo.create({
-        key: plugin.metadata.key,
-        name: plugin.metadata.name,
-        metadata: plugin.metadata,
-      });
-      await repo.save(entity);
-    } else {
-      // update metadata if changed
-      existing.name = plugin.metadata.name ?? existing.name;
-      existing.metadata = {
-        ...(existing.metadata ?? {}),
-        ...(plugin.metadata ?? {}),
-      };
-      await repo.save(existing);
-    }
-  }
-
   list() {
     return Array.from(this.loaded.values()).map((p) => {
       const key = p.metadata.key;
-      // Check if icon exists in the same way the controller does
+
       const possibleIconPaths = [
         path.join(__dirname, 'impl', `${key}-plugin`, 'icon.png'),
         path.join(__dirname, '..', 'impl', `${key}-plugin`, 'icon.png'),
@@ -402,7 +318,6 @@ export class PluginsService implements OnModuleInit {
         icon: iconExists ? `/plugins/${key}/icon` : undefined,
         installed: {
           key: p.metadata.key,
-          version: p.metadata.version,
         },
       };
     });

@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import jwt from 'jsonwebtoken';
@@ -7,7 +21,7 @@ import * as bcrypt from 'bcryptjs';
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private users: UsersService) { }
+  constructor(private users: UsersService) {}
 
   private authCache: Map<string, { result: any; expires: number }> = new Map();
 
@@ -52,7 +66,9 @@ export class AuthService {
     return jwt.sign(
       payload,
       secret as jwt.Secret,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' } as jwt.SignOptions,
+      {
+        expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+      } as jwt.SignOptions,
     );
   }
 

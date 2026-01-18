@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -8,7 +22,7 @@ import AppDataSource from '../../data-source';
 
 @Injectable()
 export class MonitorService {
-  constructor(@InjectRepository(Metric) private repo: Repository<Metric>) { }
+  constructor(@InjectRepository(Metric) private repo: Repository<Metric>) {}
 
   async getBasicMetrics() {
     // sample: compute simple metrics
@@ -149,8 +163,8 @@ export class MonitorService {
           success: proxyFetchSuccess,
           failure: proxyFetchFailure,
           errors: proxyFetchErrors,
-          durationTotal: proxyFetchDurationTotal
-        }
+          durationTotal: proxyFetchDurationTotal,
+        },
       };
     } catch (err: any) {
       return {
@@ -163,7 +177,14 @@ export class MonitorService {
         downloadsByRepo: {},
         artifactsByRepo: {},
         storageByRepo: {},
-        proxyMetrics: { hits: 0, misses: 0, success: 0, failure: 0, errors: 0, durationTotal: 0 }
+        proxyMetrics: {
+          hits: 0,
+          misses: 0,
+          success: 0,
+          failure: 0,
+          errors: 0,
+          durationTotal: 0,
+        },
       };
     }
   }

@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   Controller,
   Get,
@@ -16,7 +30,7 @@ import * as fs from 'fs';
 
 @Controller('plugins')
 export class PluginsController {
-  constructor(private readonly service: PluginsService) { }
+  constructor(private readonly service: PluginsService) {}
 
   @Get()
   list() {
@@ -30,11 +44,20 @@ export class PluginsController {
       throw new HttpException('Plugin not found', HttpStatus.NOT_FOUND);
     }
 
-    // Try a few possible locations based on how NestJS might have bundled it
     const possiblePaths = [
       path.join(__dirname, 'impl', `${key}-plugin`, 'icon.png'),
-      path.join(__dirname, '..', 'impl', `${key}-plugin`, 'icon.png'), // Case if flattened
-      path.join(__dirname, '..', '..', 'src', 'modules', 'plugins', 'impl', `${key}-plugin`, 'icon.png'), // Dev fallback
+      path.join(__dirname, '..', 'impl', `${key}-plugin`, 'icon.png'),
+      path.join(
+        __dirname,
+        '..',
+        '..',
+        'src',
+        'modules',
+        'plugins',
+        'impl',
+        `${key}-plugin`,
+        'icon.png',
+      ),
     ];
 
     for (const iconPath of possiblePaths) {
@@ -67,45 +90,33 @@ export class PluginsController {
 
   @Get('status')
   async getPluginStatus() {
-    // Import feature definitions
-    const { COMMUNITY_FEATURES, ENTERPRISE_FEATURES, FEATURE_CATEGORIES } = await import('../license/features');
-    const { LicenseService } = await import('../license/license.service');
+    const { COMMUNITY_FEATURES, ENTERPRISE_FEATURES, FEATURE_CATEGORIES } =
+      await import('../license/features');
 
-    const loadedPlugins = this.service.list().map(p => p.key);
+    const loadedPlugins = this.service.list().map((p) => p.key);
 
-    // Check which features are enabled
-    const enabledFeatures: string[] = [];
+    const enabledFeatures: string[] = [
+      ...COMMUNITY_FEATURES,
+      ...ENTERPRISE_FEATURES,
+    ];
     const disabledFeatures: string[] = [];
 
-    // All community features are always enabled
-    enabledFeatures.push(...COMMUNITY_FEATURES);
-
-    // Check enterprise features
-    for (const feature of ENTERPRISE_FEATURES) {
-      if (loadedPlugins.includes(feature)) {
-        enabledFeatures.push(feature);
-      } else {
-        disabledFeatures.push(feature);
-      }
-    }
-
     return {
-      // Plugin-specific info
       plugins: {
         loaded: loadedPlugins,
-        community: ['npm', 'pypi', 'docker', 'maven'],
-        enterprise: ['nuget', 'composer', 'helm', 'rust', 'raw'],
-        restricted: loadedPlugins.length < 9 ? ['nuget', 'composer', 'helm', 'rust', 'raw'].filter(p => !loadedPlugins.includes(p)) : [],
+        community: loadedPlugins,
+        enterprise: [],
+        restricted: [],
       },
-      // All features info
+
       features: {
         enabled: enabledFeatures,
         disabled: disabledFeatures,
         categories: FEATURE_CATEGORIES,
       },
-      // License status
-      requiresLicense: loadedPlugins.length < 9,
-      edition: loadedPlugins.length < 9 ? 'community' : 'enterprise',
+
+      requiresLicense: false,
+      edition: 'community',
     };
   }
 }

@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   Controller,
   Post,
@@ -26,7 +40,7 @@ export class AuthController {
     private audit: AuditService,
     @InjectRepository(Role) private roleRepo?: Repository<Role>,
     @InjectRepository(User) private userRepo?: Repository<User>,
-  ) { }
+  ) {}
 
   // Return the authenticated user (if any) along with roles/permissions when available
   @Get('me')
@@ -110,7 +124,10 @@ export class AuthController {
       throw new HttpException('invalid credentials', HttpStatus.UNAUTHORIZED);
     }
     const token = this.auth.signToken({ sub: u.id, username: u.username });
-    const refreshToken = this.auth.signRefreshToken({ sub: u.id, username: u.username });
+    const refreshToken = this.auth.signRefreshToken({
+      sub: u.id,
+      username: u.username,
+    });
     await this.auth.updateRefreshToken(u.id, refreshToken);
 
     await this.audit.logSuccess({
@@ -120,7 +137,12 @@ export class AuthController {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
-    return { ok: true, token, refreshToken, user: { id: u.id, username: u.username } };
+    return {
+      ok: true,
+      token,
+      refreshToken,
+      user: { id: u.id, username: u.username },
+    };
   }
 
   @Post('refresh')
@@ -132,15 +154,29 @@ export class AuthController {
     if (!payload)
       throw new HttpException('Invalid refresh token', HttpStatus.UNAUTHORIZED);
 
-    const user = await this.auth.validateRefreshToken(payload.sub as string, body.refreshToken);
+    const user = await this.auth.validateRefreshToken(
+      payload.sub as string,
+      body.refreshToken,
+    );
     if (!user)
       throw new HttpException('Invalid refresh token', HttpStatus.UNAUTHORIZED);
 
-    const token = this.auth.signToken({ sub: user.id, username: user.username });
-    const refreshToken = this.auth.signRefreshToken({ sub: user.id, username: user.username });
+    const token = this.auth.signToken({
+      sub: user.id,
+      username: user.username,
+    });
+    const refreshToken = this.auth.signRefreshToken({
+      sub: user.id,
+      username: user.username,
+    });
     await this.auth.updateRefreshToken(user.id, refreshToken);
 
-    return { ok: true, token, refreshToken, user: { id: user.id, username: user.username } };
+    return {
+      ok: true,
+      token,
+      refreshToken,
+      user: { id: user.id, username: user.username },
+    };
   }
 
   @Post('signup')
@@ -184,9 +220,7 @@ export class AuthController {
   // Allowed only if there are no users in the system. Creates an admin role
   // (if not present) and assigns it to the created account.
   @Post('bootstrap')
-  async bootstrap(
-    @Body() body: { username?: string; password: string },
-  ) {
+  async bootstrap(@Body() body: { username?: string; password: string }) {
     if (!body?.password) {
       throw new HttpException('password is required', HttpStatus.BAD_REQUEST);
     }

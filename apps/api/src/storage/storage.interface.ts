@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 export interface SaveResult {
   ok: boolean;
   path?: string;
@@ -11,7 +25,7 @@ export interface StorageAdapter {
   saveStream?(
     key: string,
     stream: NodeJS.ReadableStream,
-  ): Promise<SaveResult & { contentHash?: string }>;
+  ): Promise<SaveResult & { contentHash?: string; size?: number }>;
   // get a public (or internal) URL to read the object
   getUrl(key: string): Promise<string>;
   exists(key: string): Promise<boolean>;
@@ -21,10 +35,15 @@ export interface StorageAdapter {
     key: string,
     range?: { start?: number; end?: number },
   ): Promise<{
-    stream: NodeJS.ReadableStream;
+    stream: any; // NodeJS.ReadableStream or ReadableStream
     size?: number;
+    length?: number;
     contentType?: string;
-  }>;
+  } | null>;
   // get metadata (size, mtime, etc)
   getMetadata?(key: string): Promise<{ size: number; mtime: Date } | null>;
+  // optionally get raw buffer
+  get?(key: string): Promise<Buffer | null>;
+  // optionally list keys by prefix
+  list?(prefix: string): Promise<string[]>;
 }

@@ -19,7 +19,8 @@ export function createNpmPlugin(context: PluginContext) {
    */
   const pingUpstream = async (repo: any, context: PluginContext) => {
     const target = repo.config?.proxyUrl || 'https://registry.npmjs.org';
-    const proxyFetchWithAuth = require('../../../../plugins-core/proxy-helper').default;
+    const proxyFetchWithAuth =
+      require('../../../../plugins-core/proxy-helper').default;
 
     try {
       const res = await proxyFetchWithAuth(repo, target, {
@@ -32,7 +33,9 @@ export function createNpmPlugin(context: PluginContext) {
         ok: res.ok || (res.status > 0 && res.status < 500),
         status: res.status,
         reachable: res.status > 0 && res.status < 500,
-        message: res.ok ? undefined : (res.body as any)?.message || 'Upstream returned error status'
+        message: res.ok
+          ? undefined
+          : res.body?.message || 'Upstream returned error status',
       };
     } catch (err: any) {
       return { ok: false, message: String(err?.message ?? err) };
@@ -44,7 +47,6 @@ export function createNpmPlugin(context: PluginContext) {
       key: 'npm',
       name: 'NPM',
       description: 'NPM Registry Plugin',
-      version: '1.0.0',
       requiresLicense: false,
       licenseType: 'free',
       configSchema,
@@ -68,7 +70,6 @@ const defaultExport = {
     key: 'npm',
     name: 'NPM',
     description: 'NPM Registry Plugin',
-    version: '1.0.0',
     configSchema,
   },
   authenticate: () => ({ ok: false, message: 'Plugin not initialized' }),

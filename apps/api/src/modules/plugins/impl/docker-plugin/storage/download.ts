@@ -25,7 +25,6 @@ export function initDownload(context: { storage: any; proxyFetch?: any }) {
  */
 export async function download(repo: Repository, name: string, tag?: string) {
   const isProxy = (repo?.type || '').toString().toLowerCase() === 'proxy';
-  console.log('[DOCKER DOWNLOAD] Called with:', { name, tag, isProxy, repoType: repo?.type });
   // For proxy repos and tag-based manifest requests, try revalidating from
   // upstream on every request, then fall back to cached storage.
   try {
@@ -49,21 +48,23 @@ export async function download(repo: Repository, name: string, tag?: string) {
           const upstreamUrl = `${String(targetEarly).replace(/\/$/, '')}/v2/${encodedName}/manifests/${encodeURIComponent(
             tag,
           )}`;
-          // if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-          console.log('[PROXY REVALIDATE TAG - download]', {
-            upstreamUrl,
-            originalName: nameStr,
-            normalizedName,
-          });
+          if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+            console.debug('[PROXY REVALIDATE TAG]', {
+              upstreamUrl,
+              originalName: nameStr,
+              normalizedName,
+            });
+          }
           const fetched = await proxyFetch?.(repo as any, upstreamUrl);
-          // if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-          console.log('[PROXY REVALIDATE TAG RESULT - download]', {
-            ok: fetched?.ok,
-            status: fetched?.status,
-            url: fetched?.url,
-            storageKey: fetched?.storageKey,
-            hasBody: !!fetched?.body
-          });
+          if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+            console.debug('[PROXY REVALIDATE TAG RESULT]', {
+              ok: fetched?.ok,
+              status: fetched?.status,
+              url: fetched?.url,
+              storageKey: fetched?.storageKey,
+              hasBody: !!fetched?.body,
+            });
+          }
           if (fetched?.ok && (fetched.url || fetched.body)) {
             return {
               ok: true,
@@ -100,13 +101,7 @@ export async function download(repo: Repository, name: string, tag?: string) {
     }
 
     // Fallback to cached storage (for hosted repos or when proxy upstream has temporary issues)
-    const key = buildKey(
-      'docker',
-      repo.id,
-      name,
-      'manifests',
-      tag || 'latest',
-    );
+    const key = buildKey('docker', repo.id, name, 'manifests', tag || 'latest');
     // Verify the file actually exists before returning ok
     const exists = await storage.exists(key);
     if (!exists) {
@@ -164,7 +159,10 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
             normalizedName,
           });
         const fetchedEarly = await proxyFetch?.(repo as any, upstreamUrl);
-        if (fetchedEarly?.ok && (fetchedEarly.url || fetchedEarly.storageKey || fetchedEarly.body)) {
+        if (
+          fetchedEarly?.ok &&
+          (fetchedEarly.url || fetchedEarly.storageKey || fetchedEarly.body)
+        ) {
           // Upstream returned something (and was saved to storage by proxyFetch)
           return {
             ok: true,
@@ -260,8 +258,16 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
             target,
           });
         let fetched = await proxyFetch?.(repo as any, upstreamManifest);
-        if (!fetched?.ok && (fetched?.status === 404 || fetched?.status === 400)) {
-          if (process.env.DEBUG_DOCKER_PLUGIN === 'true') console.debug('[PROXY FETCH BLOB] Manifest/Ref failed (status ' + fetched.status + '), trying blob endpoint');
+        if (
+          !fetched?.ok &&
+          (fetched?.status === 404 || fetched?.status === 400)
+        ) {
+          if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
+            console.debug(
+              '[PROXY FETCH BLOB] Manifest/Ref failed (status ' +
+                fetched.status +
+                '), trying blob endpoint',
+            );
           fetched = await proxyFetch?.(repo as any, upstreamBlob);
         }
         if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
@@ -269,9 +275,12 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
             ok: fetched?.ok,
             status: fetched?.status,
             hasUrl: !!fetched?.url,
-            hasBody: !!fetched?.body
+            hasBody: !!fetched?.body,
           });
-        if (fetched?.ok && (fetched.url || fetched.storageKey || fetched.body)) {
+        if (
+          fetched?.ok &&
+          (fetched.url || fetched.storageKey || fetched.body)
+        ) {
           return {
             ok: true,
             url: fetched.url,
@@ -285,6 +294,7 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
       }
     }
   }
-  if (process.env.DEBUG_DOCKER_PLUGIN === 'true') console.debug('[GETBLOB] Not found in any candidate or upstream');
+  if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
+    console.debug('[GETBLOB] Not found in any candidate or upstream');
   return { ok: false };
 }

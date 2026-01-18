@@ -57,11 +57,8 @@ export async function startRegistryForRepo(
     const url = require('url');
 
     // pick registry version: prefer opts.version -> repo.config.docker.version -> v2
-    const chosenVersion = (
-      opts?.version ||
-      repo?.config?.docker?.version ||
-      'v2'
-    ).toString();
+    // Registry V1 is deprecated and removed. We force V2.
+    const chosenVersion = 'v2';
 
     // Get plugin reference from context
     const plugin = context?.plugin;
@@ -89,12 +86,10 @@ export async function startRegistryForRepo(
           (req.method === 'GET' || req.method === 'POST') &&
           /^\/v2\/token/.test(pathname)
         ) {
-          console.log('[REGISTRY PROXY] Handling token request:', req.method, req.url);
           const apiBase = (
             process.env.API_URL || 'http://localhost:3000'
           ).replace(/\/$/, '');
           const apiUrl = `${apiBase}/repository/${repo.id}${req.url}`;
-          console.log('[REGISTRY PROXY] Proxying to:', apiUrl);
           d('[TOKEN PROXY]', {
             method: req.method,
             apiUrl,
@@ -116,7 +111,6 @@ export async function startRegistryForRepo(
               options.headers['content-type'] = req.headers['content-type'];
 
             const proxyReq = http.request(options, (proxyRes: any) => {
-              console.log('[REGISTRY PROXY] Response status:', proxyRes.statusCode);
               res.statusCode = proxyRes.statusCode;
               Object.keys(proxyRes.headers).forEach((key: string) => {
                 res.setHeader(key, proxyRes.headers[key]);
@@ -128,7 +122,6 @@ export async function startRegistryForRepo(
                 data += chunk;
               });
               proxyRes.on('end', () => {
-                console.log('[REGISTRY PROXY] Response body:', data);
                 res.write(data);
                 res.end();
               });
@@ -216,37 +209,22 @@ export async function startRegistryForRepo(
         }
 
         // v1 ping
-        if (
-          chosenVersion === 'v1' &&
-          req.method === 'GET' &&
-          /^\/v1\/_ping$/.test(pathname)
-        ) {
-          res.statusCode = 200;
-          res.end(JSON.stringify({ ok: true }));
-          return;
-        }
 
         // tags list
         let m: RegExpMatchArray | null = null;
         if (chosenVersion === 'v2')
           m = pathname.match(/^\/v2\/(.+)\/tags\/list$/);
-        else if (chosenVersion === 'v1')
-          m = pathname.match(/^\/v1\/repositories\/(.+)\/tags$/);
         if ((req.method === 'GET' || req.method === 'HEAD') && m) {
           const name = decodeURIComponent(m[1]);
           const out = await plugin.listVersions?.(repo, name);
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
           // v1 repos/tags shape historically is a tags map: { "latest": "<digest>" }
-          if (chosenVersion === 'v1') {
-            const map: any = {};
-            (out?.versions || []).forEach((t: any) => (map[t] = '')); // no digest known
-            res.end(JSON.stringify(map));
-          } else {
-            res.end(JSON.stringify({ name, tags: out?.versions ?? [] }));
-          }
+          res.end(JSON.stringify({ name, tags: out?.versions ?? [] }));
           return;
         }
+
+        // v1 images list (layer IDs from manifest)
 
         // initiate multipart upload: POST /v2/<name>/blobs/uploads (only v2)
         m =
@@ -513,7 +491,7 @@ export async function startRegistryForRepo(
                 if (parsedJson?.data)
                   buf = Buffer.from(parsedJson.data, 'base64');
               }
-            } catch (e) { }
+            } catch (e) {}
           }
 
           const out = await plugin.finalizeUpload?.(
@@ -522,7 +500,7 @@ export async function startRegistryForRepo(
             uuid as any,
             digest,
             buf, // pass buffer
-            undefined // stream
+            undefined, // stream
           );
           if (out?.ok) {
             res.statusCode = 201;
@@ -549,7 +527,7 @@ export async function startRegistryForRepo(
         m =
           chosenVersion === 'v2'
             ? pathname.match(/^\/v2\/(.+)\/manifests\/([^\/]+)$/)
-            : pathname.match(/^\/v1\/repositories\/(.+)\/tags\/(.+)$/);
+            : null;
         if (m) {
           // PUT -> store manifest
           if (req.method === 'PUT') {
@@ -740,11 +718,17 @@ export async function startRegistryForRepo(
               return res.end();
             }
 
-            if ((out.url && out.url.startsWith('file://')) || out.data || out.body) {
+            if (
+              (out.url && out.url.startsWith('file://')) ||
+              out.data ||
+              out.body
+            ) {
               const fs = require('fs');
               let buffer: Buffer;
               if (out.data || out.body) {
-                buffer = Buffer.isBuffer(out.data || out.body) ? (out.data || out.body) : Buffer.from(out.data || out.body);
+                buffer = Buffer.isBuffer(out.data || out.body)
+                  ? out.data || out.body
+                  : Buffer.from(out.data || out.body);
               } else {
                 const fp = out.url.replace(/^file:\/\//, '');
                 buffer = await fs.promises.readFile(fp);
@@ -798,11 +782,6 @@ export async function startRegistryForRepo(
               // simple HTTP clients can read the stored manifest/tag value
               // instead of being redirected. For v2 blob fetches we still
               // redirect to the URL so clients can download the binary.
-              if (chosenVersion === 'v1') {
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/json');
-                return res.end(JSON.stringify(out));
-              }
               // redirect to external url for v2 (blobs)
               res.statusCode = 302;
               res.setHeader('Location', out.url);
@@ -848,12 +827,19 @@ export async function startRegistryForRepo(
           }
 
           if (!out?.ok) {
-            console.warn(`[DOCKER_REGISTRY] Resource not found: ${name} (digest: ${digest}). Result:`, out);
+            console.warn(
+              `[DOCKER_REGISTRY] Resource not found: ${name} (digest: ${digest}). Result:`,
+              out,
+            );
             res.statusCode = 404;
             res.end(JSON.stringify(out || { ok: false }));
             return;
           }
-          if ((out.url && out.url.startsWith('file://')) || out.data || out.body) {
+          if (
+            (out.url && out.url.startsWith('file://')) ||
+            out.data ||
+            out.body
+          ) {
             const fs = require('fs');
             try {
               let buffer: Buffer | null = null;
@@ -886,7 +872,11 @@ export async function startRegistryForRepo(
 
               // support simple Range header (if file-based)
               const rangeHeader = req.headers?.range as string | undefined;
-              if (rangeHeader && /^bytes=\d*-?\d*$/.test(rangeHeader) && !buffer) {
+              if (
+                rangeHeader &&
+                /^bytes=\d*-?\d*$/.test(rangeHeader) &&
+                !buffer
+              ) {
                 const fp = out.url.replace(/^file:\/\//, '');
                 const mrange = rangeHeader.replace(/bytes=/, '').split('-');
                 const start = mrange[0] ? parseInt(mrange[0], 10) : 0;

@@ -319,14 +319,23 @@ export async function listVersions(repo: Repository, name: string) {
         for (const key of keys) {
           if (!key.startsWith(prefix)) continue;
           let tag = key.slice(prefix.length);
-          try { tag = decodeURIComponent(tag); } catch (e) { }
+          try {
+            tag = decodeURIComponent(tag);
+          } catch (e) {}
 
           if (tag.includes('/')) continue;
-          if (tag.startsWith('sha256:') || tag.startsWith('sha384:') || tag.startsWith('sha512:')) continue;
+          if (
+            tag.startsWith('sha256:') ||
+            tag.startsWith('sha384:') ||
+            tag.startsWith('sha512:')
+          )
+            continue;
 
           versions.add(tag);
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     };
 
     await tryLoad(repo.id);
@@ -337,7 +346,6 @@ export async function listVersions(repo: Repository, name: string) {
     return { ok: false, message: String(err) };
   }
 }
-
 
 /**
  * Generate install instructions for a package

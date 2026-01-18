@@ -68,7 +68,9 @@ export function createDockerPlugin(context: PluginContext) {
 
   // Helper to get repository by ID (needed for group operations)
   // Prefer host-provided resolver (DB-backed). Fallback to storage only if provided.
-  const fallbackGetRepo = async (repoId: string): Promise<Repository | null> => {
+  const fallbackGetRepo = async (
+    repoId: string,
+  ): Promise<Repository | null> => {
     try {
       if (!storage?.get) return null;
       const key = buildKey('repository', repoId, 'metadata');
@@ -143,7 +145,6 @@ export function createDockerPlugin(context: PluginContext) {
             id: `${name}:${tag}`,
             metadata: {
               name,
-              version: tag,
               storageKey: key,
               ...finalMetadata,
             },
@@ -196,7 +197,6 @@ export function createDockerPlugin(context: PluginContext) {
     // Metadata
     id: 'docker',
     name: 'Docker Registry',
-    version: '1.0.0',
     description:
       'Docker Registry V2 API with support for hosted, proxy, and group repositories',
 
@@ -291,8 +291,6 @@ export function createDockerPlugin(context: PluginContext) {
             secret,
           );
 
-          console.log('[DOCKER PLUGIN] GENERATED TOKEN:', token); // DEBUG
-
           return {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
@@ -335,7 +333,6 @@ const defaultExport: any = {
     key: 'docker',
     name: 'Docker Registry',
     description: 'Docker Registry V2 plugin',
-    version: '1.0.0',
     configSchema: dockerConfigSchema,
     requiresLicense: true,
     licenseType: 'enterprise',

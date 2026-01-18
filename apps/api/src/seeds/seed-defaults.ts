@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import AppDataSource from '../data-source';
 import { Role } from '../entities/role.entity';
 import { Permission } from '../entities/permission.entity';
@@ -35,7 +49,6 @@ export async function seedDefaults() {
     }
   }
 
-  // ensure permissions
   const permsToEnsure = [
     { key: 'repo.read', description: 'Read access to repository and packages' },
     { key: 'repo.write', description: 'Write/upload access to repository' },
@@ -54,7 +67,6 @@ export async function seedDefaults() {
     }
   }
 
-  // Ensure role-permission mappings (admin => all, reader => repo.read)
   const admin = await roleRepo.findOne({
     where: { name: 'admin' },
     relations: ['permissions'],
@@ -88,23 +100,12 @@ export async function seedDefaults() {
     console.log('seed: reader role assigned repo.read');
   }
 
-  // Note: do not add docker example repo by default. Tests should create their
-  // own repositories when required so seeds stay idempotent and predictable.
-
-  // In production we want some standard Maven repositories preinstalled — create
-  // a small set of maven repos when running in production contexts. This keeps
-  // development/tests lightweight while ensuring production images contain
-  // preconfigured maven repos.
-
-  // ensure a default storage config exists (filesystem)
   try {
     const cfgRepo = AppDataSource.getRepository(StorageConfig);
 
-    // Check if any default storage config exists
     const existingDefault = await cfgRepo.findOneBy({ isDefault: true });
 
     if (!existingDefault) {
-      // Determine storage type from environment (Helm chart bootstrapping)
       let type = 'filesystem';
       let key = 'default-fs';
       let config: any = {};
@@ -115,15 +116,10 @@ export async function seedDefaults() {
         config = {
           bucket: process.env.S3_BUCKET,
           region: process.env.S3_REGION,
-          // Store keys only if they are not provided via IAM or standard envs implicitly
-          // But to be safe for adapter reconstruction from DB:
           accessKey: process.env.S3_ACCESS_KEY,
           secretKey: process.env.S3_SECRET_KEY,
         };
-      } else if (
-        process.env.STORAGE_TYPE === 'gcs' ||
-        process.env.GCS_BUCKET
-      ) {
+      } else if (process.env.STORAGE_TYPE === 'gcs' || process.env.GCS_BUCKET) {
         type = 'gcs';
         key = 'default-gcs';
         config = {
@@ -158,13 +154,6 @@ export async function seedDefaults() {
     // ignore if StorageConfig table not present yet
   }
 
-  // Do not destroy here to allow caller to run additional actions (like migrations then seed)
-
-  // Historically the seed created a default admin user automatically (username 'admin').
-  // Now that a one-time bootstrap endpoint exists (POST /auth/bootstrap), it's safer
-  // to avoid creating a password-less/default admin during seeds. To preserve
-  // compatibility for CI or special setups, set SEED_CREATE_ADMIN=true in the env
-  // to opt-in to creating the seeded admin (using SEED_ADMIN_PASSWORD or default).
   try {
     const doCreateAdmin =
       String(process.env.SEED_CREATE_ADMIN || '').toLowerCase() === 'true';
@@ -178,7 +167,7 @@ export async function seedDefaults() {
       if (!adminUser) {
         const pw = process.env.SEED_ADMIN_PASSWORD || 'admin123';
         const hash = await bcrypt.hash(pw, 10);
-        // ensure roles is a Role[] (admin may be null) — cast to satisfy TypeORM typings
+
         const created = userRepo.create({
           username: 'admin',
           passwordhash: hash,
@@ -191,7 +180,6 @@ export async function seedDefaults() {
       }
     }
   } catch (err) {
-    // if something goes wrong (missing User table), just skip admin creation
     console.log('seed: skipping admin creation due to error or missing schema');
   }
 }

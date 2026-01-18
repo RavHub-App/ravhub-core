@@ -28,7 +28,7 @@ export async function generateToken(_repo: any, creds?: any, options?: any) {
   // If no credentials, allow anonymous access for pull (if proxy/public)
   // For now, we allow anonymous token generation which grants requested scopes
   // In a real scenario, we should check if the repo is public or if the user has permissions.
-  // Since this is a plugin, we might assume the controller has done some checks, 
+  // Since this is a plugin, we might assume the controller has done some checks,
   // but actually the controller calls us to GET the token.
 
   const username = creds?.username || 'anonymous';
@@ -72,9 +72,9 @@ export async function generateToken(_repo: any, creds?: any, options?: any) {
         // But server.ts verify() doesn't check audience by default unless specified.
         // server.ts: jwt.verify(token, secret as any);
         exp: Math.floor(Date.now() / 1000) + 3600,
-        access: access
+        access: access,
       },
-      secret
+      secret,
     );
 
     return { ok: true, token };

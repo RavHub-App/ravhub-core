@@ -29,8 +29,8 @@ services:
       # License validation (optional in dev, required in prod)
       - LICENSE_KEY=${LICENSE_KEY:-}
       - LICENSE_VALIDATION_URL=${LICENSE_VALIDATION_URL:-https://portal.ravhub.app/api/validate}
-      # Point to local license portal for development
-      - LICENSE_PORTAL_URL=http://host.docker.internal:3001
+      # Point to local license portal if running natively
+      - LICENSE_PORTAL_URL=${LICENSE_PORTAL_URL:-http://host.docker.internal:3001}
       # Ensure storage service uses the persisted volume
       - STORAGE_PATH=/data/storage
       - DEBUG_DOCKER_PLUGIN=false
@@ -67,8 +67,7 @@ services:
       # target reachable from the container network. Use the `api` service
       # hostname so the proxy connects to the API container:3000.
       - VITE_API_URL=http://api:3000
-      # Point to local license portal for development (browser access)
-      - VITE_LICENSE_PORTAL_URL=http://localhost:3001
+      - VITE_LICENSE_PORTAL_URL=${VITE_LICENSE_PORTAL_URL:-http://localhost:3001}
     depends_on:
       - api
       - postgres

@@ -1,75 +1,107 @@
+FROM node:22-slim AS build-api
 
-FROM node:20-alpine AS builder
+WORKDIR /workspace
 
-WORKDIR /app
+# Install pnpm and NestJS CLI globally (only once)
+RUN npm install -g pnpm@latest @nestjs/cli
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install small utilities used by nest/watch script inside the container and postgresql-client for pg_dump
+RUN apt-get update && apt-get install -y procps postgresql-client nginx --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# Copy workspace config
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+# Copy lockfiles and root package.json for caching
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
 
-# Copy app package.json files
-COPY apps/api/package.json apps/api/
-COPY apps/web/package.json apps/web/
-COPY services/license-portal/package.json services/license-portal/
-
-# Install dependencies
+# Install all workspace dependencies using pnpm (single install for entire workspace)
+# This installs dependencies for both api and web packages
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
-COPY . .
+# Copy rest of repo (source code)
+COPY apps/api ./apps/api
+COPY scripts ./scripts
+
+# Reinstall after copying repo to ensure workspace packages (and types) are available for the apps/api runtime.
+# This avoids cases where a cached layer didn't include certain subpackage changes.
+RUN pnpm install --frozen-lockfile
+
+# Set working directory to the API app
+WORKDIR /workspace/apps/api
+
+# Build the API app
+RUN pnpm build
+
+# Remove declaration files to avoid migration runner picking them up as duplicates
+RUN find dist -type f -name "*.d.ts" -delete
+
+# Create a portable deployment folder for the API (isolated node_modules)
+WORKDIR /workspace
+RUN pnpm --filter=api --prod --legacy deploy /workspace/deploy/api \
+	&& cp -a /workspace/apps/api/dist /workspace/deploy/api/dist
+
+FROM node:22-slim AS build-web
+
+WORKDIR /workspace
+
+# Copy lockfiles and root package.json for caching
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+
+# Install dependencies
+RUN npm install -g pnpm@latest && pnpm install --frozen-lockfile
+
+# Copy rest of source code
+COPY apps/web ./apps/web
+
+# Reinstall to link workspace packages
+RUN pnpm install --frozen-lockfile
 
 # Build web
-WORKDIR /app/apps/web
-RUN pnpm build
+RUN pnpm --filter web build
 
-# Build api
-WORKDIR /app/apps/api
-RUN pnpm build
 
 # Production image
-FROM node:20-alpine
+FROM node:22-slim
 
-WORKDIR /app
+# Prepare for running 2 different apps
+EXPOSE 3000
+EXPOSE 80
 
-# Create a non-root user
-RUN addgroup -S ravhub && adduser -S ravhub -G ravhub
+WORKDIR /workspace
 
-RUN npm install -g pnpm
+# Install dependencies and setup non-root user permissions
+RUN apt-get update && apt-get install -y procps postgresql-client nginx --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data/storage /var/log/nginx /var/lib/nginx /workspace/api /workspace/web \
+    && sed -i 's|/run/nginx.pid|/tmp/nginx.pid|g' /etc/nginx/nginx.conf \
+    && sed -i 's|user www-data;|#user www-data;|g' /etc/nginx/nginx.conf \
+    && chown -R node:node /workspace /data/storage /var/log/nginx /var/lib/nginx /etc/nginx/conf.d \
+    && echo "Nginx config patched" && cat /etc/nginx/nginx.conf
 
-# Copy workspace config for production install
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY apps/api/package.json apps/api/
+# Copy portable API bundle
+COPY --from=build-api --chown=node:node /workspace/deploy/api ./api
 
-# Install prod dependencies
-RUN pnpm install --frozen-lockfile --prod
+# Copy built Web
+COPY --from=build-web --chown=node:node /workspace/apps/web/dist ./web/dist
 
-# Copy built API
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
+# Nginx config
+COPY --chown=node:node ./docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 
-# Copy built Web to client folder in API
-COPY --from=builder /app/apps/web/dist ./apps/api/client
+# Remove default site
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default || true
 
-# Ensure the non-root user has access to the app directory
-RUN chown -R ravhub:ravhub /app
+COPY --chown=node:node ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV SERVE_STATIC_PATH=/app/apps/api/client
+ENV FRONTEND_PORT=80
+ENV STORAGE_PATH=/data/storage
 
 # Switch to non-root user
-USER ravhub
+USER node
 
-WORKDIR /app/apps/api
+ENTRYPOINT ["docker-entrypoint.sh"]
 
-EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health/live || exit 1
-
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["node", "dist/main"]

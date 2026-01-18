@@ -1,0 +1,56 @@
+
+> api@0.0.1 test /home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api
+> jest -- test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts --coverage --collectCoverageFrom=src/modules/plugins/impl/npm-plugin/storage/storage.ts --no-cache
+
+  console.error
+    [NPM] Invalid JSON metadata SyntaxError: Unexpected token 'i', "invalid json" is not valid JSON
+        at JSON.parse (<anonymous>)
+        at Object.handlePut (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/src/modules/plugins/impl/npm-plugin/storage/storage.ts:119:23)
+        at Object.<anonymous> (/home/rubendev/Proyectos/distributed-chat/ravhub-core/apps/api/test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts:118:49)
+        at Promise.finally.completed (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+        at _callCircusTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+        at async _runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+        at async /home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+        at async _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+        at async _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+        at async _runTestsForDescribeBlock (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+        at async run (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+        at async runAndTransformResultsToJestFormat (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+        at async jestAdapter (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-circus@30.2.0_babel-plugin-macros@3.1.0/node_modules/jest-circus/build/runner.js:101:19)
+        at async runTestInternal (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/index.js:275:16)
+        at async runTest (/home/rubendev/Proyectos/distributed-chat/ravhub-core/node_modules/.pnpm/jest-runner@30.2.0/node_modules/jest-runner/build/index.js:343:7)
+
+      119 |       incoming = JSON.parse(buffer.toString());
+      120 |     } catch (e) {
+    > 121 |       console.error('[NPM] Invalid JSON metadata', e);
+          |               ^
+      122 |       return { ok: false, message: 'Invalid JSON' };
+      123 |     }
+      124 |
+
+      at Object.handlePut (src/modules/plugins/impl/npm-plugin/storage/storage.ts:121:15)
+      at Object.<anonymous> (test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts:118:49)
+
+PASS test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts
+  NpmPlugin Storage
+    handlePut
+      ✓ should reject group with none write policy (1 ms)
+      ✓ should handle tarball upload via stream
+      ✓ should handle metadata upload with attachments (1 ms)
+      ✓ should merge with existing metadata
+      ✓ should handle invalid JSON (14 ms)
+      ✓ should delegate to first hosted member in group
+    download
+      ✓ should download package metadata (1 ms)
+      ✓ should download tarball
+      ✓ should return not found for missing package (1 ms)
+      ✓ should handle proxy repository
+      ✓ should iterate through group members
+
+Test Suites: 1 passed, 1 total
+Tests:       11 passed, 11 total
+Snapshots:   0 total
+Time:        0.103 s, estimated 1 s
+Ran all test suites matching test/unit/modules/plugins/impl/npm-plugin/storage/storage.spec.ts|--coverage|--collectCoverageFrom=src/modules/plugins/impl/npm-plugin/storage/storage.ts|--no-cache.

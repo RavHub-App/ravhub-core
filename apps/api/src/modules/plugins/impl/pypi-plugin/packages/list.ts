@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { PluginContext, Repository } from '../utils/types';
 import { buildKey } from '../utils/key-utils';
 
@@ -18,7 +32,9 @@ export function initPackages(context: PluginContext) {
           versions.add(parts[3]);
         }
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
 
     // Check Name-based keys (fallback)
     const prefixName = buildKey('pypi', repo.name, name);
@@ -30,7 +46,9 @@ export function initPackages(context: PluginContext) {
           versions.add(parts[3]);
         }
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
 
     return { ok: true, versions: Array.from(versions) };
   };

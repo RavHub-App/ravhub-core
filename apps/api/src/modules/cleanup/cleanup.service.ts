@@ -1,4 +1,23 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -32,11 +51,8 @@ export class CleanupService {
     private readonly storageService: StorageService,
     private readonly auditService: AuditService,
     private readonly redlockService: RedlockService,
-  ) { }
+  ) {}
 
-  /**
-   * List all cleanup policies
-   */
   async findAll(): Promise<CleanupPolicy[]> {
     return this.policyRepo.find({
       relations: ['createdBy'],
@@ -44,9 +60,6 @@ export class CleanupService {
     });
   }
 
-  /**
-   * Get a single cleanup policy
-   */
   async findOne(id: string): Promise<CleanupPolicy> {
     const policy = await this.policyRepo.findOne({
       where: { id },
@@ -60,9 +73,6 @@ export class CleanupService {
     return policy;
   }
 
-  /**
-   * Create a cleanup policy
-   */
   async create(data: {
     name: string;
     description?: string;
@@ -101,16 +111,12 @@ export class CleanupService {
     return this.policyRepo.save(policy);
   }
 
-  /**
-   * Update a cleanup policy
-   */
   async update(
     id: string,
     data: Partial<CleanupPolicy>,
   ): Promise<CleanupPolicy> {
     const policy = await this.findOne(id);
 
-    // Recalculate next run if schedule changed
     if (data.frequency || data.scheduleTime) {
       data.nextRunAt = this.calculateNextRun(
         data.frequency || policy.frequency,
@@ -122,22 +128,15 @@ export class CleanupService {
     return this.findOne(id);
   }
 
-  /**
-   * Delete a cleanup policy
-   */
   async delete(id: string): Promise<void> {
     await this.policyRepo.delete(id);
   }
 
-  /**
-   * Execute a cleanup policy manually
-   */
   async execute(id: string): Promise<{ deleted: number; freedBytes: number }> {
     const policy = await this.findOne(id);
 
-    // Use a distributed lock to prevent multiple instances from running the same policy
     const lockKey = `cleanup:policy:${id}`;
-    const lockTtl = 10 * 60 * 1000; // 10 minutes
+    const lockTtl = 10 * 60 * 1000;
 
     return this.redlockService.runWithLock(lockKey, lockTtl, async () => {
       this.logger.log(`Executing cleanup policy: ${policy.name} (${id})`);
@@ -152,9 +151,6 @@ export class CleanupService {
     });
   }
 
-  /**
-   * Cleanup artifacts based on policy
-   */
   private async cleanupArtifacts(
     policy: CleanupPolicy,
   ): Promise<{ deleted: number; freedBytes: number }> {
@@ -164,25 +160,21 @@ export class CleanupService {
       .createQueryBuilder('artifact')
       .leftJoinAndSelect('artifact.repository', 'repository');
 
-    // Apply repository filter by IDs
     if (policy.repositoryIds && policy.repositoryIds.length > 0) {
       query.where('artifact.repositoryId IN (:...repoIds)', {
         repoIds: policy.repositoryIds,
       });
       artifactsToDelete = await query.getMany();
     } else {
-      // If no repositories selected, apply to all
       artifactsToDelete = await query.getMany();
     }
 
-    // Apply keep tag pattern (exclude from deletion)
     if (policy.keepTagPattern) {
       artifactsToDelete = artifactsToDelete.filter(
         (a) => !minimatch(a.version || '', policy.keepTagPattern),
       );
     }
 
-    // Apply strategy-based filtering
     if (policy.strategy === 'age-based' && policy.maxAgeDays) {
       const cutoffDate = new Date(
         Date.now() - policy.maxAgeDays * 24 * 60 * 60 * 1000,
@@ -191,7 +183,6 @@ export class CleanupService {
         (a) => a.createdAt < cutoffDate,
       );
     } else if (policy.strategy === 'count-based' && policy.maxCount) {
-      // Group by repository and keep only the N most recent
       const byRepo = new Map<string, Artifact[]>();
       for (const artifact of artifactsToDelete) {
         const repoName = artifact.repository?.name || 'unknown';
@@ -203,26 +194,22 @@ export class CleanupService {
 
       artifactsToDelete = [];
       for (const [_, artifacts] of byRepo) {
-        // Sort by lastAccessedAt or createdAt (most recent first)
         artifacts.sort((a, b) => {
           const dateA = a.lastAccessedAt || a.createdAt;
           const dateB = b.lastAccessedAt || b.createdAt;
           return dateB.getTime() - dateA.getTime();
         });
-        // Delete all except the first maxCount
         if (artifacts.length > policy.maxCount) {
           artifactsToDelete.push(...artifacts.slice(policy.maxCount));
         }
       }
     } else if (policy.strategy === 'size-based' && policy.maxSizeBytes) {
-      // Sort by lastAccessedAt (least recently used first)
       artifactsToDelete.sort((a, b) => {
         const dateA = (a.lastAccessedAt || a.createdAt).getTime();
         const dateB = (b.lastAccessedAt || b.createdAt).getTime();
         return dateA - dateB;
       });
 
-      // Calculate total size and delete until under limit
       const totalSize = artifactsToDelete.reduce(
         (sum, a) => sum + (Number(a.size) || 0),
         0,
@@ -237,44 +224,41 @@ export class CleanupService {
         }
         artifactsToDelete = toDelete;
       } else {
-        artifactsToDelete = []; // Nothing to delete
+        artifactsToDelete = [];
       }
     }
 
-    // Delete artifacts
     let freedBytes = 0;
     for (const artifact of artifactsToDelete) {
       try {
-        // Delete physical file from storage
         if (artifact.storageKey) {
           await this.storageService.delete(artifact.storageKey);
         }
         freedBytes += Number(artifact.size) || 0;
 
-        // Delete from database
         await this.artifactRepo.delete(artifact.id);
         this.logger.log(
           `Deleted artifact: ${artifact.repository?.name}/${artifact.version}`,
         );
       } catch (error) {
-        if (error instanceof ForbiddenException || error.message?.includes('License')) {
+        if (
+          error instanceof ForbiddenException ||
+          error.message?.includes('License')
+        ) {
           this.logger.warn(
             `Aborting cleanup for policy '${policy.name}' - Storage is Read-Only due to missing/invalid Enterprise license.`,
           );
-          // Stop processing further artifacts to avoid log spam
           break;
         }
         this.logger.error(`Failed to delete artifact ${artifact.id}:`, error);
       }
     }
 
-    // Update policy last run
     await this.policyRepo.update(policy.id, {
       lastRunAt: new Date(),
       nextRunAt: this.calculateNextRun(policy.frequency, policy.scheduleTime),
     });
 
-    // Log audit event
     await this.auditService
       .logSuccess({
         action: 'cleanup.execute',
@@ -288,44 +272,24 @@ export class CleanupService {
           freedMB: (freedBytes / 1024 / 1024).toFixed(2),
         },
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return { deleted: artifactsToDelete.length, freedBytes };
   }
 
-  /**
-   * Cleanup Docker blobs (garbage collection)
-   */
   private async cleanupDockerBlobs(
     policy: CleanupPolicy,
   ): Promise<{ deleted: number; freedBytes: number }> {
     try {
-      // Run Docker registry garbage collection
-      // This requires the registry to be in read-only mode temporarily
-      this.logger.log('Starting Docker registry garbage collection...');
-
-      // Note: This is a simplified version. In production, you'd want to:
-      // 1. Put registry in read-only mode
-      // 2. Run garbage collection
-      // 3. Restore registry to read-write mode
-
-      const { stdout, stderr } = await execAsync(
-        'docker exec $(docker ps -q -f name=registry) /bin/registry garbage-collect /etc/docker/registry/config.yml',
+      this.logger.warn(
+        `Cleanup policy '${policy.name}' (target: docker-blobs) skipped. Native Docker Garbage Collection is not yet implemented for the embedded registry. The legacy 'docker exec' implementation was removed as it is incompatible with HA/Kubernetes environments.`,
       );
 
-      this.logger.log('Docker garbage collection output:', stdout);
-      if (stderr) {
-        this.logger.warn('Docker garbage collection warnings:', stderr);
-      }
-
-      // Update policy last run
       await this.policyRepo.update(policy.id, {
         lastRunAt: new Date(),
         nextRunAt: this.calculateNextRun(policy.frequency, policy.scheduleTime),
       });
 
-      // Parse output to get deleted count (if available)
-      // Docker GC doesn't always report exact numbers
       return { deleted: 0, freedBytes: 0 };
     } catch (error) {
       this.logger.error('Docker garbage collection failed:', error);
@@ -333,9 +297,6 @@ export class CleanupService {
     }
   }
 
-  /**
-   * Create jobs for pending cleanup policies
-   */
   async createJobsForPendingPolicies(): Promise<void> {
     const now = new Date();
     const pendingPolicies = await this.policyRepo
@@ -351,7 +312,6 @@ export class CleanupService {
           policyName: policy.name,
         });
 
-        // Update next run time
         await this.policyRepo.update(policy.id, {
           nextRunAt: this.calculateNextRun(
             policy.frequency,
@@ -369,9 +329,6 @@ export class CleanupService {
     }
   }
 
-  /**
-   * Process cleanup jobs from the queue
-   */
   async processCleanupJobs(): Promise<void> {
     const job = await this.jobService.acquireJob('cleanup');
 
@@ -396,30 +353,37 @@ export class CleanupService {
     }
   }
 
-  /**
-   * Start the cleanup scheduler
-   */
   startCleanupScheduler(): void {
     this.logger.log('Starting cleanup scheduler and job processor');
 
-    // Create jobs for pending policies every hour
     this.createJobsForPendingPolicies().catch((error) => {
       this.logger.error('Failed to create jobs for pending policies:', error);
     });
 
     setInterval(
-      () => {
-        this.createJobsForPendingPolicies().catch((error) => {
-          this.logger.error(
-            'Failed to create jobs for pending policies:',
-            error,
+      async () => {
+        try {
+          await this.redlockService.runWithLock(
+            'cleanup:scheduler:create-jobs',
+            55 * 60 * 1000,
+            async () => {
+              await this.createJobsForPendingPolicies();
+            },
           );
-        });
+        } catch (error) {
+          const isLockError =
+            error.name === 'LockError' || error.message?.includes('Lock');
+          if (!isLockError) {
+            this.logger.error(
+              'Failed to create jobs for pending policies:',
+              error,
+            );
+          }
+        }
       },
       60 * 60 * 1000,
-    ); // Every hour
+    );
 
-    // Process cleanup jobs every 5 minutes
     this.processCleanupJobs().catch((error) => {
       this.logger.error('Failed to process cleanup jobs:', error);
     });
@@ -431,18 +395,14 @@ export class CleanupService {
         });
       },
       5 * 60 * 1000,
-    ); // Every 5 minutes
+    );
   }
 
-  /**
-   * Calculate next run time based on frequency and schedule time
-   */
   private calculateNextRun(frequency: string, scheduleTime: string): Date {
     const [hours, minutes] = scheduleTime.split(':').map(Number);
     const next = new Date();
     next.setHours(hours, minutes, 0, 0);
 
-    // If time already passed today, move to next interval
     if (next <= new Date()) {
       switch (frequency) {
         case 'daily':

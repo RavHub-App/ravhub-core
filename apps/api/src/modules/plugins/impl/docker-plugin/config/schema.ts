@@ -17,9 +17,10 @@ export const configSchema = {
               version: {
                 type: 'string',
                 title: 'Registry protocol version',
-                enum: ['v1', 'v2'],
+                enum: ['v2'],
                 default: 'v2',
-                description: 'v2 is recommended for modern Docker clients',
+                description: 'Docker Registry V2 API',
+                readOnly: true,
               },
               port: {
                 type: 'number',
@@ -54,8 +55,9 @@ export const configSchema = {
               version: {
                 type: 'string',
                 title: 'Registry protocol version',
-                enum: ['v1', 'v2'],
+                enum: ['v2'],
                 default: 'v2',
+                readOnly: true,
               },
               port: {
                 type: 'number',

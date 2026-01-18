@@ -15,14 +15,14 @@ COPY apps/web/package.json ./apps/web/package.json
 
 # Install all workspace dependencies using pnpm (single install for entire workspace)
 # This installs dependencies for both api and web packages
-RUN pnpm install --frozen-lockfile
+RUN CI=true pnpm install --frozen-lockfile
 
 # Copy rest of repo (source code)
 COPY . /workspace
 
 # Reinstall after copying repo to ensure workspace packages (and types) are available for the apps/api runtime.
 # This avoids cases where a cached layer didn't include certain subpackage changes.
-RUN pnpm install --frozen-lockfile
+RUN CI=true pnpm install --frozen-lockfile
 
 # Set working directory to the API app
 WORKDIR /workspace/apps/api

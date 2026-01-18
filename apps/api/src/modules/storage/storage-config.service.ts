@@ -1,7 +1,24 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StorageConfig } from '../../entities/storage-config.entity';
+import { RepositoryEntity } from '../../entities/repository.entity';
+import { Artifact } from '../../entities/artifact.entity';
+import { Backup } from '../../entities/backup.entity';
 import { AuditService } from '../audit/audit.service';
 import { LicenseService } from '../license/license.service';
 import { StorageService } from './storage.service';
@@ -13,6 +30,12 @@ export class StorageConfigService {
   constructor(
     @InjectRepository(StorageConfig)
     private readonly repo: Repository<StorageConfig>,
+    @InjectRepository(RepositoryEntity)
+    private readonly repositoryRepo: Repository<RepositoryEntity>,
+    @InjectRepository(Artifact)
+    private readonly artifactRepo: Repository<Artifact>,
+    @InjectRepository(Backup)
+    private readonly backupRepo: Repository<Backup>,
     private readonly auditService: AuditService,
     private readonly licenseService: LicenseService,
     private readonly storageService: StorageService,
@@ -92,71 +115,83 @@ export class StorageConfigService {
   }
 
   async listWithStats() {
-    const configs = await this.repo.find();
-    const AppDataSource = require('../../data-source').default;
+    try {
+      const configs = await this.repo.find();
 
-    // Get all repositories to calculate stats
-    const RepositoryEntity =
-      require('../../entities/repository.entity').RepositoryEntity;
-    const Artifact = require('../../entities/artifact.entity').Artifact;
-    const Plugin = require('../../entities/plugin.entity').Plugin;
-    const Backup = require('../../entities/backup.entity').Backup;
+      const [allRepos, allBackups] = await Promise.all([
+        this.repositoryRepo.find().catch((err) => {
+          this.logger.error('Failed to fetch repositories for stats', err);
+          return [];
+        }),
+        this.backupRepo.find().catch((err) => {
+          this.logger.error('Failed to fetch backups for stats', err);
+          return [];
+        }),
+      ]);
 
-    const repoRepo = AppDataSource.getRepository(RepositoryEntity);
-    const artifactRepo = AppDataSource.getRepository(Artifact);
-    const pluginRepo = AppDataSource.getRepository(Plugin);
-    const backupRepo = AppDataSource.getRepository(Backup);
+      const configsWithStats = await Promise.all(
+        configs.map(async (config) => {
+          let count = 0;
+          let totalSize = 0;
 
-    const allRepos = await repoRepo.find();
-    const allPlugins = await pluginRepo.find();
-    const allBackups = await backupRepo.find();
+          try {
+            if (config.usage === 'backup') {
+              const backups = allBackups.filter(
+                (b: any) => b.storageConfigId === config.id,
+              );
+              count = backups.length;
+              totalSize = backups.reduce(
+                (sum: number, b: any) => sum + (Number(b.sizeBytes) || 0),
+                0,
+              );
+            } else {
+              count = allRepos.filter(
+                (repo: any) => repo.config?.storageId === config.id,
+              ).length;
 
-    const configsWithStats = await Promise.all(
-      configs.map(async (config) => {
-        let count = 0;
-        let totalSize = 0;
+              const repoIds = allRepos
+                .filter((repo: any) => repo.config?.storageId === config.id)
+                .map((repo: any) => repo.id);
 
-        if (config.usage === 'backup') {
-          const backups = allBackups.filter(
-            (b: any) => b.storageConfigId === config.id,
-          );
-          count = backups.length;
-          totalSize = backups.reduce(
-            (sum: number, b: any) => sum + (Number(b.sizeBytes) || 0),
-            0,
-          );
-        } else {
-          // Repository usage (default)
-          count = allRepos.filter(
-            (repo: any) => repo.config?.storageId === config.id,
-          ).length;
+              if (repoIds.length > 0) {
+                try {
+                  const artifacts = await this.artifactRepo
+                    .createQueryBuilder('artifact')
+                    .where('artifact.repositoryId IN (:...repoIds)', { repoIds })
+                    .getMany();
 
-          const repoIds = allRepos
-            .filter((repo: any) => repo.config?.storageId === config.id)
-            .map((repo: any) => repo.id);
-
-          if (repoIds.length > 0) {
-            const artifacts = await artifactRepo
-              .createQueryBuilder('artifact')
-              .where('artifact.repositoryId IN (:...repoIds)', { repoIds })
-              .getMany();
-
-            totalSize = artifacts.reduce((sum: number, artifact: any) => {
-              return sum + (Number(artifact.size) || 0);
-            }, 0);
+                  totalSize = artifacts.reduce((sum: number, artifact: any) => {
+                    return sum + (Number(artifact.size) || 0);
+                  }, 0);
+                } catch (err) {
+                  this.logger.error(
+                    `Failed to calculate size for storage config ${config.id}`,
+                    err,
+                  );
+                }
+              }
+            }
+          } catch (err) {
+            this.logger.error(
+              `Failed to calculate stats for storage config ${config.id}`,
+              err,
+            );
           }
-        }
 
-        return {
-          ...config,
-          stats: {
-            repositoryCount: count,
-            totalSize,
-          },
-        };
-      }),
-    );
+          return {
+            ...config,
+            stats: {
+              repositoryCount: count,
+              totalSize,
+            },
+          };
+        }),
+      );
 
-    return configsWithStats;
+      return configsWithStats;
+    } catch (err) {
+      this.logger.error('Failed to list storage configs with stats', err);
+      throw err;
+    }
   }
 }

@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { PluginContext, Repository } from '../utils/types';
 import { initMetadata } from './metadata';
 import proxyFetchWithAuth from '../../../../../plugins-core/proxy-helper';
@@ -26,88 +40,111 @@ export function initProxy(context: PluginContext) {
             const filename = urlForCache.split('/').pop();
             if (filename) {
               // PyPI filenames usually start with the package name, e.g. requests-2.25.1.tar.gz
-              // We can try to extract the package name. 
+              // We can try to extract the package name.
               // For now, let's at least put it in a folder named after the package if we can find it in the URL.
               const parts = urlForCache.split('/').filter(Boolean);
               // Typical PyPI URL: .../packages/xx/yy/zzzzzzzz/packageName-version.tar.gz
               // The package name is often the first part of the filename before the first hyphen.
               const pkgName = filename.split('-')[0].toLowerCase();
               if (pkgName) {
-                canonicalKey = buildKey('pypi', repo.id, 'proxy', pkgName, filename);
+                canonicalKey = buildKey(
+                  'pypi',
+                  repo.id,
+                  'proxy',
+                  pkgName,
+                  filename,
+                );
               }
             }
-          } catch (e) { }
+          } catch (e) {}
 
-          const keyId = buildKey('pypi', repo.id, 'proxy', 'magic', urlForCache);
+          const keyId = buildKey(
+            'pypi',
+            repo.id,
+            'proxy',
+            'magic',
+            urlForCache,
+          );
           const cacheEnabled = repo.config?.cacheEnabled !== false;
 
           try {
-            let cached = (cacheEnabled && canonicalKey) ? await storage.get(canonicalKey) : null;
+            let cached =
+              cacheEnabled && canonicalKey
+                ? await storage.get(canonicalKey)
+                : null;
             if (!cached && cacheEnabled) cached = await storage.get(keyId);
 
             if (cached) {
               // Revalidate with upstream (HEAD request)
-              console.log(`[PyPI] Revalidating cached artifact for ${targetUrl}. Key: ${canonicalKey || keyId}`);
               try {
-                const headRes = await proxyFetchWithAuth(repo, targetUrl, { method: 'HEAD', timeoutMs: 5000 });
+                const headRes = await proxyFetchWithAuth(repo, targetUrl, {
+                  method: 'HEAD',
+                  timeoutMs: 5000,
+                });
                 if (headRes.ok && headRes.headers) {
                   const contentLength = headRes.headers['content-length'];
-                  if (contentLength && parseInt(contentLength) !== cached.length) {
-                    console.log(`[PyPI] Cache invalid (size mismatch: ${cached.length} vs ${contentLength}). Re-downloading.`);
+                  if (
+                    contentLength &&
+                    parseInt(contentLength) !== cached.length
+                  ) {
                     // Fall through to download
                   } else {
-                    console.log(`[PyPI] Cache valid. Serving.`);
                     return {
                       ok: true,
                       status: 200,
                       body: cached,
                       headers: {
                         'content-type': 'application/octet-stream',
-                        'x-proxy-cache': 'HIT'
+                        'x-proxy-cache': 'HIT',
                       },
                     };
                   }
                 } else {
-                  console.warn(`[PyPI] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`);
+                  console.warn(
+                    `[PyPI] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`,
+                  );
                   return {
                     ok: true,
                     status: 200,
                     body: cached,
                     headers: {
                       'content-type': 'application/octet-stream',
-                      'x-proxy-cache': 'HIT'
+                      'x-proxy-cache': 'HIT',
                     },
                   };
                 }
               } catch (revalErr) {
-                console.warn(`[PyPI] Revalidation error: ${revalErr}. Serving cache as fallback.`);
+                console.warn(
+                  `[PyPI] Revalidation error: ${revalErr}. Serving cache as fallback.`,
+                );
                 return {
                   ok: true,
                   status: 200,
                   body: cached,
                   headers: {
                     'content-type': 'application/octet-stream',
-                    'x-proxy-cache': 'HIT'
+                    'x-proxy-cache': 'HIT',
                   },
                 };
               }
             }
-          } catch (e) { /* ignore */ }
+          } catch (e) {
+            /* ignore */
+          }
 
-          console.log(`[PyPI] Proxying magic URL: ${targetUrl}`);
           const result = await proxyFetchWithAuth(repo, targetUrl);
 
           if (result.ok && 'body' in result && result.body) {
             const body = result.body;
-            const buf = Buffer.isBuffer(body) ? body : Buffer.from(body as string);
+            const buf = Buffer.isBuffer(body)
+              ? body
+              : Buffer.from(body as string);
             if (buf.length > 0) {
               const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
               if (cacheEnabled && cacheMaxAgeDays > 0) {
                 const storageKey = canonicalKey || keyId;
-                console.log(`[PyPI] Caching artifact to ${storageKey} (size: ${buf.length})`);
                 try {
                   await storage.save(storageKey, buf);
-                  console.log(`[PyPI] Successfully cached ${storageKey}`);
 
                   // Index artifact if available
                   if (context.indexArtifact) {
@@ -122,8 +159,8 @@ export function initProxy(context: PluginContext) {
                         version: '0.0.0',
                         filename: filename,
                         storageKey: storageKey,
-                        size: buf.length
-                      }
+                        size: buf.length,
+                      },
                     });
                   }
                 } catch (e) {
@@ -140,27 +177,37 @@ export function initProxy(context: PluginContext) {
       // Check cache for standard package files or metadata
       const cleanUrl = url.split('?')[0].split('#')[0];
       const isPackage = /\.(whl|tar\.gz|zip|egg|bz2)$/i.test(cleanUrl);
-      const isMetadata = !isPackage && (url.includes('/simple/') || url.endsWith('/'));
+      const isMetadata =
+        !isPackage && (url.includes('/simple/') || url.endsWith('/'));
       const cacheEnabled = repo.config?.cacheEnabled !== false;
 
       if ((isPackage || isMetadata) && cacheEnabled) {
-        const keyId = buildKey('pypi', repo.id, 'proxy', isPackage ? 'file' : 'metadata', cleanUrl);
-        console.log(`[PyPI] Checking cache for ${url} with key ${keyId}`);
+        const keyId = buildKey(
+          'pypi',
+          repo.id,
+          'proxy',
+          isPackage ? 'file' : 'metadata',
+          cleanUrl,
+        );
         try {
           const cached = await storage.get(keyId);
           if (cached) {
             // For packages, we revalidate. For metadata, maybe we should too?
             // Actually, let's revalidate metadata too to be safe, but serve from cache if upstream is down.
-            console.log(`[PyPI] Revalidating cached ${isPackage ? 'artifact' : 'metadata'} for ${url}`);
             try {
-              const headRes = await proxyFetchWithAuth(repo, url, { method: 'HEAD', timeoutMs: 5000 });
+              const headRes = await proxyFetchWithAuth(repo, url, {
+                method: 'HEAD',
+                timeoutMs: 5000,
+              });
               if (headRes.ok && headRes.headers) {
                 const contentLength = headRes.headers['content-length'];
-                if (isPackage && contentLength && parseInt(contentLength) !== cached.length) {
-                  console.log(`[PyPI] Cache invalid (size mismatch: ${cached.length} vs ${contentLength}). Re-downloading.`);
+                if (
+                  isPackage &&
+                  contentLength &&
+                  parseInt(contentLength) !== cached.length
+                ) {
                   // Fall through to download
                 } else {
-                  console.log(`[PyPI] Cache valid. Serving.`);
                   let body: any = cached;
                   if (isMetadata) {
                     body = processSimpleIndex(repo, cached.toString());
@@ -170,13 +217,17 @@ export function initProxy(context: PluginContext) {
                     status: 200,
                     body,
                     headers: {
-                      'content-type': isMetadata ? 'text/html' : 'application/octet-stream',
-                      'x-proxy-cache': 'HIT'
+                      'content-type': isMetadata
+                        ? 'text/html'
+                        : 'application/octet-stream',
+                      'x-proxy-cache': 'HIT',
                     },
                   };
                 }
               } else {
-                console.warn(`[PyPI] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`);
+                console.warn(
+                  `[PyPI] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`,
+                );
                 let body: any = cached;
                 if (isMetadata) {
                   body = processSimpleIndex(repo, cached.toString());
@@ -186,13 +237,17 @@ export function initProxy(context: PluginContext) {
                   status: 200,
                   body,
                   headers: {
-                    'content-type': isMetadata ? 'text/html' : 'application/octet-stream',
-                    'x-proxy-cache': 'HIT'
+                    'content-type': isMetadata
+                      ? 'text/html'
+                      : 'application/octet-stream',
+                    'x-proxy-cache': 'HIT',
                   },
                 };
               }
             } catch (revalErr) {
-              console.warn(`[PyPI] Revalidation error: ${revalErr}. Serving cache as fallback.`);
+              console.warn(
+                `[PyPI] Revalidation error: ${revalErr}. Serving cache as fallback.`,
+              );
               let body: any = cached;
               if (isMetadata) {
                 body = processSimpleIndex(repo, cached.toString());
@@ -202,26 +257,29 @@ export function initProxy(context: PluginContext) {
                 status: 200,
                 body,
                 headers: {
-                  'content-type': isMetadata ? 'text/html' : 'application/octet-stream',
-                  'x-proxy-cache': 'HIT'
+                  'content-type': isMetadata
+                    ? 'text/html'
+                    : 'application/octet-stream',
+                  'x-proxy-cache': 'HIT',
                 },
               };
             }
           } else {
-            console.log(`[PyPI] Cache miss for ${url}`);
           }
         } catch (e) {
           console.error(`[PyPI] Cache check error for ${url}:`, e);
         }
       }
 
-      console.log(`[PyPI] Fetching from upstream: ${url}`);
       const result = await proxyFetchWithAuth(repo, url);
-      console.log(`[PyPI] Upstream result:`, { ok: result.ok, status: result.status });
 
       // Cache package files or metadata
-      if ((isPackage || isMetadata) && result.ok && 'body' in result && result.body) {
-        console.log(`[PyPI] Attempting to cache ${isPackage ? 'package' : 'metadata'}`);
+      if (
+        (isPackage || isMetadata) &&
+        result.ok &&
+        'body' in result &&
+        result.body
+      ) {
         const body = result.body;
         let buf: Buffer;
         if (Buffer.isBuffer(body)) {
@@ -235,11 +293,15 @@ export function initProxy(context: PluginContext) {
           const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
           if (cacheEnabled && cacheMaxAgeDays > 0) {
             // Use the URL as the key identifier (encoded)
-            const keyId = buildKey('pypi', repo.id, 'proxy', isPackage ? 'file' : 'metadata', cleanUrl);
-            console.log(`[PyPI] Caching ${isPackage ? 'artifact' : 'metadata'} to ${keyId}, size: ${buf.length}`);
+            const keyId = buildKey(
+              'pypi',
+              repo.id,
+              'proxy',
+              isPackage ? 'file' : 'metadata',
+              cleanUrl,
+            );
             try {
               await storage.save(keyId, buf);
-              console.log(`[PyPI] Successfully cached ${keyId}`);
 
               // Index artifact if available
               if (isPackage && context.indexArtifact) {
@@ -249,14 +311,13 @@ export function initProxy(context: PluginContext) {
                   version: '0.0.0',
                   filename: filename,
                   storageKey: keyId,
-                  size: buf.length
+                  size: buf.length,
                 });
               }
             } catch (e) {
               console.error(`[PyPI] Failed to cache ${keyId}:`, e);
             }
           } else {
-            console.log(`[PyPI] Caching disabled (cacheMaxAgeDays=${cacheMaxAgeDays})`);
           }
         }
 

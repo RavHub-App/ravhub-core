@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   Injectable,
   OnModuleInit,
@@ -11,7 +25,7 @@ import { AuditService } from '../audit/audit.service';
 import { RepositoryPermissionService } from './repository-permission.service';
 import { LicenseService } from '../license/license.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { RepositoryEntity } from '../../entities/repository.entity';
 import { Artifact } from '../../entities/artifact.entity';
 import * as fs from 'fs';
@@ -32,9 +46,10 @@ export class ReposService implements OnModuleInit {
     private readonly auditService: AuditService,
     private readonly repositoryPermissionService: RepositoryPermissionService,
     private readonly licenseService: LicenseService,
-  ) { }
+  ) {}
 
-  private repoCache: Map<string, { ent: RepositoryEntity; expires: number }> = new Map();
+  private repoCache: Map<string, { ent: RepositoryEntity; expires: number }> =
+    new Map();
 
   async findOneCached(idOrName: string): Promise<RepositoryEntity | null> {
     const cached = this.repoCache.get(idOrName);
@@ -44,12 +59,10 @@ export class ReposService implements OnModuleInit {
 
     const ent = await this.findOne(idOrName);
     if (ent) {
-      // Short TTL: 10 seconds is enough to avoid DB storm during benchmarks
-      // but safe enough for distributed context (configs don't change that fast)
       const expires = Date.now() + 10000;
-      this.repoCache.set(idOrName, { ent: ent as any, expires });
-      this.repoCache.set((ent as any).id, { ent: ent as any, expires });
-      this.repoCache.set((ent as any).name, { ent: ent as any, expires });
+      this.repoCache.set(idOrName, { ent: ent, expires });
+      this.repoCache.set(ent.id, { ent: ent, expires });
+      this.repoCache.set(ent.name, { ent: ent, expires });
     }
     return ent;
   }
@@ -59,14 +72,12 @@ export class ReposService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    // Restart all Docker registries on application startup
     try {
       const dockerRepos = await this.repo.find({
         where: { manager: 'docker' },
       });
       this.logger.log(`Restarting ${dockerRepos.length} Docker registries...`);
 
-      // Build repos map for group resolution
       const allRepos = await this.repo.find();
       const reposById = new Map();
       for (const r of allRepos) {
@@ -75,73 +86,29 @@ export class ReposService implements OnModuleInit {
       }
 
       for (const repoEnt of dockerRepos) {
-        try {
-          const inst = this.pluginManager.getPluginForRepo(repoEnt as any);
-          if (inst && typeof inst.startRegistryForRepo === 'function') {
-            const provided = repoEnt.config?.docker ?? repoEnt.config ?? {};
-            // Apply default port=0 if not specified (0 means auto-select ephemeral port)
-            const port = provided.port !== undefined ? provided.port : 0;
-            const opts = {
-              port,
-              version: provided.version,
-              pluginManager: this.pluginManager,
-              reposById,
-            };
-            const out: any = await inst.startRegistryForRepo(
-              repoEnt as any,
-              opts,
+        await this.manageDockerRegistry(repoEnt, 'start', reposById).catch(
+          (err) => {
+            this.logger.warn(
+              `Failed to restart registry for ${repoEnt.name}: ${err.message}`,
             );
-            if (out?.ok && out.port) {
-              this.logger.log(
-                `Started registry for ${repoEnt.name} on port ${out.port}`,
-              );
-              // If port was auto-selected (port=0 initially), persist it
-              if (out.needsPersistence && out.port !== port) {
-                const newCfg = {
-                  ...(repoEnt.config ?? {}),
-                  docker: {
-                    ...(repoEnt.config?.docker ?? {}),
-                    port: out.port,
-                  },
-                };
-                await this.repo.update(repoEnt.id, { config: newCfg } as any);
-                this.logger.log(
-                  `Persisted auto-selected port ${out.port} for ${repoEnt.name}`,
-                );
-              }
-            }
-          }
-        } catch (err) {
-          this.logger.warn(
-            `Failed to restart registry for ${repoEnt.name}: ${err.message}`,
-          );
-        }
+          },
+        );
       }
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`Error restarting Docker registries: ${err.message}`);
     }
 
-    // Trigger background scan of artifacts to populate DB stats
     setTimeout(() => {
-      this.scanArtifacts().then((res) => {
-        this.logger.log(`Initial artifact scan completed. Found ${res.count} new artifacts.`);
-      }).catch((err) => {
-        this.logger.error(`Initial artifact scan failed: ${err.message}`);
-      });
+      this.scanArtifacts()
+        .then((res) => {
+          this.logger.log(
+            `Initial artifact scan completed. Found ${res.count} new artifacts.`,
+          );
+        })
+        .catch((err) => {
+          this.logger.error(`Initial artifact scan failed: ${err.message}`);
+        });
     }, 5000);
-  }
-
-  // Normalize repository entity into a safe DTO for API responses.
-  private inferManagerFromName(name?: string) {
-    if (!name) return undefined;
-    const n = name.toLowerCase();
-    if (n.includes('maven')) return 'maven';
-    if (n.includes('npm')) return 'npm';
-    if (n.includes('docker') || n.includes('registry')) return 'docker';
-    if (n.includes('nuget')) return 'nuget';
-    if (n.includes('pypi') || n.includes('python')) return 'pypi';
-    if (n.includes('composer')) return 'composer';
-    return undefined;
   }
 
   private normalize(ent?: RepositoryEntity | null) {
@@ -151,11 +118,9 @@ export class ReposService implements OnModuleInit {
     const dockerAccessUrl = ent.config?.docker?.accessUrl;
     const routeName = ent.name || ent.id;
 
-    const managerInferred = ent.manager || this.inferManagerFromName(ent.name);
+    const managerInferred = ent.manager;
     const typeInferred = ent.type || (managerInferred ? 'hosted' : undefined);
 
-    // Prefer an explicit per-repo docker accessUrl if the plugin or controller
-    // configured it (should be an absolute url like "http://host:port").
     if (managerInferred === 'docker') {
       const upstreamStatus = this.pluginManager.getUpstreamPingStatus(
         ent.id || ent.name,
@@ -169,9 +134,7 @@ export class ReposService implements OnModuleInit {
           ?.list()
           .find((m) => m.key === managerInferred);
         const pluginIcon = pluginMeta?.icon ? pluginMeta.icon : undefined;
-        // If this is a proxy repo and we don't yet have a ping record, trigger
-        // one in the background so callers will get a fresh result on subsequent
-        // requests. Do not await, this is fire-and-forget.
+
         if (typeInferred === 'proxy' && !upstreamStatus) {
           (async () => {
             try {
@@ -195,9 +158,6 @@ export class ReposService implements OnModuleInit {
         } as any;
       }
 
-      // If no explicit accessUrl was provided, but we have a configured port,
-      // construct a reasonable host:port URL. Prefer a dedicated REGISTRY_HOST
-      // (set in env) otherwise fall back to localhost.
       if (dockerPort) {
         const upstreamStatus = this.pluginManager.getUpstreamPingStatus(
           ent.id || ent.name,
@@ -233,7 +193,6 @@ export class ReposService implements OnModuleInit {
 
     const accessUrl = `/repository/${routeName}`;
 
-    // include a plugin icon URL when a matching plugin is loaded
     const pluginMeta = this.plugins
       ?.list()
       .find((m) => m.key === managerInferred);
@@ -265,15 +224,12 @@ export class ReposService implements OnModuleInit {
   }
 
   findAll() {
-    // include role relations so frontend can make per-repo RBAC decisions
-    // return normalized DTOs so frontend always receives type/manager/config and an accessUrl
     return this.repo
       .find({ relations: ['roles', 'roles.permissions'] })
       .then((list) => list.map((l) => this.normalize(l)));
   }
 
   async findOne(idOrName: string) {
-    // Check if input looks like a UUID to avoid PostgreSQL errors
     const isUuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         idOrName,
@@ -281,7 +237,6 @@ export class ReposService implements OnModuleInit {
 
     let ent: RepositoryEntity | null = null;
 
-    // Only try by id if it looks like a UUID
     if (isUuid) {
       ent = await this.repo.findOne({
         where: { id: idOrName },
@@ -290,7 +245,6 @@ export class ReposService implements OnModuleInit {
       if (ent) return this.normalize(ent);
     }
 
-    // Try by name (either as fallback or first attempt if not a UUID)
     ent = await this.repo.findOne({
       where: { name: idOrName },
       relations: ['roles', 'roles.permissions'],
@@ -299,12 +253,10 @@ export class ReposService implements OnModuleInit {
   }
 
   async create(data: Partial<RepositoryEntity>): Promise<RepositoryEntity> {
-    // Ensure config object exists
     if (!data.config) {
       data.config = {};
     }
 
-    // If no storageId provided, try to set default
     if (!data.config.storageId) {
       const defStorage = await this.storage.getDefaultStorageConfig();
       if (defStorage) {
@@ -315,7 +267,6 @@ export class ReposService implements OnModuleInit {
     const r = this.repo.create(data as any);
     const saved = (await this.repo.save(r as any)) as RepositoryEntity;
 
-    // Log audit event
     await this.auditService
       .logSuccess({
         action: 'repository.create',
@@ -323,7 +274,7 @@ export class ReposService implements OnModuleInit {
         entityId: saved.id,
         details: { name: saved.name, type: saved.type, manager: saved.manager },
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return saved;
   }
@@ -340,21 +291,17 @@ export class ReposService implements OnModuleInit {
     id: string,
     data: Partial<RepositoryEntity>,
   ): Promise<RepositoryEntity | null> {
-    // support id or name
     const ent = await this.findOne(id);
     if (!ent) return null;
     Object.assign(ent, data as any);
     return this.repo.save(ent);
   }
   async delete(id: string): Promise<void> {
-    // accept uuid or name: resolve entity first then delete by primary id
     const ent = await this.findOne(id);
     if (!ent) return;
 
     let artifactsDeleted = 0;
 
-    // Delete all artifacts associated with this repository first
-    // to avoid foreign key constraint violations
     try {
       const artifacts = await this.artifactRepo.find({
         where: { repositoryId: ent.id },
@@ -375,8 +322,6 @@ export class ReposService implements OnModuleInit {
       throw err;
     }
 
-    // Delete all physical files in storage for this repository
-    // Storage keys typically follow pattern: <manager>/<repoName>/... or <manager>/<repoId>/...
     try {
       const manager = ent.manager || 'generic';
       const prefixes = [`${manager}/${ent.name}`, `${manager}/${ent.id}`];
@@ -387,7 +332,9 @@ export class ReposService implements OnModuleInit {
         );
 
         const files = await this.storage.list(storagePrefix);
-        this.logger.log(`Found ${files.length} files to delete in ${storagePrefix}`);
+        this.logger.log(
+          `Found ${files.length} files to delete in ${storagePrefix}`,
+        );
 
         for (const fileKey of files) {
           try {
@@ -416,14 +363,13 @@ export class ReposService implements OnModuleInit {
         entityId: ent.id,
         details: { name: ent.name, artifactsDeleted },
       })
-      .catch(() => { });
+      .catch(() => {});
   }
 
   async listPackages(repoId: string) {
     const repo = await this.findOne(repoId);
     if (!repo) return [];
 
-    // Fetch DB artifacts first to merge metadata (like size)
     const dbArtifacts = await this.artifactRepo.find({
       where: { repositoryId: repo.id },
       order: { createdAt: 'DESC' },
@@ -478,10 +424,6 @@ export class ReposService implements OnModuleInit {
     return Array.from(map.values());
   }
 
-  /**
-   * Return artifacts (versions) for a package name in a repository,
-   * including a storage URL (when the storage backend provides one).
-   */
   async getPackageDetails(repoId: string, packageName: string) {
     const repo = await this.findOne(repoId);
     if (!repo) return { ok: false, message: 'repo not found' };
@@ -526,7 +468,9 @@ export class ReposService implements OnModuleInit {
           if (Array.isArray(result)) {
             installCommands = result;
           } else if (typeof result === 'string') {
-            installCommands = [{ label: 'Default', command: result, language: 'text' }];
+            installCommands = [
+              { label: 'Default', command: result, language: 'text' },
+            ];
           }
         } catch (e) {
           /* ignore */
@@ -544,14 +488,14 @@ export class ReposService implements OnModuleInit {
         url,
         installCommands,
         // Keep for backward compatibility if needed, though we prefer the array
-        installCommand: installCommands.length > 0 ? installCommands[0].command : null,
+        installCommand:
+          installCommands.length > 0 ? installCommands[0].command : null,
       });
     }
 
     return { ok: true, artifacts: out };
   }
 
-  /** Delete a specific package version/artifact and remove the storage object (best-effort). */
   async deletePackageVersion(
     repoId: string,
     packageName: string,
@@ -603,7 +547,7 @@ export class ReposService implements OnModuleInit {
         entityId: art.id,
         details: { repositoryId: repoId, packageName, version },
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return { ok: true };
   }
@@ -622,19 +566,12 @@ export class ReposService implements OnModuleInit {
     const manager = repo.manager;
     if (!manager) return { ok: false, message: 'unknown manager' };
 
-    // Use storage adapter to list files
     const adapter = await this.storage.getAdapterForId(repo.config?.storageId);
     if (!adapter || typeof adapter.list !== 'function') {
       return { ok: false, message: 'storage adapter does not support listing' };
     }
 
-    // Scan both name-based (legacy) and id-based (new) paths
-    // Note: adapter.list(prefix) returns keys relative to storage root
-    // e.g. manager/repoName/path/to/file
-    const prefixes = [
-      `${manager}/${repo.name}`,
-      `${manager}/${repo.id}`,
-    ];
+    const prefixes = [`${manager}/${repo.name}`, `${manager}/${repo.id}`];
 
     let count = 0;
 
@@ -657,7 +594,13 @@ export class ReposService implements OnModuleInit {
                 const groupParts = parts.slice(0, parts.length - 3);
                 const groupId = groupParts.join('.');
                 const pkgName = `${groupId}:${artifactId}`;
-                await this.ensureArtifact(repo, manager, pkgName, version, fileKey);
+                await this.ensureArtifact(
+                  repo,
+                  manager,
+                  pkgName,
+                  version,
+                  fileKey,
+                );
                 count++;
               }
             }
@@ -674,14 +617,21 @@ export class ReposService implements OnModuleInit {
                   if (filename.startsWith(namePart + '-')) {
                     const verExt = filename.substring(namePart.length + 1);
                     const version = verExt.replace('.tgz', '');
-                    await this.ensureArtifact(repo, manager, pkgName, version, fileKey);
+                    await this.ensureArtifact(
+                      repo,
+                      manager,
+                      pkgName,
+                      version,
+                      fileKey,
+                    );
                     count++;
                   }
                 }
               }
             }
           } else if (manager === 'docker') {
-            // Skip docker
+            // Docker artifacts are managed via registry protocol and manifest indexing.
+            // Simple file system scanning is insuficient and potentially incorrect for Docker blobs.
           } else {
             // Default simple scan (depth 2: package/version)
             // relPath: package/version/file
@@ -689,7 +639,13 @@ export class ReposService implements OnModuleInit {
             if (parts.length >= 2) {
               const pkgName = parts[0];
               const version = parts[1];
-              await this.ensureArtifact(repo, manager, pkgName, version, fileKey);
+              await this.ensureArtifact(
+                repo,
+                manager,
+                pkgName,
+                version,
+                fileKey,
+              );
               count++;
             }
           }
@@ -701,15 +657,22 @@ export class ReposService implements OnModuleInit {
     return { ok: true, count };
   }
 
-  private async ensureArtifact(repo: RepositoryEntity, manager: string, pkgName: string, version: string, storageKey: string) {
+  private async ensureArtifact(
+    repo: RepositoryEntity,
+    manager: string,
+    pkgName: string,
+    version: string,
+    storageKey: string,
+  ) {
     let size = 0;
     try {
-      // We can't easily get size without fetching metadata or file
-      // But we can try to get it from storage if adapter supports it
-      // For now, leave 0 or try to fetch if critical
-      // const adapter = await this.storage.getAdapterForId(repo.config?.storageId);
-      // if (adapter && adapter.getMetadata) ...
-    } catch (e) { }
+      const meta = await this.storage.getMetadata(storageKey);
+      if (meta && typeof meta.size === 'number') {
+        size = meta.size;
+      }
+    } catch (e) {
+      // ignore metadata errors, keep size 0
+    }
 
     const existing = await this.artifactRepo.findOne({
       where: {
@@ -739,22 +702,6 @@ export class ReposService implements OnModuleInit {
     const repo = await this.findOne(repoId);
     if (!repo) return { ok: false, message: 'repo not found' };
 
-    // Find artifacts that match the path prefix
-    // We look for exact match or starting with prefix + separator
-    // Common separators: / (npm scopes), : (docker), . (java/maven often mapped to / in storage but . in name?)
-    // Actually, in the DB packageName is stored as is.
-    // If the user browses "com/example", the packageName might be "com.example.foo" (Maven) or "@scope/pkg" (NPM).
-    // The frontend tree builder splits by / : @.
-    // So "com" matches the start of "com.example" if we split by dot?
-    // The frontend splits by `/[/:@]/`.
-    // So if I delete "com", I expect to delete "com.example..." and "com/foo...".
-
-    // This is tricky because the mapping is lossy.
-    // But let's assume the user wants to delete everything that *starts* with that string,
-    // ensuring a boundary check to avoid partial matches (e.g. deleting "te" shouldn't delete "test").
-
-    // We can try to match `prefix` exactly OR `prefix` followed by any of the separators.
-
     const artifacts = await this.artifactRepo.find({
       where: { repositoryId: repo.id },
     });
@@ -783,14 +730,11 @@ export class ReposService implements OnModuleInit {
     const repo = await this.repo.findOne({ where: { id: repoId } });
     if (!repo) throw new Error('Repository not found');
 
-    // Try to find by path first (newly added field)
     let artifact = await this.artifactRepo.findOne({
       where: { repositoryId: repoId, path: artifactPath },
     });
 
-    // Fallback to storageKey if not found by path
     if (!artifact) {
-      // Try searching by storageKey directly (some plugins use path as storageKey)
       artifact = await this.artifactRepo.findOne({
         where: { repositoryId: repoId, storageKey: artifactPath },
       });
@@ -807,8 +751,11 @@ export class ReposService implements OnModuleInit {
       };
     }
 
-    // Calculate current hash using the storage abstraction
-    const { stream } = await this.storage.getStream(artifact.storageKey);
+    const streamRes = await this.storage.getStream(artifact.storageKey);
+    if (!streamRes || !streamRes.stream) {
+      return { ok: false, message: 'Could not read artifact from storage.' };
+    }
+    const { stream } = streamRes as { stream: any };
     const crypto = require('crypto');
     const hash = crypto.createHash('sha256');
 
@@ -828,16 +775,18 @@ export class ReposService implements OnModuleInit {
     };
   }
 
-  async attachProvenance(repoId: string, artifactPath: string, provenance: any) {
+  async attachProvenance(
+    repoId: string,
+    artifactPath: string,
+    provenance: any,
+  ) {
     const repo = await this.repo.findOne({ where: { id: repoId } });
     if (!repo) throw new Error('Repository not found');
 
-    // Try to find by path first
     let artifact = await this.artifactRepo.findOne({
       where: { repositoryId: repoId, path: artifactPath },
     });
 
-    // Fallback to storageKey
     if (!artifact) {
       artifact = await this.artifactRepo.findOne({
         where: { repositoryId: repoId, storageKey: artifactPath },
@@ -858,5 +807,108 @@ export class ReposService implements OnModuleInit {
     await this.artifactRepo.save(artifact);
 
     return { ok: true, message: 'Provenance attached' };
+  }
+
+  async validateDockerPortAvailability(
+    port: number,
+    excludeRepoId?: string,
+  ): Promise<boolean> {
+    const where: any = { manager: 'docker' };
+    if (excludeRepoId) {
+      where.id = Not(excludeRepoId);
+    }
+    const repos = await this.repo.find({ where });
+    return !repos.some((r) => r.config?.docker?.port === port);
+  }
+
+  validateProxyConfig(config: any): boolean {
+    if (!config || typeof config !== 'object') return false;
+
+    const hasUpstream = (obj: any): boolean => {
+      if (!obj || typeof obj !== 'object') return false;
+      for (const k of Object.keys(obj)) {
+        if (
+          [
+            'target',
+            'registry',
+            'upstream',
+            'indexUrl',
+            'proxyUrl',
+            'url',
+          ].includes(k) &&
+          obj[k] &&
+          String(obj[k]).trim()
+        )
+          return true;
+
+        if (typeof obj[k] === 'object' && hasUpstream(obj[k])) return true;
+      }
+      return false;
+    };
+
+    return hasUpstream(config);
+  }
+
+  async manageDockerRegistry(
+    repo: RepositoryEntity,
+    action: 'start' | 'stop' | 'restart',
+    reposMap?: Map<string, RepositoryEntity>,
+  ) {
+    const isDocker = (repo.manager || '').toLowerCase() === 'docker';
+    if (!isDocker) return;
+
+    const inst = this.pluginManager.getPluginForRepo(repo as any);
+    if (!inst) return;
+
+    if (action === 'stop' || action === 'restart') {
+      if (typeof inst.stopRegistryForRepo === 'function') {
+        await inst.stopRegistryForRepo(repo as any);
+      }
+    }
+
+    if (action === 'start' || action === 'restart') {
+      if (typeof inst.startRegistryForRepo === 'function') {
+        if (!reposMap) {
+          reposMap = new Map();
+          const all = await this.repo.find();
+          all.forEach((r) => {
+            reposMap!.set(r.id, r);
+            reposMap!.set(r.name, r);
+          });
+        }
+
+        const provided = repo.config?.docker ?? repo.config ?? {};
+        const port = provided.port !== undefined ? provided.port : 0;
+
+        const opts = {
+          port,
+          version: provided.version,
+          pluginManager: this.pluginManager,
+          reposById: reposMap,
+        };
+
+        const out: any = await inst.startRegistryForRepo(repo as any, opts);
+
+        if (out?.ok && out.port) {
+          this.logger.log(
+            `Docker plugin: Started registry for ${repo.name} on port ${out.port}`,
+          );
+
+          if (out.needsPersistence || (port === 0 && out.port)) {
+            const newCfg = {
+              ...(repo.config ?? {}),
+              docker: {
+                ...(repo.config?.docker ?? {}),
+                port: out.port,
+                accessUrl: out.accessUrl,
+                version: provided.version || out.version || 'v2',
+              },
+            };
+            await this.repo.update(repo.id, { config: newCfg } as any);
+            repo.config = newCfg;
+          }
+        }
+      }
+    }
   }
 }

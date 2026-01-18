@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { buildKey } from '../utils/key-utils';
 import { PluginContext, Repository } from '../utils/types';
 import { parseMavenCoordsFromPath, normalizeRepoPath } from '../utils/maven';
@@ -44,10 +58,15 @@ function getContentBuffer(pkg: any): Buffer {
 
 function getContentTypeByPath(p: string): string {
   const lower = p.toLowerCase();
-  if (lower.endsWith('.pom') || lower.endsWith('.xml')) return 'application/xml';
+  if (lower.endsWith('.pom') || lower.endsWith('.xml'))
+    return 'application/xml';
   if (lower.endsWith('.jar')) return 'application/java-archive';
   if (lower.endsWith('.aar')) return 'application/octet-stream';
-  if (lower.endsWith('.sha1') || lower.endsWith('.md5') || lower.endsWith('.sha256'))
+  if (
+    lower.endsWith('.sha1') ||
+    lower.endsWith('.md5') ||
+    lower.endsWith('.sha256')
+  )
     return 'text/plain';
   if (lower.endsWith('.asc')) return 'application/pgp-signature';
   return 'application/octet-stream';
@@ -71,12 +90,13 @@ function stripChecksumExt(p: string): string {
 async function streamToBuffer(req: any): Promise<Buffer> {
   const chunks: Buffer[] = [];
   return await new Promise((resolve, reject) => {
-    req.on('data', (c: Buffer) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    req.on('data', (c: Buffer) =>
+      chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)),
+    );
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
-
 
 export function initStorage(context: PluginContext) {
   const { storage } = context;
@@ -91,14 +111,19 @@ export function initStorage(context: PluginContext) {
     }
   }
 
-  async function downloadImpl(repo: Repository, repoPath: string, visited: Set<string>): Promise<any> {
+  async function downloadImpl(
+    repo: Repository,
+    repoPath: string,
+    visited: Set<string>,
+  ): Promise<any> {
     if (!repo) return { ok: false, message: 'Not found' };
     const p = normalizeRepoPath(repoPath);
 
     // Group read: try members in order
     if (repo.type === 'group') {
       const members: string[] = repo.config?.members ?? [];
-      if (!Array.isArray(members) || members.length === 0) return { ok: false, message: 'Not found' };
+      if (!Array.isArray(members) || members.length === 0)
+        return { ok: false, message: 'Not found' };
 
       const key = String(repo.id || repo.name || '');
       if (key) visited.add(key);
@@ -124,7 +149,7 @@ export function initStorage(context: PluginContext) {
                 contentType: getContentTypeByPath(p),
               };
             }
-          } catch { }
+          } catch {}
 
           const proxied = await proxyFetch(child as any, p);
           if (proxied?.ok && proxied.body) {
@@ -137,7 +162,8 @@ export function initStorage(context: PluginContext) {
             return {
               ok: true,
               data: proxied.body,
-              contentType: proxied.headers?.['content-type'] || getContentTypeByPath(p),
+              contentType:
+                proxied.headers?.['content-type'] || getContentTypeByPath(p),
             };
           }
           continue;
@@ -163,7 +189,7 @@ export function initStorage(context: PluginContext) {
             contentType: getContentTypeByPath(p),
           };
         }
-      } catch { }
+      } catch {}
 
       const proxied = await proxyFetch(repo as any, p);
       if (proxied?.ok && proxied.body) {
@@ -172,7 +198,10 @@ export function initStorage(context: PluginContext) {
           await storage.save(proxyKey, proxied.body);
 
           // Index artifact if it's a jar/pom/aar
-          if (context.indexArtifact && (p.endsWith('.jar') || p.endsWith('.pom') || p.endsWith('.aar'))) {
+          if (
+            context.indexArtifact &&
+            (p.endsWith('.jar') || p.endsWith('.pom') || p.endsWith('.aar'))
+          ) {
             try {
               const coords = parseMavenCoordsFromPath(p);
               if (coords) {
@@ -185,8 +214,8 @@ export function initStorage(context: PluginContext) {
                     version: coords.version,
                     path: p,
                     storageKey: proxyKey,
-                    size: proxied.body.length
-                  }
+                    size: proxied.body.length,
+                  },
                 });
               }
             } catch (e) {
@@ -197,7 +226,8 @@ export function initStorage(context: PluginContext) {
         return {
           ok: true,
           data: proxied.body,
-          contentType: proxied.headers?.['content-type'] || getContentTypeByPath(p),
+          contentType:
+            proxied.headers?.['content-type'] || getContentTypeByPath(p),
         };
       }
       return { ok: false, message: 'Not found in upstream' };
@@ -301,13 +331,19 @@ export function initStorage(context: PluginContext) {
     }
 
     // Hosted upload: prefer explicit maven repo relative path.
-    const repoPath = normalizeRepoPath(pkg?.path || pkg?.name || 'com/example/artifact/1.0.0/artifact-1.0.0.pom');
+    const repoPath = normalizeRepoPath(
+      pkg?.path || pkg?.name || 'com/example/artifact/1.0.0/artifact-1.0.0.pom',
+    );
     const keyId = buildKey('maven', repo.id, repoPath);
     const keyName = buildKey('maven', repo.name, repoPath);
     const buf = getContentBuffer(pkg);
 
     const coords = parseMavenCoordsFromPath(repoPath);
-    const packageName = coords?.packageName || pkg?.packageName || pkg?.coordinates || 'com.example:artifact';
+    const packageName =
+      coords?.packageName ||
+      pkg?.packageName ||
+      pkg?.coordinates ||
+      'com.example:artifact';
     const version = coords?.version || pkg?.version || '1.0.0';
 
     // Check for redeployment policy
@@ -330,7 +366,7 @@ export function initStorage(context: PluginContext) {
 
     try {
       await storage.save(keyId, buf);
-      return {
+      const uploadResult = {
         ok: true,
         id: repoPath,
         metadata: {
@@ -341,6 +377,22 @@ export function initStorage(context: PluginContext) {
           size: buf.length,
         },
       };
+
+      // Index artifact in DB for UI listing (skip metadata/checksums)
+      if (
+        context.indexArtifact &&
+        !isMetadataOrChecksum &&
+        packageName &&
+        version
+      ) {
+        try {
+          await context.indexArtifact(repo, uploadResult);
+        } catch (e) {
+          console.error('[Maven] Failed to index artifact:', e);
+        }
+      }
+
+      return uploadResult;
     } catch (err: any) {
       return { ok: false, message: String(err) };
     }
@@ -409,7 +461,9 @@ export function initStorage(context: PluginContext) {
         const hosted = await getHostedMembers();
         if (hosted.length === 0)
           return { ok: false, message: 'No hosted members' };
-        const results = await Promise.all(hosted.map((m) => handlePut(m, repoPath, delegateReq)));
+        const results = await Promise.all(
+          hosted.map((m) => handlePut(m, repoPath, delegateReq)),
+        );
         const success = results.find((r) => r.ok);
         if (success) return success;
         return { ok: false, message: 'Mirror write failed on all members' };
@@ -426,7 +480,9 @@ export function initStorage(context: PluginContext) {
     const version = coords?.version;
 
     const allowRedeploy = repo.config?.allowRedeploy !== false;
-    const isSnapshot = version ? String(version).toUpperCase().endsWith('-SNAPSHOT') : false;
+    const isSnapshot = version
+      ? String(version).toUpperCase().endsWith('-SNAPSHOT')
+      : false;
     const isMetadataOrChecksum =
       p.toLowerCase().endsWith('maven-metadata.xml') ||
       checksumAlgoForPath(p) !== null ||
@@ -435,7 +491,9 @@ export function initStorage(context: PluginContext) {
     if (!allowRedeploy && version && !isSnapshot && !isMetadataOrChecksum) {
       const exists = await storage.exists(key);
       if (exists) {
-        throw new Error(`Redeployment of ${packageName || ''}:${version} is not allowed`);
+        throw new Error(
+          `Redeployment of ${packageName || ''}:${version} is not allowed`,
+        );
       }
     }
 
@@ -451,8 +509,14 @@ export function initStorage(context: PluginContext) {
         buf = req.buffer;
       } else if (typeof req.body === 'string') {
         buf = Buffer.from(req.body);
-      } else if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
-        throw new Error('Body already parsed. Please use Content-Type: application/octet-stream or similar.');
+      } else if (
+        req.body &&
+        typeof req.body === 'object' &&
+        Object.keys(req.body).length > 0
+      ) {
+        throw new Error(
+          'Body already parsed. Please use Content-Type: application/octet-stream or similar.',
+        );
       } else {
         buf = await streamToBuffer(req);
       }
@@ -460,7 +524,7 @@ export function initStorage(context: PluginContext) {
       result = { ok: true, size: buf.length };
     }
 
-    return {
+    const putResult = {
       ok: true,
       id: p,
       metadata: {
@@ -472,6 +536,22 @@ export function initStorage(context: PluginContext) {
         contentHash: result.contentHash,
       },
     };
+
+    // Index artifact in DB for UI listing (skip metadata/checksums)
+    if (
+      context.indexArtifact &&
+      !isMetadataOrChecksum &&
+      packageName &&
+      version
+    ) {
+      try {
+        await context.indexArtifact(repo, putResult);
+      } catch (e) {
+        console.error('[Maven] Failed to index artifact:', e);
+      }
+    }
+
+    return putResult;
   };
 
   return { upload, download, handlePut };

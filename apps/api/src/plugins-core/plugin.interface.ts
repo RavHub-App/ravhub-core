@@ -1,28 +1,31 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 export interface PluginMetadata {
   key: string;
   name?: string;
   description?: string;
-  version?: string;
   requiresLicense?: boolean;
-  /** Optional specific license type required, usually 'enterprise' */
   licenseType?: string;
-  /** Optional public URL (path) to an icon image for this plugin, e.g. '/plugins/npm/icon' */
   icon?: string;
-  /** Optional configuration schema (JSON Schema-ish) advertised by the plugin so the host UI
-   * can render dynamic configuration forms. Plugins don't have to provide this.
-   */
   configSchema?: any;
-}
-
-export function resolvePluginVersion(currentDir: string): string {
-  return '1.0.0'; // Built-in default version
 }
 
 export interface UploadResult {
   ok: boolean;
   id?: string;
   message?: string;
-  // optional metadata provided by plugin for indexing (storage key, package/version)
   metadata?: {
     storageKey?: string;
     name?: string;
@@ -51,20 +54,17 @@ export interface PluginContext {
     getUrl(key: string): Promise<string>;
     list(prefix: string): Promise<string[]>;
   };
-  dataSource?: any;
   getRepo?: (id: string) => Promise<Repository | null>;
-  trackDownload?: (
+  indexArtifact?: (
     repo: Repository,
-    name: string,
-    version?: string,
+    result: any,
+    userId?: string,
   ) => Promise<void>;
-  indexArtifact?: (repo: Repository, result: any, userId?: string) => Promise<void>;
   redis?: any;
 }
 
 export interface DownloadResult {
   ok: boolean;
-  // For demo: url or buffer can be provided - production would stream
   url?: string;
   message?: string;
   data?: any;
@@ -91,13 +91,8 @@ export interface ProxyFetchResult {
 
 export interface IPlugin {
   metadata: PluginMetadata;
-  // Called once when plugin is loaded by the host
   init?(opts?: any): Promise<void>;
-
-  // Basic health / ping endpoint that returns plugin-specific metadata
   ping?(): Promise<any>;
-
-  // Plugin storage / protocol methods - allow the host to call
   upload?(repo: any, pkg: any): Promise<UploadResult>;
   download?(
     repo: any,
@@ -106,15 +101,11 @@ export interface IPlugin {
   ): Promise<DownloadResult>;
   listVersions?(repo: any, packageName: string): Promise<ListVersionsResult>;
   proxyFetch?(repo: any, url: string): Promise<ProxyFetchResult>;
-  // plugin-specific authentication flow (e.g. npm login, docker login)
   authenticate?(
     repo: any,
     credentials: any,
   ): Promise<{ ok: boolean; user?: any; token?: string; message?: string }>;
 
-  // Optional Docker-specific operations (plugins that implement Docker responsibilities
-  // may implement the multipart and token flows themselves). The API controller delegates
-  // to these if they exist so plugin can fully encapsulate behavior.
   generateToken?(
     repo: any,
     credentials?: any,
@@ -127,13 +118,6 @@ export interface IPlugin {
     user?: any;
   }>;
 
-  // (Docker helpers such as uploads/blobs/manifests are declared below once)
-
-  // Optional Docker-specific helpers (plugins may implement to take full ownership
-  // of registry flows for blobs/manifests + token lifecycle). These are optional
-  // so other plugins are unaffected.
-  // Start a registry process for a specific repository (optional); plugin may
-  // return { ok, port } to indicate a running per-repo registry.
   startRegistryForRepo?: (
     repo: any,
     opts?: any,
@@ -144,14 +128,12 @@ export interface IPlugin {
     host?: string;
     message?: string;
   }>;
-  // Stop a registry process for a specific repository (optional); plugin may
-  // close the running per-repo registry and cleanup resources.
+
   stopRegistryForRepo?: (repo: any) => Promise<{
     ok: boolean;
     message?: string;
   }>;
 
-  // Multipart blob helpers for Docker (the plugin may implement full multi-step uploads)
   initiateUpload?: (
     repo: any,
     name: string,
@@ -185,7 +167,6 @@ export interface IPlugin {
     tag: string,
     manifest: any,
   ) => Promise<UploadResult>;
-  // token server helper: produce token payloads that registry clients expect
   issueToken?: (
     repo: any,
     credentials: any,
@@ -196,12 +177,8 @@ export interface IPlugin {
     expires_in?: number;
     message?: string;
   }>;
-
-  // Called to handle a PUT request (e.g. for raw file upload)
   handlePut?(repo: any, path: string, req: any): Promise<any>;
-
   pingUpstream?(repo: any, context: PluginContext): Promise<any>;
-
   getInstallCommand?(
     repo: any,
     pkg: { name: string; version: string },

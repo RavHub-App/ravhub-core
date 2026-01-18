@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between } from 'typeorm';
@@ -22,11 +36,8 @@ export class AuditService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditRepo: Repository<AuditLog>,
-  ) { }
+  ) {}
 
-  /**
-   * Log an audit event
-   */
   async log(context: LogContext): Promise<AuditLog> {
     try {
       const entry = this.auditRepo.create({
@@ -42,9 +53,7 @@ export class AuditService {
       });
 
       const saved = await this.auditRepo.save(entry);
-      // this.logger.debug(
-      //   `Audit log created: ${context.action} by user ${context.userId || 'system'}`,
-      // );
+
       return saved;
     } catch (err) {
       this.logger.error(`Failed to create audit log: ${err.message}`);
@@ -52,25 +61,16 @@ export class AuditService {
     }
   }
 
-  /**
-   * Log a successful operation
-   */
   async logSuccess(context: Omit<LogContext, 'status'>): Promise<AuditLog> {
     return this.log({ ...context, status: 'success' });
   }
 
-  /**
-   * Log a failed operation
-   */
   async logFailure(
     context: Omit<LogContext, 'status'> & { error: string },
   ): Promise<AuditLog> {
     return this.log({ ...context, status: 'failure' });
   }
 
-  /**
-   * Query audit logs with filters
-   */
   async query(filters: {
     userId?: string;
     action?: string;
@@ -108,9 +108,6 @@ export class AuditService {
     return { logs, total };
   }
 
-  /**
-   * Get recent logs
-   */
   async getRecent(limit = 100): Promise<AuditLog[]> {
     return this.auditRepo.find({
       relations: ['user'],
@@ -119,9 +116,6 @@ export class AuditService {
     });
   }
 
-  /**
-   * Delete old audit logs (retention policy)
-   */
   async deleteOlderThan(days: number): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);

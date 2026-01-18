@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { PluginContext, Repository } from '../utils/types';
 import { initMetadata } from './metadata';
 import { proxyFetchWithAuth } from '../../../../../plugins-core/proxy-helper';
@@ -21,12 +35,13 @@ export function initProxy(context: PluginContext) {
           }
         }
         cleanPath = p.startsWith('/') ? p.slice(1) : p;
-      } catch (e) { }
+      } catch (e) {}
     }
 
-    const storagePath = (!cleanPath.includes('/-/') && !cleanPath.endsWith('.tgz'))
-      ? `${cleanPath}/package.json`
-      : cleanPath;
+    const storagePath =
+      !cleanPath.includes('/-/') && !cleanPath.endsWith('.tgz')
+        ? `${cleanPath}/package.json`
+        : cleanPath;
     const proxyKey = buildKey('npm', repo.id, 'proxy', storagePath);
     const cacheEnabled = repo.config?.cacheEnabled !== false;
 
@@ -36,48 +51,55 @@ export function initProxy(context: PluginContext) {
       if (cachedData && cacheEnabled) {
         if (storagePath.endsWith('.tgz')) {
           // Revalidate tarballs with HEAD request
-          console.log(`[NPM] Revalidating cached tarball: ${storagePath}`);
           try {
-            const headRes = await proxyFetchWithAuth(repo, url, { method: 'HEAD', timeoutMs: 5000 });
+            const headRes = await proxyFetchWithAuth(repo, url, {
+              method: 'HEAD',
+              timeoutMs: 5000,
+            });
             if (headRes.ok && headRes.headers) {
               const contentLength = headRes.headers['content-length'];
-              if (contentLength && parseInt(contentLength) !== cachedData.length) {
-                console.log(`[NPM] Cache invalid (size mismatch: ${cachedData.length} vs ${contentLength}). Re-downloading.`);
+              if (
+                contentLength &&
+                parseInt(contentLength) !== cachedData.length
+              ) {
                 // Fall through to fetch from upstream
               } else {
-                console.log(`[NPM] Cache valid. Serving.`);
                 return {
                   ok: true,
                   status: 200,
                   headers: {
                     'content-type': 'application/octet-stream',
-                    'x-proxy-cache': 'HIT'
+                    'x-proxy-cache': 'HIT',
                   },
-                  body: cachedData
+                  body: cachedData,
                 };
               }
             } else {
-              console.warn(`[NPM] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`);
+              console.warn(
+                `[NPM] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`,
+              );
               return {
                 ok: true,
                 status: 200,
                 headers: {
                   'content-type': 'application/octet-stream',
-                  'x-proxy-cache': 'HIT'
+                  'x-proxy-cache': 'HIT',
                 },
-                body: cachedData
+                body: cachedData,
               };
             }
           } catch (revalErr) {
-            console.warn(`[NPM] Revalidation error: ${revalErr}. Serving cache as fallback.`);
+            console.warn(
+              `[NPM] Revalidation error: ${revalErr}. Serving cache as fallback.`,
+            );
             return {
               ok: true,
               status: 200,
               headers: {
                 'content-type': 'application/octet-stream',
-                'x-proxy-cache': 'HIT'
+                'x-proxy-cache': 'HIT',
               },
-              body: cachedData
+              body: cachedData,
             };
           }
         } else if (storagePath.endsWith('package.json')) {
@@ -92,13 +114,13 @@ export function initProxy(context: PluginContext) {
             status: 200,
             headers: {
               'content-type': 'application/json',
-              'x-proxy-cache': 'HIT'
+              'x-proxy-cache': 'HIT',
             },
-            body
+            body,
           };
         }
       }
-    } catch (e) { }
+    } catch (e) {}
 
     // 2. Fetch from upstream
     try {
@@ -106,7 +128,9 @@ export function initProxy(context: PluginContext) {
       const result = await proxyFetchWithAuth(repo, cleanUrl);
 
       if (result.ok && 'body' in result) {
-        const isMetadata = result.headers && result.headers['content-type']?.includes('application/json');
+        const isMetadata =
+          result.headers &&
+          result.headers['content-type']?.includes('application/json');
 
         // 3. Cache to persistent storage (ORIGINAL data)
         const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
@@ -125,11 +149,13 @@ export function initProxy(context: PluginContext) {
                 id: storagePath,
                 metadata: {
                   storageKey: proxyKey,
-                  size: Buffer.isBuffer(dataToSave) ? dataToSave.length : Buffer.byteLength(String(dataToSave)),
-                  path: storagePath
-                }
+                  size: Buffer.isBuffer(dataToSave)
+                    ? dataToSave.length
+                    : Buffer.byteLength(String(dataToSave)),
+                  path: storagePath,
+                },
               });
-            } catch (e) { }
+            } catch (e) {}
           }
         }
 

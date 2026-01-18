@@ -1,170 +1,392 @@
-# RavHub (monorepo)
+<div align="center">
 
-Proyecto para crear un gestor de repositorios de paquetes (hosted, proxy, group) con soporte inicial para Docker, npm y Maven.
+# 📦 RavHub
 
-Stack inicial propuesto:
+### Self-Hosted Package Registry for Modern Teams
 
-- Frontend: React + Vite + TypeScript + MUI
-- Backend: NestJS (modular, plugin-friendly)
-- DB: PostgreSQL / MySQL
-- Storage: filesystem local o S3/MinIO
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-22+-green.svg)](https://nodejs.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 
-Scripts principales:
+**A powerful, cloud-native alternative to JFrog Artifactory and Sonatype Nexus.**
 
-- pnpm install / pnpm bootstrap
-- pnpm dev (arranca api + web en desarrollo)
+[English](#english) | [Español](#español)
 
-Adicionalmente se ha añadido soporte para ejecutar el entorno de desarrollo dentro de Docker (hot-reload):
+</div>
 
-- pnpm run dev:docker (arranca api + web en contenedores con hot-reload vía docker compose)
+---
 
-Próximos pasos:
+<a name="english"></a>
 
-1. Scaffold backend con NestJS (apps/api)
-2. Scaffold frontend con Vite (apps/web)
-3. Definir esquema DB para repositorios, roles y plugins
+## 🚀 What is RavHub?
 
-## Docker (desarrollo)
+RavHub is a **self-hosted package registry** that allows you to host, proxy, and manage software packages across multiple ecosystems. Deploy it on your own infrastructure and take full control of your artifacts.
 
-Para levantar los servicios de desarrollo dentro de contenedores con hot-reload:
+### ✨ Key Features
+
+| Feature                    | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| 🐳 **Docker Registry**     | Full OCI-compliant registry for container images |
+| 📦 **NPM Registry**        | Host private npm packages or proxy npmjs.com     |
+| ☕ **Maven Repository**    | Manage Java/Kotlin artifacts with Maven/Gradle   |
+| 🐍 **PyPI Repository**     | Host Python packages or proxy pypi.org           |
+| 🔷 **NuGet Repository**    | .NET package management                          |
+| 🎼 **Composer Repository** | PHP packages for your Laravel/Symfony projects   |
+| ⚓ **Helm Charts**         | Kubernetes Helm chart repository                 |
+| 🦀 **Cargo Registry**      | Rust crates management                           |
+| 📁 **Raw Repository**      | Store any binary artifacts                       |
+
+### 🏗️ Repository Types
+
+- **Hosted**: Store your private packages
+- **Proxy**: Cache packages from upstream registries (npm, Docker Hub, Maven Central...)
+- **Group**: Combine multiple repositories into a single endpoint
+
+---
+
+## � Quick Start
+
+### Using Helm (Recommended)
 
 ```bash
-# desde la raíz del repo
-pnpm run dev:docker
-# o directamente
+# Add the RavHub Helm repository
+helm repo add ravhub https://charts.ravhub.app
+helm repo update
+
+# Install RavHub
+helm install ravhub ravhub/ravhub \
+  --namespace ravhub \
+  --create-namespace \
+  --set ingress.enabled=true \
+  --set ingress.host=ravhub.example.com
+
+# Or install from local chart
+helm install ravhub ./charts/ravhub -n ravhub --create-namespace
+```
+
+### Using Docker Compose (Development/Testing)
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/ravhub-core.git
+cd ravhub-core
+
+# Start the stack
+docker compose -f docker-compose.prod.yml up -d
+
+# Access the UI at http://localhost
+```
+
+### First-Time Setup
+
+1. Open your RavHub URL in the browser
+2. Create the first admin user via `/auth/bootstrap`
+3. Start creating repositories!
+
+---
+
+## 📖 Usage Examples
+
+### Docker
+
+```bash
+# Login to your registry
+docker login localhost:5000 -u admin
+
+# Push an image
+docker tag myapp:latest localhost:5000/myapp:latest
+docker push localhost:5000/myapp:latest
+
+# Pull an image
+docker pull localhost:5000/myapp:latest
+```
+
+### NPM
+
+```bash
+# Configure npm to use your registry
+npm config set registry http://localhost/repository/npm-hosted/
+
+# Publish a package
+npm publish
+
+# Install from your registry
+npm install my-private-package
+```
+
+### Maven
+
+```xml
+<!-- Add to your pom.xml -->
+<repositories>
+    <repository>
+        <id>ravhub</id>
+        <url>http://localhost/repository/maven-group/</url>
+    </repository>
+</repositories>
+```
+
+### Python/pip
+
+```bash
+# Install from your PyPI proxy
+pip install requests --index-url http://localhost/repository/pypi-proxy/simple/
+
+# Upload with twine
+twine upload --repository-url http://localhost/repository/pypi-hosted/ dist/*
+```
+
+---
+
+## 🛠️ Development Setup
+
+### Prerequisites
+
+- Node.js 22+
+- pnpm 9+
+- Docker & Docker Compose
+- PostgreSQL 15+ (or use the included Docker service)
+
+### Local Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start development stack (API + Web + PostgreSQL)
 docker compose -f docker-compose.dev.yml up --build
+
+# API: http://localhost:3000
+# Web: http://localhost:5173
 ```
 
-Esto construye e inicia los servicios `api` (NestJS) y `web` (Vite) en contenedores; el código fuente se monta en los contenedores para permitir hot-reloading.
-
-Nota: docker-compose.dev.yml ahora carga variables desde `apps/api/.env` — copia `apps/api/.env.example` a `apps/api/.env` y ajústalo si necesitas valores distintos para desarrollo (con esto evitamos tocar las variables del host directamente).
-
-Comandos útiles (pnpm)
+### Running Tests
 
 ```bash
-# Levanta sólo el stack de desarrollo (api + web)
-pnpm run compose:dev:up
+# Unit tests
+pnpm --filter api test
 
-# Baja sólo el stack de desarrollo y elimina volúmenes/recursos huérfanos
-pnpm run compose:dev:down
-
-# Levanta el license portal (servicios del portal de licencias)
-pnpm run compose:license:up
-pnpm run compose:license:down
-
-# Levanta ambos (dev + license portal) — útil cuando el portal y la API se prueban juntos
-pnpm run compose:both:up
-pnpm run compose:both:down
-
-# Ver servicios y logs de ambos stacks
-pnpm run compose:ps
-pnpm run compose:logs
+# E2E tests
+pnpm --filter api test:e2e
 ```
-
-## Base de datos y migraciones
-
-Actualmente el entorno de desarrollo usa PostgreSQL (imagen `postgres:15-alpine`) como servicio en `docker-compose.dev.yml` — esto facilita la migración futura a Kubernetes + Helm (Postgres es una opción sólida y compatible con Helm charts comunes).
-
-Cómo funciona en desarrollo:
-
-- La API usa TypeORM; en `apps/api/src/app.module.ts` la conexión se configura por variables de entorno.
-- En `docker-compose.dev.yml` la DB se expone en `postgres:5432` y la API en desarrollo usa `TYPEORM_SYNC=true` para crear el esquema automáticamente.
-
-Notas para producción / siguiente pasos:
-
-- No usar `synchronize` en producción (puede causar pérdida de datos). Usar migraciones gestionadas con `DataSource` (archivo `apps/api/src/data-source.ts`) y la CLI de TypeORM para generar/ejecutar migraciones.
-- Cuando preparemos el chart de Helm, diseñaremos `values.yaml` para configurar base de datos, secretos y volúmenes.
-
-Soporte actual añadido (migraciones + seeds):
-
-- Archivo de DataSource para migraciones: `apps/api/src/data-source.ts` (usa `src/migrations/*.ts` en desarrollo y `dist/migrations/*.js` en producción).
-- Scripts disponibles en `apps/api/package.json`:
-  - `pnpm --filter api run migrations:create -n <Name>` — crea plantilla de migración (TypeORM CLI)
-  - `pnpm --filter api run migrations:generate -n <Name>` — genera una migración (TypeORM CLI)
-  - `pnpm --filter api run migrations:run` — aplica migraciones pendientes
-  - `pnpm --filter api run migrations:revert` — revierte la última migración
-  - `pnpm --filter api run db:seed` — aplica solo los seeds
-  - `pnpm --filter api run db:setup` — ejecuta migraciones y luego aplica seeds (útil en setups de CI / contenedores)
-
-Ejemplo (desde la raíz del repo) para aplicar migraciones y seeds contra el Postgres expuesto por docker-compose.dev:
-
-```bash
-# usa un fichero .env para no exportar variables en el host
-# copia el ejemplo y edita si necesitas valores distintos:
-cp apps/api/.env.example apps/api/.env
-
-# luego ejecuta las tareas (ts-node cargará .env automáticamente)
-pnpm --filter api run db:setup
-```
-
-## Running integration/e2e tests with compose
-
-The repository includes a small helper script to run local integration tests with a set
-of supporting services (Postgres, registry, verdaccio, pypi, etc.). The script picks
-free host ports automatically to avoid colliding with locally running dev stacks:
-
-```bash
-./test/run-e2e-with-compose.sh
-```
-
-If you prefer running the compose file manually, note the test compose default binds the
-API to host port 30000 (TEST_API_PORT defaults to 30000) to avoid collisions with dev
-which uses 3000 by default.
 
 ---
 
-## Seeds y datos por defecto
+## 🏛️ Architecture
 
-Se ha añadido un seed inicial que inserta los roles por defecto (`admin`, `reader`) y un repositorio de ejemplo (`example-npm`).
-Nota importante: El seed ya no crea automáticamente un usuario administrador por defecto — esto aplica en todos los entornos (dev/test/prod). Para crear el primer superusuario use el endpoint `POST /auth/bootstrap` desde la UI o la API. Si por alguna razón necesita volver a crear el admin desde el seed (por ejemplo en CI), puede habilitarlo estableciendo la variable de entorno `SEED_CREATE_ADMIN=true` antes de ejecutar `db:seed`.
-
-Además, el seed ahora preinstala un conjunto básico de repositorios Maven tanto en **development** como en **production** (hosted, proxy y group: `maven-hosted`, `maven-proxy`, `maven-group`). En entornos de **test** las pruebas crean recursos ad‑hoc (para evitar dependencias globales entre ejecuciones). Esto mantiene el entorno local de desarrollo listo para probar Maven mientras mantiene los tests autocontenidos.
-El seed principal está en `apps/api/src/seeds/seed-defaults.ts` y se puede ejecutar con `db:seed` o a través de `db:setup`.
-
----
-
-## Plugins (arquitectura inicial)
-
-Se añadió una arquitectura simple para plugins en el backend:
-
-- Definición de interfaz: `apps/api/src/plugins/plugin.interface.ts`.
-- Loader del host: `apps/api/src/modules/plugins/plugins.service.ts` — descubre plugins en `apps/api/src/plugins` y los registra (opcionalmente en DB).
-- Módulo de plugins: `apps/api/src/modules/plugins` con un endpoint exponiendo los plugins cargados `/plugins` y `/plugins/:key/ping`.
-- Ejemplo de plugin: `apps/api/src/plugins/npm-plugin.ts` (plugin de ejemplo para npm).
-
-Hot-deploy de plugins (despliegue en caliente):
-
-- Coloca un archivo `zip` o `tar.gz` con la estructura del plugin en `apps/api/deploy` (esta carpeta se monta en el contenedor `api` en desarrollo). **Preferir artefactos compilados (JS) en vez de fuente TypeScript** para evitar que el compilador del `api` intente compilar archivos `.ts` adicionales y genere errores por dependencias no incluidas.
-- El servicio `PluginDeploymentService` (registrado en `PluginsModule`) vigila la carpeta `apps/api/deploy`, descomprime el artefacto y lo mueve a `apps/api/src/plugins/<nombre>-plugin`.
-- Si el plugin está bien formado, el `PluginsService` intentará recargar el plugin en caliente y (si corresponde) inicializarlo.
-- Para empaquetar un plugin: incluya `index.ts` (o `index.js` en compilado), `package` subfolders, `proxy/`, `storage/`, `auth/` si aplica, y `icon.png`. El SDK `plugins-sdk` incluye plantillas para comenzar.
-
-Nota: El soporte para `docker` ya se incluye por defecto en la aplicación (ver `apps/api/src/plugins/docker-plugin`). El SDK ya no incluye una plantilla `docker-plugin`.
-
-SDK para plugins:
-
-- Hemos añadido un paquete SDK en `packages/plugins-sdk` que contiene las interfaces y utilidades para el desarrollo de plugins y plantillas para scaffolding.
-- Para generar un plugin nuevo desde una plantilla: `pnpm --filter @ravhub/plugins-sdk run scaffold -- my-plugin`.
-
-Desarrollo rápido de plugins:
-
-1. Crear un módulo en `apps/api/src/plugins/<plugin-name>.ts` que exporte por defecto un objeto que cumpla `IPlugin` (ver `plugin.interface.ts`).
-2. Reiniciar la API en modo desarrollo; el loader intentará cargar automáticamente los plugins y los registrará en la tabla `plugins`.
-
----
-
-## Helm chart (dev -> staging)
-
-Se agregó un Chart básico en `charts/distributed-registry/` que despliega `api`, `web` y `postgres`.
-
-Uso local (helm instalado y cluster listo):
-
-```bash
-# ejemplo para desplegar con valores de desarrollo
-helm install my-registry charts/distributed-registry -f charts/distributed-registry/values.yaml
-
-# para staging (usa placeholders en values-staging.yaml):
-helm upgrade --install my-registry charts/distributed-registry -f charts/distributed-registry/values-staging.yaml
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          RavHub Container (All-in-One)                     │
+│                                                                            │
+│    ┌───────────────────────────┐              ┌────────────────────────┐   │
+│    │      Nginx (Port 80)      │              │   Docker (Port 5000)   │   │
+│    │      (Reverse Proxy)      │              │      (Direct API)      │   │
+│    └─────────────┬─────────────┘              └───────────┬────────────┘   │
+│                  │                                        │                │
+│        ┌─────────┴─────────┐                              │                │
+│        ▼                   ▼                              │                │
+│  ┌────────────┐     ┌─────────────┐                       │                │
+│  │  Static    │     │     API     │◄──────────────────────┘                │
+│  │  Assets    │     │   (NestJS)  │                                        │
+│  └────────────┘     └──────┬──────┘                                        │
+└────────────────────────────┼───────────────────────────────────────────────┘
+                             │
+             ┌───────────────┼───────────────┐
+             │               │               │
+             ▼               ▼               ▼
+     ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+     │  PostgreSQL  │ │    Storage   │ │     Redis    │
+     │    (Data)    │ │  (Artifacts) │ │   (Optional) │
+     └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
-Este chart es minimalista y pensado como punto de partida — ajustaremos recursos, probes, CRDs y secretos cuando pasemos al flujo CI/CD y a despliegues reales en k8s.
+---
+
+## 🔒 Security
+
+- **Authentication**: Basic Auth with JWT tokens
+- **Authorization**: Role-based access control (RBAC)
+- **Repository Permissions**: Granular per-repository access control
+- **Audit Logging**: Track all actions for compliance
+
+---
+
+## 📊 Community vs Enterprise
+
+| Feature              | Community | Enterprise |
+| -------------------- | :-------: | :--------: |
+| All Package Managers |    ✅     |     ✅     |
+| Hosted/Proxy/Group   |    ✅     |     ✅     |
+| RBAC & Permissions   |    ✅     |     ✅     |
+| Filesystem Storage   |    ✅     |     ✅     |
+| S3/GCS/Azure Storage |    ❌     |     ✅     |
+| Scheduled Backups    |    ❌     |     ✅     |
+| Cleanup Policies     |    ✅     |     ✅     |
+| Audit Logging        |    ✅     |     ✅     |
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a Pull Request.
+
+```bash
+# Fork the repo, then:
+git checkout -b feature/amazing-feature
+git commit -m 'feat: add amazing feature'
+git push origin feature/amazing-feature
+# Open a Pull Request
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<a name="español"></a>
+
+# 📦 RavHub (Español)
+
+### Registro de Paquetes Self-Hosted para Equipos Modernos
+
+---
+
+## 🚀 ¿Qué es RavHub?
+
+RavHub es un **registro de paquetes self-hosted** que te permite alojar, hacer proxy y gestionar paquetes de software en múltiples ecosistemas. Despliégalo en tu propia infraestructura y toma el control total de tus artefactos.
+
+### ✨ Características Principales
+
+| Característica              | Descripción                                               |
+| --------------------------- | --------------------------------------------------------- |
+| 🐳 **Registro Docker**      | Registro compatible con OCI para imágenes de contenedores |
+| 📦 **Registro NPM**         | Aloja paquetes npm privados o haz proxy de npmjs.com      |
+| ☕ **Repositorio Maven**    | Gestiona artefactos Java/Kotlin con Maven/Gradle          |
+| 🐍 **Repositorio PyPI**     | Aloja paquetes Python o haz proxy de pypi.org             |
+| 🔷 **Repositorio NuGet**    | Gestión de paquetes .NET                                  |
+| 🎼 **Repositorio Composer** | Paquetes PHP para tus proyectos Laravel/Symfony           |
+| ⚓ **Charts de Helm**       | Repositorio de charts Helm para Kubernetes                |
+| 🦀 **Registro Cargo**       | Gestión de crates de Rust                                 |
+| 📁 **Repositorio Raw**      | Almacena cualquier artefacto binario                      |
+
+### 🏗️ Tipos de Repositorio
+
+- **Hosted**: Almacena tus paquetes privados
+- **Proxy**: Cachea paquetes de registros upstream (npm, Docker Hub, Maven Central...)
+- **Group**: Combina múltiples repositorios en un único endpoint
+
+---
+
+## � Inicio Rápido
+
+### Usando Helm (Recomendado)
+
+```bash
+# Añade el repositorio Helm de RavHub
+helm repo add ravhub https://charts.ravhub.app
+helm repo update
+
+# Instala RavHub
+helm install ravhub ravhub/ravhub \
+  --namespace ravhub \
+  --create-namespace \
+  --set ingress.enabled=true \
+  --set ingress.host=ravhub.mi-empresa.com
+
+# O instala desde el chart local
+helm install ravhub ./charts/ravhub -n ravhub --create-namespace
+```
+
+### Usando Docker Compose (Desarrollo/Pruebas)
+
+```bash
+# Clona el repositorio
+git clone https://github.com/your-org/ravhub-core.git
+cd ravhub-core
+
+# Inicia el stack
+docker compose -f docker-compose.prod.yml up -d
+
+# Accede a la UI en http://localhost
+```
+
+### Primera Configuración
+
+1. Abre `http://localhost` en tu navegador
+2. Crea el primer usuario admin vía `/auth/bootstrap`
+3. ¡Empieza a crear repositorios!
+
+---
+
+## 🛠️ Desarrollo Local
+
+### Requisitos Previos
+
+- Node.js 22+
+- pnpm 9+
+- Docker & Docker Compose
+- PostgreSQL 15+ (o usa el servicio Docker incluido)
+
+### Desarrollo
+
+```bash
+# Instala dependencias
+pnpm install
+
+# Inicia el stack de desarrollo (API + Web + PostgreSQL)
+docker compose -f docker-compose.dev.yml up --build
+
+# API: http://localhost:3000
+# Web: http://localhost:5173
+```
+
+### Ejecutar Tests
+
+```bash
+# Tests unitarios
+pnpm --filter api test
+
+# Tests E2E
+pnpm --filter api test:e2e
+```
+
+---
+
+## 📊 Community vs Enterprise
+
+| Característica              | Community | Enterprise |
+| --------------------------- | :-------: | :--------: |
+| Todos los Package Managers  |    ✅     |     ✅     |
+| Hosted/Proxy/Group          |    ✅     |     ✅     |
+| RBAC y Permisos             |    ✅     |     ✅     |
+| Almacenamiento Filesystem   |    ✅     |     ✅     |
+| Políticas de Limpieza       |    ✅     |     ✅     |
+| Almacenamiento S3/GCS/Azure |    ❌     |     ✅     |
+| Backups Programados         |    ❌     |     ✅     |
+| Registro de Auditoría       |    ✅     |     ✅     |
+
+---
+
+## 🤝 Contribuir
+
+¡Las contribuciones son bienvenidas! Por favor, lee nuestra [Guía de Contribución](CONTRIBUTING.md) antes de enviar un Pull Request.
+
+---
+
+## 📄 Licencia
+
+Este proyecto está licenciado bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the RavHub Team**
+
+[⬆ Back to top](#-ravhub)
+
+</div>

@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -10,16 +24,11 @@ import { User } from './user.entity';
 import { Role } from './role.entity';
 import { RepositoryEntity } from './repository.entity';
 
-/**
- * Repository-level permissions
- * Allows granting specific permissions to users or roles for individual repositories
- */
 @Entity({ name: 'repository_permissions' })
 export class RepositoryPermission {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // The repository this permission applies to
   @ManyToOne(() => RepositoryEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'repositoryId' })
   repository: RepositoryEntity;
@@ -27,7 +36,6 @@ export class RepositoryPermission {
   @Column()
   repositoryId: string;
 
-  // Either user or role must be set (not both)
   @ManyToOne(() => User, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user?: User;
@@ -42,10 +50,6 @@ export class RepositoryPermission {
   @Column({ nullable: true })
   roleId?: string;
 
-  // Permission level: 'read', 'write', 'admin'
-  // - read: can pull/download packages
-  // - write: can push/upload packages
-  // - admin: can manage repository settings
   @Column({ type: 'varchar', length: 20 })
   permission: 'read' | 'write' | 'admin';
 

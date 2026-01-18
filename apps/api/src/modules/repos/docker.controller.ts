@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   Controller,
   Get,
@@ -27,7 +41,7 @@ export class DockerCompatController {
     private auth: AuthService,
     private storage: StorageService,
     private redis: RedisService,
-  ) { }
+  ) {}
 
   private getUserIdFromRequest(req: any): string | undefined {
     try {
@@ -142,7 +156,9 @@ export class DockerCompatController {
       if (!data) return null;
       const parsed = JSON.parse(data);
       if (parsed.buffers) {
-        parsed.buffers = parsed.buffers.map((b: any) => Buffer.from(b, 'base64'));
+        parsed.buffers = parsed.buffers.map((b: any) =>
+          Buffer.from(b, 'base64'),
+        );
       }
       return parsed;
     }
@@ -153,10 +169,16 @@ export class DockerCompatController {
     if (this.redis.isEnabled()) {
       const toStore = { ...sess };
       if (toStore.buffers) {
-        toStore.buffers = toStore.buffers.map((b: Buffer) => b.toString('base64'));
+        toStore.buffers = toStore.buffers.map((b: Buffer) =>
+          b.toString('base64'),
+        );
       }
       // TTL 24h for uploads
-      await this.redis.set(`docker:sess:${uuid}`, JSON.stringify(toStore), 86400);
+      await this.redis.set(
+        `docker:sess:${uuid}`,
+        JSON.stringify(toStore),
+        86400,
+      );
       return;
     }
     this.uploadSessions.set(uuid, sess);
@@ -189,7 +211,6 @@ export class DockerCompatController {
   @Get(':id/v2/token')
   @Post(':id/v2/token')
   async token(@Param('id') id: string, @Body() body: any, @Req() req: any) {
-    console.log(`[DockerCompatController] token request for repo=${id} query=${JSON.stringify(req.query)}`);
     const r = await this.repos.findOne(id);
     if (!r) throw new NotFoundException('not found');
 
@@ -201,14 +222,19 @@ export class DockerCompatController {
         : [];
 
     // For tests/dev: if x-user-roles header is present, mint a token directly.
-    const rolesHeader = req?.headers?.['x-user-roles'] || req?.headers?.['x-user-role'];
+    const rolesHeader =
+      req?.headers?.['x-user-roles'] || req?.headers?.['x-user-role'];
     if (rolesHeader) {
       const roles = String(rolesHeader)
         .split(',')
         .map((rr: string) => rr.trim().toLowerCase())
         .filter(Boolean);
 
-      const requestedAccess: Array<{ type: string; name: string; actions: string[] }> = [];
+      const requestedAccess: Array<{
+        type: string;
+        name: string;
+        actions: string[];
+      }> = [];
       for (const rs of rawScopes) {
         const parts = String(rs).split(':');
         if (parts.length >= 3) {
@@ -237,11 +263,16 @@ export class DockerCompatController {
       };
     }
 
-    const authHeader = req?.headers?.authorization || req?.headers?.Authorization;
+    const authHeader =
+      req?.headers?.authorization || req?.headers?.Authorization;
     if (!authHeader || !String(authHeader).startsWith('Basic ')) {
       // If repository is public, allow anonymous token for 'pull' actions
       if (r.config?.authEnabled === false) {
-        const requestedAccess: Array<{ type: string; name: string; actions: string[] }> = [];
+        const requestedAccess: Array<{
+          type: string;
+          name: string;
+          actions: string[];
+        }> = [];
         let allPull = true;
         for (const rs of rawScopes) {
           const parts = String(rs).split(':');
@@ -286,7 +317,10 @@ export class DockerCompatController {
     let username = '';
     let password = '';
     try {
-      const decoded = Buffer.from(String(authHeader).slice('Basic '.length), 'base64').toString('utf8');
+      const decoded = Buffer.from(
+        String(authHeader).slice('Basic '.length),
+        'base64',
+      ).toString('utf8');
       const idx = decoded.indexOf(':');
       username = idx >= 0 ? decoded.slice(0, idx) : decoded;
       password = idx >= 0 ? decoded.slice(idx + 1) : '';
@@ -294,12 +328,14 @@ export class DockerCompatController {
       throw new UnauthorizedException('invalid basic auth');
     }
 
-    console.log(`[DockerCompatController] validating user: ${username}`);
     const validated = await this.auth.validateUser(username, password);
-    console.log(`[DockerCompatController] user validated: ${!!validated}`);
     if (!validated) throw new UnauthorizedException('invalid credentials');
 
-    const requestedAccess: Array<{ type: string; name: string; actions: string[] }> = [];
+    const requestedAccess: Array<{
+      type: string;
+      name: string;
+      actions: string[];
+    }> = [];
     for (const rs of rawScopes) {
       const parts = String(rs).split(':');
       if (parts.length >= 3) {
@@ -326,7 +362,6 @@ export class DockerCompatController {
       expires_in: 3600,
       issued_at: new Date().toISOString(),
     };
-    console.log(`[DockerCompatController] token response: ${JSON.stringify(response)}`);
     return response;
   }
 
@@ -369,21 +404,10 @@ export class DockerCompatController {
     @Res() res: any,
     @Req() req?: any,
   ) {
-    console.log('[DOCKER CONTROLLER MANIFEST GET]', {
-      id,
-      name,
-      tag,
-      hasAuth: !!req?.headers?.authorization,
-    });
     const r = await this.repos.findOne(id);
     if (!r) {
-      console.log('[MANIFEST GET] Repository not found:', id);
       return res.status(404).json({ ok: false, message: 'not found' });
     }
-    console.log('[MANIFEST GET] Found repo:', {
-      type: r.type,
-      manager: r.manager,
-    });
 
     if (r.config?.authEnabled !== false) {
       const ah = req?.headers?.authorization || req?.headers?.Authorization;
@@ -406,9 +430,6 @@ export class DockerCompatController {
     // repos where the plugin owns blob storage.
     const plugin: any = this.pluginManager.getPluginForRepo(r);
     if (r.type === 'group') {
-      console.log(
-        '[DOCKER CONTROLLER MANIFEST] Calling pluginManager.download for group repo',
-      );
       const userId = this.getUserIdFromRequest(req);
       const result = await this.pluginManager.download(
         r,
@@ -511,10 +532,15 @@ export class DockerCompatController {
                 : undefined;
               range = { start, end };
             }
-            const streamRes = await this.storage.getStream(
+            const streamRes = (await this.storage.getStream(
               keyForStorage,
               range,
-            );
+            )) as any;
+            if (!streamRes) {
+              return res
+                .status(404)
+                .json({ ok: false, message: 'Stream not available' });
+            }
             const size = streamRes.size ?? undefined;
             const contentType =
               streamRes.contentType ?? 'application/octet-stream';
@@ -551,10 +577,7 @@ export class DockerCompatController {
       }
       return res ? res.status(200).json(out) : out;
     }
-    console.log(
-      '[DOCKER CONTROLLER MANIFEST] Calling pluginManager.download for non-group repo',
-      { repoType: r.type, repoId: r.id },
-    );
+
     const userId = this.getUserIdFromRequest(req);
     const result = await this.pluginManager.download(
       r,
@@ -612,7 +635,15 @@ export class DockerCompatController {
               : undefined;
             range = { start, end };
           }
-          const streamRes = await this.storage.getStream(keyForStorage, range);
+          const streamRes = (await this.storage.getStream(
+            keyForStorage,
+            range,
+          )) as any;
+          if (!streamRes) {
+            return res
+              .status(404)
+              .json({ ok: false, message: 'Stream not available' });
+          }
           const size = streamRes.size ?? undefined;
           const contentType =
             streamRes.contentType ?? 'application/octet-stream';
@@ -900,9 +931,9 @@ export class DockerCompatController {
     if (!r || (r.type || '').toString().toLowerCase() !== 'hosted') {
       return res
         ? res.status(405).json({
-          ok: false,
-          message: 'uploads allowed only on hosted repositories',
-        })
+            ok: false,
+            message: 'uploads allowed only on hosted repositories',
+          })
         : { ok: false, message: 'uploads allowed only on hosted repositories' };
     }
     const plugin: any = this.pluginManager.getPluginForRepo(r);
@@ -1033,12 +1064,6 @@ export class DockerCompatController {
     @Res() res: any,
     @Req() req?: any,
   ) {
-    console.log('[DOCKER CONTROLLER BLOB GET]', {
-      id,
-      name,
-      digest: digest.substring(0, 20) + '...',
-      hasAuth: !!req?.headers?.authorization,
-    });
     const r = await this.repos.findOne(id);
     if (!r) return res.status(404).json({ ok: false, message: 'not found' });
 
@@ -1067,11 +1092,7 @@ export class DockerCompatController {
         message: 'blob downloads not supported for this repo type',
       });
     }
-    console.log('[DOCKER CONTROLLER BLOB] Calling pluginManager.download', {
-      repoType,
-      repoId: r.id,
-      repoName: r.name,
-    });
+
     const userId = this.getUserIdFromRequest(req);
     const result = await this.pluginManager.download(
       r,
@@ -1092,17 +1113,24 @@ export class DockerCompatController {
     // Stream blob from storage if storageKey is available (avoids OOM for large layers)
     if (result.storageKey) {
       try {
-        const { stream, size } = await this.storage.getStream(result.storageKey);
+        const streamRes = (await this.storage.getStream(
+          result.storageKey,
+        )) as any;
+        if (!streamRes) throw new Error('Stream not available');
+        const { stream, size } = streamRes;
         if (res) {
           res.setHeader('Content-Type', 'application/octet-stream');
           if (size) res.setHeader('Content-Length', size.toString());
           // Docker Registry V2 requires the digest header
           if (digest) res.setHeader('Docker-Content-Digest', digest);
-          return (stream as any).pipe(res);
+          return stream.pipe(res);
         }
         return { ok: true, stream };
       } catch (err) {
-        console.warn(`[DOCKER] streaming failed for ${result.storageKey}, falling back`, err);
+        console.warn(
+          `[DOCKER] streaming failed for ${result.storageKey}, falling back`,
+          err,
+        );
       }
     }
 

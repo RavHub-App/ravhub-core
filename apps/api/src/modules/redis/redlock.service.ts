@@ -1,93 +1,114 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import Redlock, { Lock } from 'redlock';
 import { RedisService } from './redis.service';
 
 @Injectable()
 export class RedlockService implements OnModuleInit {
-    private readonly logger = new Logger(RedlockService.name);
-    private redlock: Redlock | null = null;
+  private readonly logger = new Logger(RedlockService.name);
+  private redlock: Redlock | null = null;
 
-    constructor(private readonly redisService: RedisService) { }
+  constructor(private readonly redisService: RedisService) {}
 
-    onModuleInit() {
-        if (!this.redisService.isEnabled()) {
-            return;
-        }
-
-        const client = this.redisService.getClient();
-        if (!client) return;
-
-        this.redlock = new Redlock(
-            [client],
-            {
-                driftFactor: 0.01,
-                retryCount: 10,
-                retryDelay: 200,
-                retryJitter: 200,
-                automaticExtensionThreshold: 500,
-            }
-        );
-
-        this.redlock.on('error', (error) => {
-            this.logger.error(`Redlock error: ${error.message}`);
-        });
+  onModuleInit() {
+    if (!this.redisService.isEnabled()) {
+      return;
     }
 
-    /**
-     * Acquires a lock for a given resource.
-     * @param resource The resource name to lock (e.g., 'upload:npm:package-name')
-     * @param ttl Time to live in milliseconds
-     */
-    async lock(resource: string, ttl: number): Promise<Lock | null> {
-        if (!this.redlock) return null;
-        return this.redlock.acquire([resource], ttl);
-    }
+    const client = this.redisService.getClient();
+    if (!client) return;
 
-    /**
-     * Executes a function within a lock.
-     * @param resource The resource name to lock
-     * @param ttl Time to live in milliseconds
-     * @param fn The function to execute
-     */
-    private memoryLocks: Map<string, Promise<void>> = new Map();
+    this.redlock = new Redlock([client], {
+      driftFactor: 0.01,
+      retryCount: 10,
+      retryDelay: 200,
+      retryJitter: 200,
+      automaticExtensionThreshold: 500,
+    });
 
-    async runWithLock<T>(resource: string, ttl: number, fn: () => Promise<T>): Promise<T> {
-        if (!this.redlock) {
-            // In-Memory Mutex Fallback for Single-Replica scenarios without Redis.
-            // Node.js is single-threaded but concurrent via async I/O. We must serialize access 
-            // to critical sections to prevent race conditions during await operations.
+    this.redlock.on('error', (error) => {
+      this.logger.error(`Redlock error: ${error.message}`);
+    });
+  }
 
-            // 1. Wait if locked
-            while (this.memoryLocks.has(resource)) {
-                try { await this.memoryLocks.get(resource); } catch { }
-            }
+  /**
+   * Acquires a lock for a given resource.
+   * @param resource The resource name to lock (e.g., 'upload:npm:package-name')
+   * @param ttl Time to live in milliseconds
+   */
+  async lock(resource: string, ttl: number): Promise<Lock | null> {
+    if (!this.redlock) return null;
+    return this.redlock.acquire([resource], ttl);
+  }
 
-            // 2. Acquire Lock
-            let release: (() => void) | undefined;
-            const lockPromise = new Promise<void>((resolve) => { release = resolve; });
-            this.memoryLocks.set(resource, lockPromise);
+  /**
+   * Executes a function within a lock.
+   * @param resource The resource name to lock
+   * @param ttl Time to live in milliseconds
+   * @param fn The function to execute
+   */
+  private memoryLocks: Map<string, Promise<void>> = new Map();
 
-            try {
-                return await fn();
-            } finally {
-                // 3. Release Lock
-                this.memoryLocks.delete(resource);
-                if (release) release();
-            }
-        }
+  async runWithLock<T>(
+    resource: string,
+    ttl: number,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (!this.redlock) {
+      // In-Memory Mutex Fallback for Single-Replica scenarios without Redis.
+      // Node.js is single-threaded but concurrent via async I/O. We must serialize access
+      // to critical sections to prevent race conditions during await operations.
 
-        let lock: Lock | null = null;
+      // 1. Wait if locked
+      while (this.memoryLocks.has(resource)) {
         try {
-            lock = await this.lock(resource, ttl);
-            return await fn();
-        } finally {
-            if (lock) {
-                try {
-                    await lock.release();
-                } catch (err) {
-                    this.logger.error(`Failed to release lock for ${resource}: ${err.message}`);
-                }
-            }
-        }
+          await this.memoryLocks.get(resource);
+        } catch {}
+      }
+
+      // 2. Acquire Lock
+      let release: (() => void) | undefined;
+      const lockPromise = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      this.memoryLocks.set(resource, lockPromise);
+
+      try {
+        return await fn();
+      } finally {
+        // 3. Release Lock
+        this.memoryLocks.delete(resource);
+        if (release) release();
+      }
     }
+
+    let lock: Lock | null = null;
+    try {
+      lock = await this.lock(resource, ttl);
+      return await fn();
+    } finally {
+      if (lock) {
+        try {
+          await lock.release();
+        } catch (err) {
+          this.logger.error(
+            `Failed to release lock for ${resource}: ${err.message}`,
+          );
+        }
+      }
+    }
+  }
 }

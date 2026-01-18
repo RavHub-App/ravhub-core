@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 import {
   Controller,
   Get,
@@ -27,7 +41,6 @@ import { User } from '../../entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { AuthService } from '../auth/auth.service';
 
-// expose endpoints under both /repository and /repositories for backward compatibility
 @Controller(['repository', 'repositories'])
 export class ReposController {
   private readonly logger = new Logger(ReposController.name);
@@ -38,21 +51,15 @@ export class ReposController {
     private readonly permissionService: PermissionService,
     private users: UsersService,
     private auth: AuthService,
-  ) { }
+  ) {}
 
   @Get()
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.read')
   async list(@Req() req: any) {
-
     try {
       const repos = await this.repos.findAll();
       const user = req.user;
-
-
-
-
-      // Enrich each repository with the user's permission level using unified service
       if (user && user.id) {
         const enrichedRepos = await Promise.all(
           repos.map(async (repo) => {
@@ -65,19 +72,11 @@ export class ReposController {
           }),
         );
 
-
         return enrichedRepos;
       }
 
-
       return repos;
     } catch (err: any) {
-      // During startup DB might not yet be available — return an empty list (200) so e2e
-      // readiness checks can proceed and tests can create repositories.
-      console.error('[REPOS LIST] Error:', err?.message || String(err));
-      this.logger.warn(
-        'list /repository failed: ' + (err?.message || String(err)),
-      );
       return [];
     }
   }
@@ -86,138 +85,34 @@ export class ReposController {
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.manage')
   async create(@Body() body: Partial<RepositoryEntity>) {
-    // support docker-specific config right in repo creation
-    // if manager is docker and no config provided, ensure a docker sub-config exists
-    try {
-      const manager = (body.manager || '').toLowerCase();
-      if (manager === 'docker') {
-        body.config = body.config || {};
-        // normalize docker config container
-        const dockerCfg = body.config.docker || {};
-        // default version to v2
-        dockerCfg.version = dockerCfg.version || 'v2';
-        // allow providing a port, otherwise leave undefined so runtime can pick default
-        if (!dockerCfg.port) dockerCfg.port = dockerCfg.port || undefined;
-        body.config.docker = dockerCfg;
-      } else if (manager === 'nuget') {
-        body.config = body.config || {};
-        const nugetCfg = body.config.nuget || {};
-        // allow selecting nuget protocol version: v2 or v3 (default to v3)
-        nugetCfg.version = (nugetCfg.version || 'v3').toString().toLowerCase();
-        body.config.nuget = nugetCfg;
-      }
-    } catch {
-      // on any error, still proceed with the create; validation can be handled elsewhere
-    }
-    // For proxy repositories we require a configured upstream URL. The value
-    // can be provided directly in config (e.g. config.target) or nested
-    // under a plugin-specific key (e.g. config.nuget.upstream). We consider
-    // a repository valid only if one of the known upstream keys is present
-    // and truthy in the config object.
     const isProxy = (body.type || '').toString().toLowerCase() === 'proxy';
-    if (isProxy) {
-      const hasUpstream = (obj: any): boolean => {
-        if (!obj || typeof obj !== 'object') return false;
-        for (const k of Object.keys(obj)) {
-          if (
-            [
-              'target',
-              'registry',
-              'upstream',
-              'indexUrl',
-              'proxyUrl',
-              'url',
-            ].includes(k) &&
-            obj[k] &&
-            String(obj[k]).trim()
-          )
-            return true;
-          if (typeof obj[k] === 'object') {
-            if (hasUpstream(obj[k])) return true;
-          }
-        }
-        return false;
-      };
-
-      if (!hasUpstream(body.config)) {
-        throw new BadRequestException(
-          'proxy repositories require a proxy URL in config (e.g. config.target or config.<plugin>.proxyUrl)',
-        );
-      }
+    if (isProxy && !this.repos.validateProxyConfig(body.config)) {
+      throw new BadRequestException(
+        'proxy repositories require a proxy URL in config (e.g. config.target or config.<plugin>.proxyUrl)',
+      );
     }
 
-    // Validate Docker port is not already in use
     if (
       (body.manager || '').toLowerCase() === 'docker' &&
       body.config?.docker?.port
     ) {
-      const requestedPort = body.config.docker.port;
-      const existingRepos = await this.repos.findAll();
-      const portInUse = existingRepos.some(
-        (r) =>
-          (r.manager || '').toLowerCase() === 'docker' &&
-          r.config?.docker?.port === requestedPort,
+      const isAvailable = await this.repos.validateDockerPortAvailability(
+        body.config.docker.port,
       );
-      if (portInUse) {
+      if (!isAvailable) {
         throw new BadRequestException(
-          `Port ${requestedPort} is already in use by another Docker repository. Please choose a different port.`,
+          `Port ${body.config.docker.port} is already in use by another Docker repository. Please choose a different port.`,
         );
       }
     }
 
     const saved = await this.repos.create(body);
 
-    // If this is a docker-managed repo, attempt to start a per-repo registry (plugin may choose port/version)
     try {
       if ((saved.manager || '').toLowerCase() === 'docker') {
-        const inst = this.pluginManager.getPluginForRepo(saved as any);
-        if (inst && typeof inst.startRegistryForRepo === 'function') {
-          // prefer explicitly provided docker config under saved.config.docker
-          const provided = saved.config?.docker ?? saved.config ?? {};
-          // Apply default port=0 if not specified (0 means auto-select ephemeral port once, then persist)
-          const port = provided.port !== undefined ? provided.port : 0;
-          // Build repos map for group resolution
-          const allRepos = await this.repos.findAll();
-          const reposById = new Map();
-          for (const r of allRepos) {
-            reposById.set(r.id, r);
-            reposById.set(r.name, r);
-          }
-          const opts = {
-            port,
-            version: provided.version,
-            pluginManager: this.pluginManager,
-            reposById,
-          };
-          try {
-            const out: any = await inst.startRegistryForRepo(
-              saved as any,
-              opts,
-            );
-            if (out?.ok && out.port) {
-              // persist generated port and version back to repo config
-              const newCfg = {
-                ...(saved.config ?? {}),
-                docker: {
-                  ...(saved.config?.docker ?? {}),
-                  port: out.port,
-                  version: provided.version || out.version || 'v2',
-                  accessUrl: out.accessUrl ?? saved.config?.docker?.accessUrl,
-                },
-              };
-              await this.repos.update(saved.id, { config: newCfg } as any);
-              // reflect change in returned value
-              saved.config = newCfg;
-            }
-          } catch (err) {
-            // console.error('[DEBUG] Error starting registry:', err);
-            // don't fail creation if plugin registry fails; log can be added later
-          }
-        }
+        const out = await this.repos.manageDockerRegistry(saved, 'start');
       }
-    } catch (err) {
-      // tolerate any plugin errors — repo creation still succeeds
-    }
+    } catch (err) {}
 
     return saved;
   }
@@ -233,7 +128,6 @@ export class ReposController {
     const user = req.user;
     if (!user || !user.id) return repo;
 
-    // Get user's permission level using unified service
     const userPermission =
       await this.permissionService.getUserRepositoryPermission(
         user.id,
@@ -243,7 +137,6 @@ export class ReposController {
     return { ...repo, userPermission };
   }
 
-  // Trigger an immediate upstream ping for a repository (non-blocking for UI flows)
   @Get(':id/ping')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.read')
@@ -255,7 +148,6 @@ export class ReposController {
     return await this.pluginManager.triggerUpstreamPingForRepo(ent);
   }
 
-  // Repository metadata: secure, read-only details aggregating config, capabilities and audit
   @Get(':id/metadata')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.read')
@@ -269,7 +161,6 @@ export class ReposController {
       supportsPull: manager === 'docker' || manager === 'nuget',
       supportsPush: manager === 'docker' || manager === 'nuget',
     };
-    // Basic audit placeholders; plugins can enrich via their own state
     const audit = {
       lastRead: r?.audit?.lastRead || null,
       lastWrite: r?.audit?.lastWrite || null,
@@ -294,7 +185,6 @@ export class ReposController {
     };
   }
 
-  // Repository members (for group-type repos): secure, read-only
   @Get(':id/members')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.read')
@@ -321,7 +211,6 @@ export class ReposController {
     @Param('id') id: string,
     @Body() body: Partial<RepositoryEntity>,
   ) {
-    // Validate Docker port change if applicable
     const existingRepo = await this.repos.findOne(id);
     if (!existingRepo) {
       throw new NotFoundException(`Repository ${id} not found`);
@@ -334,126 +223,43 @@ export class ReposController {
       const requestedPort = body.config.docker.port;
       const currentPort = existingRepo.config?.docker?.port;
 
-      // Only validate if port is actually changing
       if (requestedPort !== currentPort) {
-        const existingRepos = await this.repos.findAll();
-        const portInUse = existingRepos.some(
-          (r) =>
-            r.id !== id &&
-            (r.manager || '').toLowerCase() === 'docker' &&
-            r.config?.docker?.port === requestedPort,
+        const isAvailable = await this.repos.validateDockerPortAvailability(
+          requestedPort,
+          id,
         );
-        if (portInUse) {
+        if (!isAvailable) {
           throw new BadRequestException(
             `Port ${requestedPort} is already in use by another Docker repository. Please choose a different port.`,
           );
         }
 
-        // Stop the current registry before updating (will restart on next access or explicitly)
-        const inst = this.pluginManager.getPluginForRepo(existingRepo);
-        if (inst && typeof inst.stopRegistryForRepo === 'function') {
-          await inst.stopRegistryForRepo(existingRepo);
-        }
+        await this.repos.manageDockerRegistry(existingRepo, 'stop');
       }
     }
 
-    // allow partial updates (e.g., config modifications) — delegate to service
     const updated = await this.repos.update(id, body as any);
 
-    // Some Docker registries keep repository config in-memory (e.g. group routing).
-    // If config changes but port doesn't, we still need to restart the registry so
-    // the new config takes effect.
     const isDocker = (existingRepo.manager || '').toLowerCase() === 'docker';
-    const requestedPort = body.config?.docker?.port;
-    const portUnchanged =
-      requestedPort === undefined ||
-      requestedPort === existingRepo.config?.docker?.port;
-    const dockerConfigTouched =
-      body.config !== undefined &&
-      (Object.prototype.hasOwnProperty.call(body.config as any, 'members') ||
-        Object.prototype.hasOwnProperty.call(body.config as any, 'writePolicy') ||
-        Object.prototype.hasOwnProperty.call(body.config as any, 'preferredWriter'));
-    if (updated && isDocker && portUnchanged && dockerConfigTouched) {
-      const inst = this.pluginManager.getPluginForRepo(updated as any);
-      if (inst && typeof inst.startRegistryForRepo === 'function') {
-        if (typeof inst.stopRegistryForRepo === 'function') {
-          await inst.stopRegistryForRepo(updated as any);
-        }
+    if (updated && isDocker) {
+      const requestedPort = body.config?.docker?.port;
+      const portUnchanged =
+        requestedPort === undefined ||
+        requestedPort === existingRepo.config?.docker?.port;
+      const dockerConfigTouched =
+        body.config !== undefined &&
+        (Object.prototype.hasOwnProperty.call(body.config as any, 'members') ||
+          Object.prototype.hasOwnProperty.call(
+            body.config as any,
+            'writePolicy',
+          ) ||
+          Object.prototype.hasOwnProperty.call(
+            body.config as any,
+            'preferredWriter',
+          ));
 
-        const allRepos = await this.repos.findAll();
-        const reposById = new Map<string, any>();
-        allRepos.forEach((r) => reposById.set(r.id, r));
-
-        const provided = updated.config?.docker ?? updated.config ?? {};
-        const port =
-          provided.port !== undefined
-            ? provided.port
-            : existingRepo.config?.docker?.port ?? 0;
-        const opts = {
-          port,
-          version: provided.version,
-          pluginManager: this.pluginManager,
-          reposById,
-        };
-        const out: any = await inst.startRegistryForRepo(updated as any, opts);
-
-        if (out?.ok && out.needsPersistence && out.port) {
-          const newCfg = {
-            ...(updated.config ?? {}),
-            docker: {
-              ...(updated.config?.docker ?? {}),
-              port: out.port,
-              accessUrl: out.accessUrl,
-            },
-          };
-          await this.repos.update(id, { config: newCfg } as any);
-          updated.config = newCfg;
-        }
-      }
-    }
-
-    // If Docker port changed, restart registry with new port
-    if (
-      updated &&
-      isDocker &&
-      body.config?.docker?.port !== undefined &&
-      body.config.docker.port !== existingRepo.config?.docker?.port
-    ) {
-      const inst = this.pluginManager.getPluginForRepo(updated as any);
-      if (inst && typeof inst.startRegistryForRepo === 'function') {
-        // Stop existing registry first
-        if (typeof inst.stopRegistryForRepo === 'function') {
-          await inst.stopRegistryForRepo(updated as any);
-        }
-
-        const allRepos = await this.repos.findAll();
-        const reposById = new Map<string, any>();
-        allRepos.forEach((r) => reposById.set(r.id, r));
-
-        const provided = updated.config?.docker ?? updated.config ?? {};
-        // Apply default port=0 if not specified (0 means auto-select ephemeral port once, then persist)
-        const port = provided.port !== undefined ? provided.port : 0;
-        const opts = {
-          port,
-          version: provided.version,
-          pluginManager: this.pluginManager,
-          reposById,
-        };
-        const out: any = await inst.startRegistryForRepo(updated as any, opts);
-
-        // If port was auto-selected, persist it
-        if (out?.ok && out.needsPersistence && out.port) {
-          const newCfg = {
-            ...(updated.config ?? {}),
-            docker: {
-              ...(updated.config?.docker ?? {}),
-              port: out.port,
-              accessUrl: out.accessUrl,
-            },
-          };
-          await this.repos.update(id, { config: newCfg } as any);
-          updated.config = newCfg;
-        }
+      if (!portUnchanged || dockerConfigTouched) {
+        await this.repos.manageDockerRegistry(updated, 'restart');
       }
     }
 
@@ -483,13 +289,11 @@ export class ReposController {
       };
     }
 
-    // Get the storage service
     const storageService = this.repos['storageService'];
     if (!storageService) {
       throw new Error('Storage service not available');
     }
 
-    // Determine the prefixes for this repository's files
     const manager = (repo.manager || 'generic').toLowerCase();
     const prefixes = [`${manager}/${repo.name}`, `${manager}/${repo.id}`];
 
@@ -498,12 +302,10 @@ export class ReposController {
     );
 
     try {
-      // Perform the migration for all possible prefixes
       for (const prefix of prefixes) {
         await storageService.migrate(prefix, oldStorageId, newStorageId);
       }
 
-      // Update the repository config with the new storage ID
       const updatedConfig = {
         ...(repo.config || {}),
         storageId: newStorageId,
@@ -532,7 +334,6 @@ export class ReposController {
   async upload(@Param('id') id: string, @Body() body: any, @Req() req?: any) {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, message: 'not found' };
-    // docker repositories are expected to be served on a dedicated registry port
     if ((r.manager || '').toLowerCase() === 'docker') {
       return {
         ok: false,
@@ -544,8 +345,6 @@ export class ReposController {
     return this.pluginManager.upload(r, body, userId);
   }
 
-
-
   @Post(':id/scan')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.manage')
@@ -553,7 +352,7 @@ export class ReposController {
   async scan(@Param('id') id: string) {
     const repo = await this.repos.findOne(id);
     if (!repo) throw new NotFoundException('Repository not found');
-    return this.repos.scanRepoArtifacts(repo as any);
+    return this.repos.scanRepoArtifacts(repo);
   }
 
   @Get(':id/artifacts/:artifactId/verify')
@@ -577,9 +376,9 @@ export class ReposController {
     }
 
     try {
-      const { stream } = await this.repos['storageService'].getStream(
+      const { stream } = (await this.repos.storageService.getStream(
         artifact.storageKey,
-      );
+      )) as any;
       const crypto = require('crypto');
       const hash = crypto.createHash('sha256');
 
@@ -608,7 +407,8 @@ export class ReposController {
   async attachProvenance(
     @Param('id') id: string,
     @Param('artifactId') artifactId: string,
-    @Body() body: { commitSha?: string; buildId?: string; sourceRepoUrl?: string },
+    @Body()
+    body: { commitSha?: string; buildId?: string; sourceRepoUrl?: string },
   ) {
     const repo = await this.repos.findOne(id);
     if (!repo) throw new NotFoundException('Repository not found');
@@ -645,8 +445,7 @@ export class ReposController {
   async listVersions(@Param('id') id: string, @Param('name') name: string) {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, versions: [] };
-    // if ((r.manager || '').toLowerCase() === 'docker')
-    //   return { ok: false, versions: [] };
+
     return this.pluginManager.listVersions(r, name);
   }
 
@@ -657,9 +456,6 @@ export class ReposController {
   async packageDetails(@Param('id') id: string, @Param('name') name: string) {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, message: 'not found' };
-    // if ((r.manager || '').toLowerCase() === 'docker')
-    //   return { ok: false, message: 'docker package listing not supported' };
-
     return this.repos.getPackageDetails(id, decodeURIComponent(name));
   }
 
@@ -674,9 +470,6 @@ export class ReposController {
   ) {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, message: 'not found' };
-    // if ((r.manager || '').toLowerCase() === 'docker')
-    //   return { ok: false, message: 'docker package deletion not supported' };
-
     return this.repos.deletePackageVersion(
       id,
       decodeURIComponent(name),
@@ -708,25 +501,14 @@ export class ReposController {
   ) {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false };
-    // if ((r.manager || '').toLowerCase() === 'docker')
-    //   return {
-    //     ok: false,
-    //     message:
-    //       'docker repositories are served on a dedicated registry port; use the registry host:port to download blobs/manifests',
-    //   };
+
     const userId = req?.user?.id;
     const pkgName = body.packageName || query.packageName;
     const pkgVer = body.version || query.version;
 
     if (!pkgName) return { ok: false, message: 'packageName required' };
 
-    return this.pluginManager.download(
-      r,
-      pkgName,
-      pkgVer,
-      new Set(),
-      userId,
-    );
+    return this.pluginManager.download(r, pkgName, pkgVer, new Set(), userId);
   }
 
   @Get(':id/proxy')
@@ -740,34 +522,25 @@ export class ReposController {
   ) {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false };
-    // if ((r.manager || '').toLowerCase() === 'docker')
-    //   return {
-    //     ok: false,
-    //     message:
-    //       'docker repositories are served on a dedicated registry port; proxy pulls should go to the registry host:port',
-    //   };
+
     const targetUrl = body.url || query.url;
     if (!targetUrl) return { ok: false, message: 'url required' };
     return this.pluginManager.proxyFetch(r, targetUrl);
   }
 
-  // Plugin-specific authentication endpoint (e.g. npm login, docker login)
   @Post(':id/auth')
   async pluginAuth(@Param('id') id: string, @Body() body: any) {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, message: 'not found' };
     const res = await this.pluginManager.authenticate(r, body);
 
-    // If plugin returned a user-like object, ensure a local user exists and return a JWT
     if (res?.ok && res.user && res.user.username) {
       let u: User | null = await this.users.findByUsername(res.user.username);
       if (!u) {
-        // create local user record without password
         u = await this.users.create({
           username: res.user.username,
         });
       }
-      // at this point u should be a valid User — defensive check before signing
       if (!u) return { ok: false, message: 'failed to create or find user' };
       const token = this.auth.signToken({ sub: u.id, username: u.username });
       return { ok: true, token, user: { id: u.id, username: u.username } };
@@ -776,10 +549,8 @@ export class ReposController {
     return res;
   }
 
-  // npm "adduser" / "login" compatibility endpoint
   @Post(':id/-/user/org.couchdb.user')
   async npmLogin(@Param('id') id: string, @Body() body: any) {
-    // body expected to contain { name, password, email } when using npm adduser
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, message: 'not found' };
     if ((r.manager || '').toLowerCase() === 'docker')
@@ -790,14 +561,9 @@ export class ReposController {
       };
 
     const res = await this.pluginAuth(id, body);
-    // npm expects { ok: true } or user doc — provide token for clients
     if (res?.ok && res.token) return { ok: true };
     return res;
   }
-
-  // MOVED TO TOP
-  // @Get(':id/v2/token')
-  // @Post(':id/v2/token')
 
   @Delete(':id')
   @UseGuards(UnifiedPermissionGuard)
@@ -807,22 +573,13 @@ export class ReposController {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, message: 'not found' };
 
-    // Stop registry server if this is a docker repo
     if ((r.manager || '').toLowerCase() === 'docker') {
-      const inst = this.pluginManager.getPluginForRepo(r);
-      if (inst && typeof inst.stopRegistryForRepo === 'function') {
-        const stopResult = await inst.stopRegistryForRepo(r);
-
-      }
+      await this.repos.manageDockerRegistry(r, 'stop');
     }
 
     await this.repos.delete(id);
     return { ok: true };
   }
-
-  // ============================================
-  // Repository Permission Management Endpoints
-  // ============================================
 
   @Get(':id/permissions')
   @UseGuards(UnifiedPermissionGuard)
@@ -834,7 +591,6 @@ export class ReposController {
         await this.repositoryPermissionService.getRepositoryPermissions(id);
       return result;
     } catch (err) {
-      // console.error('[GET PERMISSIONS] Error:', err);
       throw err;
     }
   }
@@ -880,10 +636,6 @@ export class ReposController {
     return this.repositoryPermissionService.revokePermission(permissionId);
   }
 
-  // ============================================
-  // Proxy Cache Management Endpoints
-  // ============================================
-
   @Delete(':id/cache')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.manage')
@@ -900,10 +652,8 @@ export class ReposController {
       );
     }
 
-    // Clear in-memory cache
     const memoryCleared = await this.pluginManager.clearProxyCache(id);
 
-    // Clean old files from storage
     const filesDeleted = await this.pluginManager.cleanupProxyCache(id);
 
     return {
@@ -975,9 +725,12 @@ export class ReposController {
     @Param() params: any,
     @Req() req: any,
   ) {
-    const path = params[0] || params['0'] || (Array.isArray(params.path) ? params.path.join('/') : params.path);
+    const path =
+      params[0] ||
+      params['0'] ||
+      (Array.isArray(params.path) ? params.path.join('/') : params.path);
 
-    const r = req.repository || await this.repos.findOne(id);
+    const r = req.repository || (await this.repos.findOne(id));
     if (!r) throw new NotFoundException('Repository not found');
 
     const userId = req?.user?.id;
@@ -998,32 +751,36 @@ export class ReposController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const path = params[0] || (Array.isArray(params.path) ? params.path.join('/') : params.path);
+    const path =
+      params[0] ||
+      (Array.isArray(params.path) ? params.path.join('/') : params.path);
 
-    const r = req.repository || await this.repos.findOne(id);
+    const r = req.repository || (await this.repos.findOne(id));
     if (!r) return res.status(404).send('Not found');
 
-
-
-    // If it's a proxy repo, delegate to proxyFetch
     if (r.type === 'proxy') {
       const result = await this.pluginManager.proxyFetch(r, path);
       if (result.headers) {
         for (const [k, v] of Object.entries(result.headers)) {
-          // Skip headers that express/node handles automatically or that might cause issues
-          if (['content-length', 'content-encoding', 'transfer-encoding', 'connection'].includes(k.toLowerCase())) continue;
+          if (
+            [
+              'content-length',
+              'content-encoding',
+              'transfer-encoding',
+              'connection',
+            ].includes(k.toLowerCase())
+          )
+            continue;
           res.setHeader(k, v as string);
         }
       }
       if (result.status) res.status(result.status);
 
       if (result.stream) {
-        // Handle streaming response for large artifacts
         const stream = result.stream as any;
         if (typeof stream.pipe === 'function') {
           return stream.pipe(res);
         } else if (stream instanceof ReadableStream) {
-          // Web Stream API (common in some fetch implementations)
           const nodeStream = require('stream').Readable.fromWeb(stream as any);
           return nodeStream.pipe(res);
         }
@@ -1034,19 +791,11 @@ export class ReposController {
       return;
     }
 
-    // If it's a hosted repo, delegate to download
-    // For RawPlugin, we can use download(repo, path)
     if (r.manager === 'raw' || r.type === 'hosted' || r.type === 'group') {
-      // We need to call plugin.download directly or via manager
-      // PluginManager.download expects (repo, name, version)
-      // But for raw, name is the path.
       const plugin = this.pluginManager.getPluginForRepo(r);
       if (plugin && typeof plugin.download === 'function') {
         const result = await plugin.download(r, path);
         if (result.ok && result.url) {
-          // If it's a file:// url (local), we might want to stream it?
-          // But StorageService.getUrl returns file:// for fs.
-          // res.sendFile requires absolute path.
           if (result.url.startsWith('file://')) {
             const p = result.url.replace('file://', '');
             return res.sendFile(p);
@@ -1054,7 +803,8 @@ export class ReposController {
           return res.redirect(result.url);
         }
         if (result.ok && result.data) {
-          if (result.contentType) res.setHeader('Content-Type', result.contentType);
+          if (result.contentType)
+            res.setHeader('Content-Type', result.contentType);
           return res.send(result.data);
         }
       }
@@ -1067,11 +817,10 @@ export class ReposController {
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.read')
   @RepositoryPermission('read')
-  async verifyArtifactByPath(
-    @Param('id') id: string,
-    @Param() params: any,
-  ) {
-    const path = params[0] || (Array.isArray(params.path) ? params.path.join('/') : params.path);
+  async verifyArtifactByPath(@Param('id') id: string, @Param() params: any) {
+    const path =
+      params[0] ||
+      (Array.isArray(params.path) ? params.path.join('/') : params.path);
     try {
       return await this.repos.verify(id, path);
     } catch (err: any) {
@@ -1088,7 +837,9 @@ export class ReposController {
     @Param() params: any,
     @Body() provenance: any,
   ) {
-    const path = params[0] || (Array.isArray(params.path) ? params.path.join('/') : params.path);
+    const path =
+      params[0] ||
+      (Array.isArray(params.path) ? params.path.join('/') : params.path);
     try {
       return await this.repos.attachProvenance(id, path, provenance);
     } catch (err: any) {

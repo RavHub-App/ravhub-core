@@ -13,7 +13,7 @@ COPY apps/web/package.json /workspace/apps/web/package.json
 # Install all workspace deps using pnpm (keeps correct hoisted structure for workspace)
 RUN pnpm install --frozen-lockfile --silent --shamefully-hoist
 
-# Copy rest of repository into the image
+
 COPY . /workspace
 
 WORKDIR /workspace/apps/web
@@ -21,5 +21,5 @@ WORKDIR /workspace/apps/web
 ENV NODE_ENV=development
 EXPOSE 5173
 
-# Start dev server using the local vite in the workspace (hot reload)
+
 CMD ["pnpm", "run", "dev"]
