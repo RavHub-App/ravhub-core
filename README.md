@@ -49,7 +49,9 @@ RavHub is a **self-hosted package registry** that allows you to host, proxy, and
 
 ## � Quick Start
 
-### Using Helm (Recommended)
+### Using Helm (Coming Soon 🚧)
+
+_Once the public chart repository is live:_
 
 ```bash
 # Add the RavHub Helm repository
@@ -62,18 +64,13 @@ helm install ravhub ravhub/ravhub \
   --create-namespace \
   --set ingress.enabled=true \
   --set ingress.host=ravhub.example.com
-
-# Or install from local chart
-helm install ravhub ./charts/ravhub -n ravhub --create-namespace
 ```
 
-### Using Docker Compose (Development/Testing)
+### Using Docker (Coming Soon 🚧)
+
+_Once the official image is published:_
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/ravhub-core.git
-cd ravhub-core
-
 # Start the stack
 docker compose -f docker-compose.prod.yml up -d
 
