@@ -12,19 +12,32 @@
  * GNU Affero General Public License for more details.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import AppDataSource from '../../data-source';
 import { ProxyCacheService } from './proxy-cache.service';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
-export class ProxyCacheJobService {
+export class ProxyCacheJobService implements OnModuleDestroy {
   private readonly logger = new Logger(ProxyCacheJobService.name);
+  private jobProcessorInterval: NodeJS.Timeout | null = null;
+  private schedulerInterval: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly proxyCacheService: ProxyCacheService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
+
+  onModuleDestroy() {
+    if (this.jobProcessorInterval) {
+      clearInterval(this.jobProcessorInterval);
+      this.jobProcessorInterval = null;
+    }
+    if (this.schedulerInterval) {
+      clearInterval(this.schedulerInterval);
+      this.schedulerInterval = null;
+    }
+  }
 
   async startJobProcessor() {
     let waited = 0;
@@ -43,7 +56,7 @@ export class ProxyCacheJobService {
 
     this.logger.log('Starting proxy cache cleanup job processor');
 
-    setInterval(async () => {
+    this.jobProcessorInterval = setInterval(async () => {
       try {
         const queryRunner = AppDataSource.createQueryRunner();
         await queryRunner.connect();
@@ -102,7 +115,7 @@ export class ProxyCacheJobService {
                 byRepository: result.byRepo,
               },
             })
-            .catch(() => {});
+            .catch(() => { });
 
           this.logger.log(
             `Completed proxy cache cleanup job ${job.id}: ${result.total} files deleted`,
@@ -213,7 +226,7 @@ export class ProxyCacheJobService {
       `Starting proxy cache cleanup job scheduler (interval ${interval / 1000}s)`,
     );
 
-    setInterval(async () => {
+    this.schedulerInterval = setInterval(async () => {
       try {
         if (!AppDataSource.isInitialized) return;
         await tryBecomeLeaderAndCreateJob();

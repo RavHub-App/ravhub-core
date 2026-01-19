@@ -15,6 +15,7 @@
 import {
   Injectable,
   OnModuleInit,
+  OnModuleDestroy,
   Logger,
   ForbiddenException,
 } from '@nestjs/common';
@@ -32,8 +33,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
-export class ReposService implements OnModuleInit {
+export class ReposService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ReposService.name);
+  private scanTimeout: NodeJS.Timeout | null = null;
 
   constructor(
     @InjectRepository(RepositoryEntity)
@@ -46,7 +48,14 @@ export class ReposService implements OnModuleInit {
     private readonly auditService: AuditService,
     private readonly repositoryPermissionService: RepositoryPermissionService,
     private readonly licenseService: LicenseService,
-  ) {}
+  ) { }
+
+  onModuleDestroy() {
+    if (this.scanTimeout) {
+      clearTimeout(this.scanTimeout);
+      this.scanTimeout = null;
+    }
+  }
 
   private repoCache: Map<string, { ent: RepositoryEntity; expires: number }> =
     new Map();
@@ -98,7 +107,7 @@ export class ReposService implements OnModuleInit {
       this.logger.error(`Error restarting Docker registries: ${err.message}`);
     }
 
-    setTimeout(() => {
+    this.scanTimeout = setTimeout(() => {
       this.scanArtifacts()
         .then((res) => {
           this.logger.log(
@@ -274,7 +283,7 @@ export class ReposService implements OnModuleInit {
         entityId: saved.id,
         details: { name: saved.name, type: saved.type, manager: saved.manager },
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return saved;
   }
@@ -363,7 +372,7 @@ export class ReposService implements OnModuleInit {
         entityId: ent.id,
         details: { name: ent.name, artifactsDeleted },
       })
-      .catch(() => {});
+      .catch(() => { });
   }
 
   async listPackages(repoId: string) {
@@ -547,7 +556,7 @@ export class ReposService implements OnModuleInit {
         entityId: art.id,
         details: { repositoryId: repoId, packageName, version },
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return { ok: true };
   }

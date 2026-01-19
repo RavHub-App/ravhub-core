@@ -17,5 +17,18 @@ export default defineConfig({
             '**/dist/**',
             '**/node_modules/**',
         ],
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'json', 'html'],
+            exclude: [
+                '**/node_modules/**',
+                '**/dist/**',
+                '**/e2e/**',
+                '**/*.config.*',
+                '**/*.d.ts',
+                '**/test-utils.tsx',
+                '**/setupTests.ts',
+            ]
+        },
     },
 })

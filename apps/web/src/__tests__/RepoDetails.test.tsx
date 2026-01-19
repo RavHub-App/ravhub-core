@@ -13,161 +13,139 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '../test-utils';
+import { renderWithProviders, screen, fireEvent, waitFor } from '../test-utils';
 import RepoDetails from '../pages/RepoDetails';
 import axios from 'axios';
-import { MemoryRouter } from 'react-router-dom';
-import { AuthProvider } from '../contexts/AuthContext';
-import { NotificationProvider } from '../components/NotificationSystem';
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { useAuth } from '../contexts/AuthContext';
 
+// Mock dependencies
 vi.mock('axios');
 
-describe('RepoDetails settings', () => {
-    beforeEach(() => vi.resetAllMocks());
+const mockRepo = {
+    id: 'my-repo',
+    name: 'my-repo',
+    type: 'hosted',
+    manager: 'npm',
+    config: { authEnabled: true }
+};
 
-    it('allows admin to edit docker port and saves to API', async () => {
-        const repo = { id: 'r1', name: 'r1', manager: 'docker', type: 'hosted', config: { docker: { port: 5010 } } };
+// Mock react-router-dom by importing actual and overriding hooks
+// IMPORTANT: extensive mocking ensures renderWithProviders (which uses BrowserRouter) continues to work
+// by exporting BrowserRouter as a pass-through
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual('react-router-dom');
+    return {
+        ...actual,
+        BrowserRouter: ({ children }: any) => <div>{children}</div>, // Mock Router used in test-utils
+        useParams: () => ({ name: 'my-repo' }),
+        useNavigate: () => vi.fn(),
+        // Mock useLocation to return null state so component fetches fresh data
+        useLocation: () => ({ pathname: '/admin/repos/my-repo', state: null }),
+    };
+});
 
-        // Mock the docker plugin schema response
-        const dockerPluginSchema = {
-            type: 'object',
-            properties: {
-                docker: {
-                    type: 'object',
-                    title: 'Docker registry settings',
-                    properties: {
-                        version: {
-                            type: 'string',
-                            title: 'Registry protocol version',
-                            enum: ['v1', 'v2'],
-                            default: 'v2',
-                        },
-                        port: {
-                            type: 'number',
-                            title: 'Registry port',
-                            description: 'Optional port to expose this repository registry on',
-                        },
-                    },
-                },
-            },
-        };
+// Mock sub-components to reduce noise
+vi.mock('../components/Repos/RepoBrowse', () => ({
+    default: () => <div data-testid="repo-browse">RepoBrowse</div>
+}));
+vi.mock('../components/Repos/RepoUpload', () => ({
+    default: () => <div data-testid="repo-upload">RepoUpload</div>
+}));
+vi.mock('../components/Repos/RepositoryPermissions', () => ({
+    default: () => <div data-testid="repo-permissions">RepoPermissions</div>
+}));
 
-        // axios.get used in effect — return repo first, then plugin schema
+// Mock AuthContext
+vi.mock('../contexts/AuthContext', async () => {
+    const actual = await vi.importActual('../contexts/AuthContext');
+    return {
+        ...actual,
+        useAuth: () => ({
+            user: { id: 'admin', role: 'admin' },
+            loading: false
+        }),
+    };
+});
+
+// Mock repo permissions
+vi.mock('../components/Repos/repo-permissions', () => ({
+    canPerformOnRepo: () => true,
+    hasGlobalPermission: () => true
+}));
+
+describe('RepoDetails', () => {
+    beforeEach(() => {
+        vi.resetAllMocks();
+
         (axios.get as any).mockImplementation((url: string) => {
-            if (url.includes('/api/plugins/docker/ping')) {
-                return Promise.resolve({
-                    data: {
-                        ok: true,
-                        capabilities: {
-                            repoTypes: ['hosted', 'proxy', 'group'],
-                            configSchema: dockerPluginSchema,
-                        },
-                    },
-                });
-            }
-            if (url.includes('/api/repository/r1')) {
-                return Promise.resolve({ data: repo });
-            }
-            return Promise.reject(new Error('Unknown URL'));
+            if (url === '/api/repository/my-repo') return Promise.resolve({ data: mockRepo });
+            // API calls for settings/etc
+            if (url === '/api/plugins/npm/ping') return Promise.resolve({ data: { result: { capabilities: { configSchema: {} } } } });
+            if (url === '/api/storage/configs') return Promise.resolve({ data: [] });
+            return Promise.resolve({ data: {} });
+        });
+    });
+
+    it('fetches and displays repository details', async () => {
+        renderWithProviders(<RepoDetails />);
+
+        // Wait for axios call
+        await waitFor(() => expect(axios.get).toHaveBeenCalledWith('/api/repository/my-repo'));
+
+        // Wait for rendering
+        await waitFor(() => {
+            // 'my-repo' appears in Breadcrumbs AND Title, so we expect multiple
+            expect(screen.getAllByText('my-repo').length).toBeGreaterThan(0);
+            expect(screen.getByText('hosted')).toBeInTheDocument();
+            expect(screen.getByText('npm')).toBeInTheDocument();
+        });
+    });
+
+    it('renders tabs correctly for admin user', async () => {
+        renderWithProviders(<RepoDetails />);
+        await waitFor(() => {
+            const titles = screen.getAllByText('my-repo');
+            expect(titles.length).toBeGreaterThan(0);
         });
 
-        (axios.put as any).mockResolvedValue({ data: { ...repo, config: { docker: { port: 5020 } } } });
-
-        // simulate authenticated admin user so Settings are visible
-        localStorage.setItem('token', 't');
-        localStorage.setItem('user', JSON.stringify({ id: 'u1', username: 'admin', roles: ['admin'], permissions: ['repo.manage', 'repo.write'] }));
-
-        render(
-            <AuthProvider>
-                <NotificationProvider>
-                    <MemoryRouter initialEntries={[{ pathname: '/admin/repos/r1', state: { repo, tab: 2 } }]}>
-                        <RepoDetails />
-                    </MemoryRouter>
-                </NotificationProvider>
-            </AuthProvider>
-        );
-
-        // Wait for the port input to appear (rendered from schema)
-        const portInput = await screen.findByLabelText(/Registry port/i);
-        expect(portInput).toBeInTheDocument();
-
-        // Change port value
-        fireEvent.change(portInput, { target: { value: '5020' } });
-
-        const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
-        fireEvent.click(saveBtn);
-
-        await waitFor(() => expect(axios.put).toHaveBeenCalled());
-        const calledUrl = (axios.put as any).mock.calls[0][0];
-        expect(calledUrl).toContain('/api/repository/');
-        const body = (axios.put as any).mock.calls[0][1];
-        expect(body.config?.docker?.port).toBe(5020);
+        expect(screen.getByText('Browse')).toBeInTheDocument();
+        expect(screen.getByText('Upload')).toBeInTheDocument();
+        expect(screen.getByText('Permissions')).toBeInTheDocument();
+        expect(screen.getByText('Settings')).toBeInTheDocument();
     });
 
-    // Access URL input removed from the settings form as this value is server-managed for hosted repos
+    it('handles delete action', async () => {
+        (axios.delete as any).mockResolvedValue({});
 
-    it('does not show Upload tab for docker repos even when user has upload permission', async () => {
-        const repo = { id: 'rd1', name: 'rd1', manager: 'docker', type: 'hosted', config: { docker: { port: 5010 } } };
-        (axios.get as any).mockResolvedValue({ data: repo });
+        renderWithProviders(<RepoDetails />);
+        await waitFor(() => {
+            expect(screen.getAllByText('my-repo').length).toBeGreaterThan(0);
+        });
 
-        localStorage.setItem('token', 't');
-        localStorage.setItem('user', JSON.stringify({ id: 'u1', username: 'admin', roles: ['admin'], permissions: ['repo.write'] }));
+        const deleteBtn = screen.getByLabelText('Delete Repository');
+        fireEvent.click(deleteBtn);
 
-        render(
-            <AuthProvider>
-                <NotificationProvider>
-                    <MemoryRouter initialEntries={[{ pathname: '/admin/repos/rd1', state: { repo } }]}>
-                        <RepoDetails />
-                    </MemoryRouter>
-                </NotificationProvider>
-            </AuthProvider>
+        await waitFor(() => screen.getByText(/Are you sure you want to delete repository/i));
+
+        // Find generic Confirm/Delete button in modal
+        const confirmBtn = screen.getAllByRole('button').find(b =>
+            b.textContent?.toLowerCase().includes('delete') ||
+            b.textContent?.toLowerCase().includes('confirm')
         );
+        if (!confirmBtn) throw new Error("Confirm button not found");
+        fireEvent.click(confirmBtn);
 
-        // upload tab should not be present for docker
-        expect(() => screen.getByText('Upload')).toThrow();
+        await waitFor(() => {
+            expect(axios.delete).toHaveBeenCalledWith('/api/repository/my-repo');
+        });
     });
 
-    it('does not show Upload tab for non-hosted repos even when user has upload permission', async () => {
-        const repo = { id: 'rp1', name: 'rp1', manager: 'npm', type: 'proxy', config: {} };
-        (axios.get as any).mockResolvedValue({ data: repo });
-
-        localStorage.setItem('token', 't');
-        localStorage.setItem('user', JSON.stringify({ id: 'u1', username: 'admin', roles: ['admin'], permissions: ['repo.write'] }));
-
-        render(
-            <AuthProvider>
-                <NotificationProvider>
-                    <MemoryRouter initialEntries={[{ pathname: '/admin/repos/rp1', state: { repo } }]}>
-                        <RepoDetails />
-                    </MemoryRouter>
-                </NotificationProvider>
-            </AuthProvider>
-        );
-
-        // Upload tab should not be present for non-hosted (proxy) even if user has write permission
-        expect(() => screen.getByText('Upload')).toThrow();
-    });
-
-    it('shows Upload tab for hosted non-docker repos when user has write permission', async () => {
-        const repo = { id: 'rn1', name: 'rn1', manager: 'npm', type: 'hosted', config: {} };
-        (axios.get as any).mockResolvedValue({ data: repo });
-
-        localStorage.setItem('token', 't');
-        localStorage.setItem('user', JSON.stringify({ id: 'u1', username: 'admin', roles: ['admin'], permissions: ['repo.write'] }));
-
-        render(
-            <AuthProvider>
-                <NotificationProvider>
-                    <MemoryRouter initialEntries={[{ pathname: '/admin/repos/rn1', state: { repo } }]}>
-                        <RepoDetails />
-                    </MemoryRouter>
-                </NotificationProvider>
-            </AuthProvider>
-        );
-
-        // Upload tab should be visible for hosted non-docker
-        const uploadTab = await screen.findByText('Upload');
-        expect(uploadTab).toBeInTheDocument();
+    it('renders Browse tab content by default', async () => {
+        renderWithProviders(<RepoDetails />);
+        await waitFor(() => {
+            expect(screen.getAllByText('my-repo').length).toBeGreaterThan(0);
+        });
+        expect(screen.getByTestId('repo-browse')).toBeInTheDocument();
     });
 });

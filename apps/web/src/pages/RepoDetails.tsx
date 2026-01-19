@@ -40,6 +40,12 @@ export default function RepoDetails() {
     const location = useLocation();
     const [repo, setRepo] = useState<any>(location.state?.repo ?? null)
     const [loading, setLoading] = useState<boolean>(() => (location.state?.repo ? false : true))
+
+    // DEBUG LOG
+    useEffect(() => {
+        console.log('[RepoDetails] Render state:', { name, hasRepo: !!repo, loading, locState: location.state });
+    }, [name, repo, loading, location.state]);
+
     const [tab, setTab] = useState<number>(() => (location.state?.tab ? Number(location.state.tab) : 0))
     const [iconError, setIconError] = useState(false);
     const [liveStatus, setLiveStatus] = useState<any | null>(null);
@@ -247,6 +253,7 @@ export default function RepoDetails() {
                                 size="sm"
                                 onClick={handleDelete}
                                 sx={{ ml: 'auto' }}
+                                aria-label="Delete Repository"
                             >
                                 <DeleteIcon />
                             </IconButton>
@@ -322,6 +329,14 @@ export default function RepoDetails() {
                     </TabPanel>
                 ) : null}
             </Tabs>
+            <ConfirmationModal
+                open={confirmAction.open}
+                onClose={() => setConfirmAction((prev) => ({ ...prev, open: false }))}
+                onConfirm={confirmAction.onConfirm}
+                title={confirmAction.title}
+                message={confirmAction.message}
+                color={confirmAction.color}
+            />
         </Box>
     )
 }
@@ -989,14 +1004,7 @@ function RepoSettings({ repo, setRepo, confirmAction, setConfirmAction }: {
                 <Button variant="solid" onClick={handleSave} loading={saving}>Save Changes</Button>
             </Box>
 
-            <ConfirmationModal
-                open={confirmAction.open}
-                onClose={() => setConfirmAction(prev => ({ ...prev, open: false }))}
-                onConfirm={confirmAction.onConfirm}
-                title={confirmAction.title}
-                message={confirmAction.message}
-                color={confirmAction.color}
-            />
+
         </Box>
     );
 }

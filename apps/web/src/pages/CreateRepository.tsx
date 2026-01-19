@@ -456,7 +456,7 @@ export default function CreateRepository() {
         if (schema.type === 'string') {
             const inputType = schema.format === 'password' ? 'password' : 'text';
             return (
-                <FormControl key={path.join('.')}>
+                <FormControl key={path.join('.')} data-testid={`field-${path.join('-')}`}>
                     <FormLabel>{schema.title ?? path[path.length - 1]}</FormLabel>
                     <Input
                         type={inputType}
@@ -728,6 +728,10 @@ export default function CreateRepository() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!name.trim()) {
+            // HTML5 validation usually catches this, but for robustness (and tests)
+            return;
+        }
         setLoading(true);
         try {
             let payloadConfig = configValues || {};

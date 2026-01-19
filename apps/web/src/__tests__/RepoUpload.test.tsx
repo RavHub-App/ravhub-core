@@ -15,6 +15,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '../test-utils';
 import RepoUpload from '../components/Repos/RepoUpload';
+import { NotificationProvider } from '../components/NotificationSystem';
 import axios from 'axios';
 import { vi } from 'vitest';
 
@@ -28,7 +29,11 @@ describe('RepoUpload component', () => {
 
         (axios.post as any).mockResolvedValue({ status: 200, data: { ok: true } });
 
-        const { container } = render(<RepoUpload repoId={repoId} />);
+        const { container } = render(
+            <NotificationProvider>
+                <RepoUpload repoId={repoId} />
+            </NotificationProvider>
+        );
 
         // find file input (hidden) and simulate selecting a file
         const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -56,7 +61,11 @@ describe('RepoUpload component', () => {
 
         (axios.post as any).mockRejectedValue(new Error('upload failed'));
 
-        const { container } = render(<RepoUpload repoId={repoId} />);
+        const { container } = render(
+            <NotificationProvider>
+                <RepoUpload repoId={repoId} />
+            </NotificationProvider>
+        );
 
         const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
         const testFile = new File(['x'], 'x.bin', { type: 'application/octet-stream' });

@@ -37,7 +37,7 @@ import { RedisModule } from './modules/redis/redis.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
-      type: 'postgres',
+      type: (process.env.DB_TYPE as any) || 'postgres',
       host: process.env.POSTGRES_HOST || 'localhost',
       port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
       username: process.env.POSTGRES_USER || 'postgres',
@@ -71,4 +71,4 @@ import { RedisModule } from './modules/redis/redis.module';
   controllers: [AppController, HealthController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
-export class AppModule {}
+export class AppModule { }
