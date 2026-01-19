@@ -17,11 +17,18 @@ import { UsersService } from '../users/users.service';
 import jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { User } from '../../entities/user.entity';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private users: UsersService) {}
+  constructor(
+    private users: UsersService,
+    @InjectRepository(User) private readonly userRepo: Repository<User>,
+  ) { }
 
   private authCache: Map<string, { result: any; expires: number }> = new Map();
 
@@ -78,7 +85,11 @@ export class AuthService {
   }
 
   async validateRefreshToken(userId: string, refreshToken: string) {
-    const user = await this.users.findOne(userId);
+    const user = await this.userRepo.createQueryBuilder('user')
+      .where('user.id = :id', { id: userId })
+      .addSelect('user.refreshTokenHash')
+      .getOne();
+
     if (!user || !user.refreshTokenHash) return null;
 
     const isMatch = await bcrypt.compare(refreshToken, user.refreshTokenHash);

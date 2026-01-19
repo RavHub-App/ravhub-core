@@ -29,13 +29,19 @@ import { UsersService } from './users.service';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import * as bcrypt from 'bcryptjs';
-import AppDataSource from '../../data-source';
+
 import { Role } from '../../entities/role.entity';
+
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 @Controller('users')
 @UseGuards(PermissionsGuard)
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    @InjectRepository(Role) private readonly roleRepo: Repository<Role>,
+  ) { }
 
   @Get()
   @Permissions('user.read')
@@ -75,10 +81,9 @@ export class UsersController {
 
     // handle roles if provided
     if (body.roles && Array.isArray(body.roles)) {
-      const roleRepo = AppDataSource.getRepository(Role);
       const roles: Role[] = [];
       for (const rName of body.roles) {
-        const r = await roleRepo.findOne({ where: { name: rName } });
+        const r = await this.roleRepo.findOne({ where: { name: rName } });
         if (r) roles.push(r);
       }
       userData.roles = roles;
@@ -103,10 +108,9 @@ export class UsersController {
 
     // handle roles update
     if (body.roles && Array.isArray(body.roles)) {
-      const roleRepo = AppDataSource.getRepository(Role);
       const roles: Role[] = [];
       for (const rName of body.roles) {
-        const r = await roleRepo.findOne({ where: { name: rName } });
+        const r = await this.roleRepo.findOne({ where: { name: rName } });
         if (r) roles.push(r);
       }
       updateData.roles = roles;

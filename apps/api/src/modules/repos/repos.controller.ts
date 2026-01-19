@@ -51,7 +51,7 @@ export class ReposController {
     private readonly permissionService: PermissionService,
     private users: UsersService,
     private auth: AuthService,
-  ) {}
+  ) { }
 
   @Get()
   @UseGuards(UnifiedPermissionGuard)
@@ -112,7 +112,7 @@ export class ReposController {
       if ((saved.manager || '').toLowerCase() === 'docker') {
         const out = await this.repos.manageDockerRegistry(saved, 'start');
       }
-    } catch (err) {}
+    } catch (err) { }
 
     return saved;
   }
@@ -759,7 +759,7 @@ export class ReposController {
     if (!r) return res.status(404).send('Not found');
 
     if (r.type === 'proxy') {
-      const result = await this.pluginManager.proxyFetch(r, path);
+      const result: any = await this.pluginManager.proxyFetch(r, path);
       if (result.headers) {
         for (const [k, v] of Object.entries(result.headers)) {
           if (

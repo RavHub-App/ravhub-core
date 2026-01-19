@@ -25,7 +25,7 @@ export class UsersService {
     @InjectRepository(User) private repo: Repository<User>,
     private readonly auditService: AuditService,
     private readonly licenseService: LicenseService,
-  ) {}
+  ) { }
 
   async findAll() {
     return await this.repo.find({ relations: ['roles', 'roles.permissions'] });
@@ -56,14 +56,23 @@ export class UsersService {
         entityId: saved.id,
         details: { username: saved.username },
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return this.findOne(saved.id) as Promise<User>;
   }
 
   async update(id: string, data: Partial<User>) {
-    await this.repo.update(id, data);
-    return this.findOne(id);
+    // repo.update doesn't handle relations, use save instead
+    const user = await this.repo.preload({
+      id,
+      ...data,
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return await this.repo.save(user);
   }
 
   async delete(id: string): Promise<void> {
@@ -78,7 +87,7 @@ export class UsersService {
           entityId: id,
           details: { username: user.username },
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }
 }

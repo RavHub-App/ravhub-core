@@ -41,7 +41,7 @@ const password = process.env.POSTGRES_PASSWORD || 'postgres';
 const database = process.env.POSTGRES_DB || 'ravhub';
 
 export const AppDataSource = new DataSource({
-  type: 'postgres',
+  type: (process.env.DB_TYPE as any) || 'postgres',
   host,
   port,
   username,
