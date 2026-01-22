@@ -1,8 +1,16 @@
-/**
- * Download operations module for Docker plugin
- * Handles download and getBlob operations
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  */
-
 import { buildKey } from '../utils/key-utils';
 import { normalizeImageName } from '../utils/helpers';
 import type { Repository } from '../utils/types';
@@ -10,121 +18,58 @@ import type { Repository } from '../utils/types';
 // Plugin context references (will be set by init)
 let storage: any = null;
 let proxyFetch: any = null;
+let getRepo: ((id: string) => Promise<Repository | null>) | null = null;
+const pendingDownloads = new Map<string, Promise<any>>();
 
 /**
  * Initialize the download module with plugin context
  */
-export function initDownload(context: { storage: any; proxyFetch?: any }) {
+export function initDownload(context: { storage: any; proxyFetch?: any; getRepo?: any }) {
   storage = context.storage;
   proxyFetch = context.proxyFetch;
+  getRepo = context.getRepo;
 }
 
 /**
- * Download a manifest by name and tag
- * For proxy repos, revalidates from upstream before returning cached version
+ * Download a manifest or blob.
+ * Delegates to getBlob which handles both manifests (via tag) and blobs (via digest).
  */
 export async function download(repo: Repository, name: string, tag?: string) {
-  const isProxy = (repo?.type || '').toString().toLowerCase() === 'proxy';
-  // For proxy repos and tag-based manifest requests, try revalidating from
-  // upstream on every request, then fall back to cached storage.
-  try {
-    if (isProxy && tag) {
-      try {
-        const targetEarly =
-          repo?.config?.proxyUrl ||
-          repo?.config?.docker?.proxyUrl ||
-          repo?.config?.upstream ||
-          repo?.config?.docker?.upstream ||
-          repo?.config?.target ||
-          repo?.config?.registry ||
-          null;
-        if (targetEarly) {
-          const nameStr = Array.isArray(name) ? name.join('/') : name;
-          const normalizedName = normalizeImageName(nameStr, targetEarly, repo);
-          const encodedName = normalizedName
-            .split('/')
-            .map((s: string) => encodeURIComponent(s))
-            .join('/');
-          const upstreamUrl = `${String(targetEarly).replace(/\/$/, '')}/v2/${encodedName}/manifests/${encodeURIComponent(
-            tag,
-          )}`;
-          if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
-            console.debug('[PROXY REVALIDATE TAG]', {
-              upstreamUrl,
-              originalName: nameStr,
-              normalizedName,
-            });
-          }
-          const fetched = await proxyFetch?.(repo as any, upstreamUrl);
-          if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
-            console.debug('[PROXY REVALIDATE TAG RESULT]', {
-              ok: fetched?.ok,
-              status: fetched?.status,
-              url: fetched?.url,
-              storageKey: fetched?.storageKey,
-              hasBody: !!fetched?.body,
-            });
-          }
-          if (fetched?.ok && (fetched.url || fetched.body)) {
-            return {
-              ok: true,
-              url: fetched.url,
-              storageKey: fetched.storageKey,
-              data: fetched.body,
-            };
-          }
-          // If proxy fetch failed with a definitive error (not network issue), return the error
-          if (fetched && !fetched.ok && fetched.status) {
-            console.warn('[PROXY REVALIDATE TAG FAILED - download]', {
-              status: fetched.status,
-              message: fetched.message,
-            });
-            // Only try cache fallback for temporary errors (5xx), not for 4xx errors
-            if (fetched.status >= 500) {
-              if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-                console.debug(
-                  '[PROXY REVALIDATE TAG - download] Server error, trying cache fallback',
-                );
-            } else {
-              // 4xx errors mean the resource doesn't exist or auth failed - don't try cache
-              return {
-                ok: false,
-                message: fetched.message || 'upstream fetch failed',
-                status: fetched.status,
-              };
-            }
-          }
-        }
-      } catch (e: any) {
-        console.warn('[PROXY REVALIDATE TAG ERROR - download]', e.message);
-      }
-    }
-
-    // Fallback to cached storage (for hosted repos or when proxy upstream has temporary issues)
-    const key = buildKey('docker', repo.id, name, 'manifests', tag || 'latest');
-    // Verify the file actually exists before returning ok
-    const exists = await storage.exists(key);
-    if (!exists) {
-      if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-        console.debug('[DOWNLOAD] Not found in cache:', key);
-      return { ok: false, message: 'not found' };
-    }
-    const url = await storage.getUrl(key);
-    return { ok: true, url };
-  } catch (err) {
-    return { ok: false };
+  if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+    console.debug('[DOWNLOAD->GETBLOB] Delegating', { name, tag });
   }
+  return getBlob(repo, name, tag || 'latest');
 }
 
 /**
- * Get a blob or manifest by digest
+ * Get a blob or manifest by digest/tag
  * Searches multiple possible storage locations and falls back to upstream for proxy repos
  */
 export async function getBlob(repo: Repository, name: string, digest: string) {
   if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
     console.debug(
-      `[GETBLOB] repo=${repo.name}, type=${repo.type}, name=${name}, digest=${digest}`,
+      `[GETBLOB] repo=${repo.name}, type=${repo.type}, name=${name}, digest=${digest}, config=${JSON.stringify(repo.config)}`,
     );
+
+  // Group support: delegate to members
+  if (repo.type === 'group') {
+    const members = repo.config?.members || [];
+    if (getRepo) {
+      for (const memberId of members) {
+        try {
+          const memberRepo = await getRepo(memberId);
+          if (memberRepo) {
+            const res = await getBlob(memberRepo, name, digest);
+            if (res.ok) return res;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    return { ok: false, message: 'not found in group' };
+  }
+
   // For proxy repos: if requesting a manifest by tag (not a sha* digest),
   // attempt to revalidate from upstream first. If upstream fails, fall back
   // to cached storage below.
@@ -133,6 +78,7 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
     !digest.startsWith('sha256:') &&
     !digest.startsWith('sha384:') &&
     !digest.startsWith('sha512:');
+
   if (isProxyEarly && isTagRef) {
     try {
       const targetEarly =
@@ -143,6 +89,9 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
         repo?.config?.target ||
         repo?.config?.registry ||
         null;
+
+      console.debug('[GETBLOB DEBUG] Revalidate Start', { targetEarly });
+
       if (targetEarly) {
         const nameStr = Array.isArray(name) ? name.join('/') : name;
         // Normalize according to repo config // upstream
@@ -158,7 +107,15 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
             originalName: nameStr,
             normalizedName,
           });
-        const fetchedEarly = await proxyFetch?.(repo as any, upstreamUrl);
+
+        // Use skipCache: true to force revalidation check
+        const fetchedEarly = await proxyFetch?.(repo as any, upstreamUrl, { skipCache: true });
+        if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+          console.debug('[PROXY REVALIDATE TAG RESULT (GETBLOB)]', {
+            ok: fetchedEarly?.ok,
+            status: fetchedEarly?.status
+          });
+        }
         if (
           fetchedEarly?.ok &&
           (fetchedEarly.url || fetchedEarly.storageKey || fetchedEarly.body)
@@ -215,6 +172,10 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
       repo?.config?.target ||
       repo?.config?.registry ||
       null;
+
+    if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+      console.debug('[GETBLOB DEBUG] Proxy Fallback', { target });
+    }
     if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
       console.debug('[GETBLOB PROXY TARGET]', {
         target,
@@ -248,49 +209,67 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
         // fall back to blobs for real layer/config blobs.
         const upstreamManifest = `${targetBase}${v2Prefix}/${encodedName}/manifests/${digestRef}`;
         const upstreamBlob = `${targetBase}${v2Prefix}/${encodedName}/blobs/${digestRef}`;
-        if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-          console.debug('[PROXY FETCH BLOB]', {
-            upstreamManifest,
-            upstreamBlob,
-            digest,
-            nameStr,
-            normalizedName,
-            target,
-          });
-        let fetched = await proxyFetch?.(repo as any, upstreamManifest);
-        if (
-          !fetched?.ok &&
-          (fetched?.status === 404 || fetched?.status === 400)
-        ) {
-          if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-            console.debug(
-              '[PROXY FETCH BLOB] Manifest/Ref failed (status ' +
-                fetched.status +
-                '), trying blob endpoint',
-            );
-          fetched = await proxyFetch?.(repo as any, upstreamBlob);
+
+        // Coalescing for Blob/Manifest by Digest
+        const blobCoalesceKey = `docker:${repo.id}:blob:${digest}`;
+        if (pendingDownloads.has(blobCoalesceKey)) {
+          return await pendingDownloads.get(blobCoalesceKey);
         }
-        if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-          console.debug('[PROXY FETCH BLOB RESULT]', {
-            ok: fetched?.ok,
-            status: fetched?.status,
-            hasUrl: !!fetched?.url,
-            hasBody: !!fetched?.body,
-          });
-        if (
-          fetched?.ok &&
-          (fetched.url || fetched.storageKey || fetched.body)
-        ) {
-          return {
-            ok: true,
-            url: fetched.url,
-            storageKey: fetched.storageKey,
-            data: fetched.body,
-          };
-        }
+
+        const fetchBlobTask = (async () => {
+          try {
+            if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
+              console.debug('[PROXY FETCH BLOB]', {
+                upstreamManifest,
+                upstreamBlob,
+                digest,
+                nameStr,
+                normalizedName,
+                target,
+              });
+            let fetched = await proxyFetch?.(repo as any, upstreamManifest);
+            if (
+              !fetched?.ok &&
+              (fetched?.status === 404 || fetched?.status === 400)
+            ) {
+              if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
+                console.debug(
+                  '[PROXY FETCH BLOB] Manifest/Ref failed (status ' +
+                  fetched.status +
+                  '), trying blob endpoint',
+                );
+              fetched = await proxyFetch?.(repo as any, upstreamBlob);
+            }
+            if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
+              console.debug('[PROXY FETCH BLOB RESULT]', {
+                ok: fetched?.ok,
+                status: fetched?.status,
+                hasUrl: !!fetched?.url,
+                hasBody: !!fetched?.body,
+              });
+            if (
+              fetched?.ok &&
+              (fetched.url || fetched.storageKey || fetched.body)
+            ) {
+              return {
+                ok: true,
+                url: fetched.url,
+                storageKey: fetched.storageKey,
+                data: fetched.body,
+              };
+            }
+          } finally {
+            pendingDownloads.delete(blobCoalesceKey);
+          }
+        })();
+
+        pendingDownloads.set(blobCoalesceKey, fetchBlobTask);
+        return await fetchBlobTask;
+
       } catch (err: any) {
         console.warn('[PROXY FETCH BLOB ERROR]', err.message);
         // continue to return not found below
+        pendingDownloads.delete(`docker:${repo.id}:blob:${digest}`);
       }
     }
   }

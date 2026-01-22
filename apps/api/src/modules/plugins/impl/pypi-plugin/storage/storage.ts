@@ -15,6 +15,7 @@
 import { buildKey } from '../utils/key-utils';
 import { PluginContext, Repository } from '../utils/types';
 import { proxyFetchWithAuth } from '../../../../../plugins-core/proxy-helper';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 export function initStorage(context: PluginContext) {
   const { storage } = context;
@@ -91,8 +92,8 @@ export function initStorage(context: PluginContext) {
     // Check for redeployment policy
     const allowRedeploy = repo.config?.allowRedeploy !== false;
     if (!allowRedeploy) {
-      const existingId = await storage.get(keyId);
-      const existingName = await storage.get(keyName);
+      const existingId = await storage.get(keyId).catch(() => null);
+      const existingName = await storage.get(keyName).catch(() => null);
       if (existingId || existingName) {
         return {
           ok: false,
@@ -130,6 +131,57 @@ export function initStorage(context: PluginContext) {
   };
 
   const handlePut = async (repo: Repository, path: string, req: any) => {
+    // Group Write Policy Logic
+    if (repo.type === 'group') {
+      const writePolicy = repo.config?.writePolicy || 'none';
+      const members = repo.config?.members || [];
+
+      if (writePolicy === 'none') {
+        return { ok: false, message: 'Group is read-only' };
+      }
+
+      const getHostedMembers = async () => {
+        const hosted: Repository[] = [];
+        if (!context.getRepo) return hosted;
+        for (const id of members) {
+          const m = await context.getRepo(id);
+          if (m && m.type === 'hosted') hosted.push(m);
+        }
+        return hosted;
+      };
+
+      if (writePolicy === 'first') {
+        const hosted = await getHostedMembers();
+        for (const member of hosted) {
+          const result = await handlePut(member, path, req);
+          if (result.ok) return result;
+        }
+        return { ok: false, message: 'No writable member found' };
+      }
+
+      if (writePolicy === 'preferred' || writePolicy === 'broadcast') {
+        const preferredId = repo.config?.preferredWriter;
+        if (!preferredId)
+          return { ok: false, message: 'Preferred writer not configured' };
+        const member = await context.getRepo?.(preferredId);
+        if (!member || member.type !== 'hosted')
+          return { ok: false, message: 'Preferred writer unavailable' };
+        return await handlePut(member, path, req);
+      }
+
+      if (writePolicy === 'mirror') {
+        const hosted = await getHostedMembers();
+        if (hosted.length === 0)
+          return { ok: false, message: 'No hosted members' };
+        const results = await Promise.all(hosted.map((m) => handlePut(m, path, req)));
+        const success = results.find((r) => r.ok);
+        if (success) return success;
+        return { ok: false, message: 'Mirror write failed on all members' };
+      }
+
+      return { ok: false, message: 'Unknown write policy' };
+    }
+
     // PyPI path structure often: /package/version/filename
     const parts = path.split('/').filter((p) => p);
     let name = 'pkg';
@@ -152,7 +204,7 @@ export function initStorage(context: PluginContext) {
     // Check for redeployment policy
     const allowRedeploy = repo.config?.allowRedeploy !== false;
     if (!allowRedeploy) {
-      const exists = await storage.exists(keyId);
+      const exists = await storage.exists(keyId).catch(() => false);
       if (exists) {
         return {
           ok: false,
@@ -220,6 +272,97 @@ export function initStorage(context: PluginContext) {
   };
 
   const download = async (repo: Repository, name: string, version?: string) => {
+    // Implement PEP 503 (Simple Repository API)
+    if (name === 'simple' || name.startsWith('simple/')) {
+      let pkgName = name === 'simple' ? '' : name.replace('simple/', '').replace(/\/$/, '');
+
+      // Root /simple/ - List all packages (optional but good practice)
+      if (!pkgName) {
+        // NOTE: Listing all packages might be expensive in storage-based approach. 
+        // Return empty or basic valid HTML.
+        return {
+          ok: true,
+          contentType: 'text/html',
+          data: Buffer.from(`<!DOCTYPE html><html><body><h1>Simple Index</h1></body></html>`)
+        };
+      }
+
+      // Package Detail /simple/<package>/ - List versions/files
+      let links: string[] = [];
+
+      // Check Hosted files
+      // We look for keys like pypi/<repoId>/<pkgName>/<version>/<filename>
+      // But storage.list usually works on prefix. 
+      // Our structure: pypi/id/pkg/ver/file
+      // We can list pypi/id/pkg
+      const prefix = buildKey('pypi', repo.id, pkgName);
+      try {
+        const keys = await storage.list(prefix);
+        // Expected key: .../pkgName/version/filename
+        // Map to filename and relative URL
+        // URL in simple API: ../../packages/<pkgName>/<version>/<filename> (relative to /simple/pkg/)
+        // Or absolute: /repository/<repo>/<pkgName>/<version>/<filename>
+
+        // Note: ReposController maps :id/* to download.
+        // If we return a link /repository/repo/pkg/ver/file, fetching it calls download('pkg/ver/file').
+
+        const host = process.env.API_HOST || 'localhost:3000';
+        const proto = process.env.API_PROTOCOL || 'http';
+        const baseUrl = `${proto}://${host}/repository/${repo.name}`;
+
+        keys.forEach((k: string) => {
+          const parts = k.split('/');
+          // pypi, id, pkgName, version, filename
+          if (parts.length >= 5) {
+            const ver = parts[3];
+            const file = parts[4];
+            // Construct a download link that goes back to ReposController
+            // Using path: pkgName/version/file
+            // This matches 'download' logic when not starting with 'simple/'
+            const href = `${baseUrl}/${pkgName}/${ver}/${file}`;
+            links.push(`<a href="${href}">${file}</a>`);
+          }
+        });
+
+      } catch (e) { }
+
+      // Proxy Logic
+      if (repo.type === 'proxy') {
+        const upstream = repo.config?.proxyUrl || repo.config?.url;
+        if (upstream) {
+          // Try to fetch upstream simple index
+          // Upstream: https://pypi.org/simple/<pkgName>/
+          const target = `${upstream.replace(/\/$/, '')}/simple/${pkgName}/`;
+          try {
+            const res = await proxyFetchWithAuth(repo, target);
+            if (res.ok && res.body) {
+
+              return {
+                ok: true,
+                contentType: res.headers?.['content-type'] || 'text/html',
+                data: res.body
+              };
+            }
+          } catch (e) { }
+        }
+      }
+
+      const html = `<!DOCTYPE html>
+<html>
+<head><title>Links for ${pkgName}</title></head>
+<body>
+<h1>Links for ${pkgName}</h1>
+${links.join('<br/>\n')}
+</body>
+</html>`;
+      return {
+        ok: true,
+        contentType: 'text/html',
+        data: Buffer.from(html)
+      };
+    }
+
+
     if (!version) {
       // Try to parse from name (path)
       const parts = name.split('/');
@@ -250,20 +393,24 @@ export function initStorage(context: PluginContext) {
     // Check storage
     try {
       // 1. Try exact match (legacy behavior: .../version is the file)
-      let data = await storage.get(storageKeyId);
-      if (!data) data = await storage.get(storageKeyName);
+      let data = await storage.get(storageKeyId).catch(() => null);
+      if (!data) data = await storage.get(storageKeyName).catch(() => null);
 
       // 2. If not found, try listing directory (new behavior: .../version/filename)
       if (!data) {
-        const listId = await storage.list(storageKeyId);
+        const listId = await storage.list(storageKeyId).catch(() => []);
         if (listId && listId.length > 0) {
           // Pick the first file found in the version directory
           // Prefer .whl (binary) over .tar.gz (source), otherwise take first available
-          const preferred =
-            listId.find((f: string) => f.endsWith('.whl')) ||
-            listId.find((f: string) => f.endsWith('.tar.gz')) ||
-            listId[0];
-          data = await storage.get(preferred);
+          // Ensure we don't pick the directory itself if it's in the list
+          const files = listId.filter(f => f !== storageKeyId && f !== storageKeyId + '/');
+          if (files.length > 0) {
+            const preferred =
+              files.find((f: string) => f.endsWith('.whl')) ||
+              files.find((f: string) => f.endsWith('.tar.gz')) ||
+              files[0];
+            data = await storage.get(preferred).catch(() => null);
+          }
         }
       }
 
@@ -284,15 +431,17 @@ export function initStorage(context: PluginContext) {
       }
     } catch (err) {
       // ignore
-    } // Proxy Logic
+    }
+
+    // Proxy Logic
     if (repo.type === 'proxy') {
       const upstreamUrl = repo.config?.proxyUrl || repo.config?.url;
       if (upstreamUrl) {
-        try {
-          // Simple convention for E2E test: upstream/name/version
-          const targetUrl = `${upstreamUrl}/${name}/${version}`;
-          const proxyKey = buildKey('pypi', repo.id, 'proxy', name, version);
+        // Normal file download logic (not simple API)
+        const targetUrl = `${upstreamUrl}/${name}/${version}`;
+        const proxyKey = buildKey('pypi', repo.id, 'proxy', name, version);
 
+        return await runWithLock(context, proxyKey, async () => {
           const cached = await storage.get(proxyKey);
           if (cached) {
             return {
@@ -302,33 +451,35 @@ export function initStorage(context: PluginContext) {
             };
           }
 
-          const res = await proxyFetchWithAuth(repo, targetUrl);
-          if (res.ok && 'body' in res && res.body) {
-            await storage.save(proxyKey, res.body as Buffer);
+          try {
+            const res = await proxyFetchWithAuth(repo, targetUrl);
+            if (res.ok && (res as any).body) {
+              await storage.save(proxyKey, (res as any).body as Buffer);
 
-            // Index artifact
-            if (context.indexArtifact) {
-              try {
-                await context.indexArtifact(repo, {
-                  ok: true,
-                  id: `${name}:${version}`,
-                  metadata: {
-                    name,
-                    version,
-                    storageKey: proxyKey,
-                    size: (res.body as Buffer).length,
-                  },
-                });
-              } catch (e) {
-                // ignore
+              // Index artifact (optional for proxy)
+              if (context.indexArtifact) {
+                try {
+                  await context.indexArtifact(repo, {
+                    ok: true,
+                    id: `${name}:${version}`,
+                    metadata: {
+                      name,
+                      version,
+                      storageKey: proxyKey,
+                      size: ((res as any).body as Buffer).length,
+                    },
+                  });
+                } catch (e) {
+                  // ignore
+                }
               }
+              return { ...res, data: (res as any).body, skipCache: true };
             }
-
-            return { ...res, data: res.body, skipCache: true };
+            return res;
+          } catch (e) {
+            return { ok: false, message: String(e) };
           }
-        } catch (e) {
-          // ignore
-        }
+        });
       }
     }
 

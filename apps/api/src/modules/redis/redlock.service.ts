@@ -21,7 +21,7 @@ export class RedlockService implements OnModuleInit {
   private readonly logger = new Logger(RedlockService.name);
   private redlock: Redlock | null = null;
 
-  constructor(private readonly redisService: RedisService) {}
+  constructor(private readonly redisService: RedisService) { }
 
   onModuleInit() {
     if (!this.redisService.isEnabled()) {
@@ -69,30 +69,17 @@ export class RedlockService implements OnModuleInit {
   ): Promise<T> {
     if (!this.redlock) {
       // In-Memory Mutex Fallback for Single-Replica scenarios without Redis.
-      // Node.js is single-threaded but concurrent via async I/O. We must serialize access
-      // to critical sections to prevent race conditions during await operations.
+      // Uses a Promise chain to strictly serialize access.
 
-      // 1. Wait if locked
-      while (this.memoryLocks.has(resource)) {
-        try {
-          await this.memoryLocks.get(resource);
-        } catch {}
-      }
+      const previous = this.memoryLocks.get(resource) || Promise.resolve();
 
-      // 2. Acquire Lock
-      let release: (() => void) | undefined;
-      const lockPromise = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      this.memoryLocks.set(resource, lockPromise);
-
-      try {
+      const next = previous.catch(() => { }).then(async () => {
         return await fn();
-      } finally {
-        // 3. Release Lock
-        this.memoryLocks.delete(resource);
-        if (release) release();
-      }
+      });
+
+      this.memoryLocks.set(resource, next as Promise<void>); // Cast to maintain map type
+
+      return next;
     }
 
     let lock: Lock | null = null;

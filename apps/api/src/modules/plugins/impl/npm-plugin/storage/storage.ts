@@ -19,6 +19,7 @@ import {
   createInitialMetadata,
   NpmMetadata,
 } from '../utils/metadata';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 async function streamToBuffer(req: any): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -33,6 +34,7 @@ async function streamToBuffer(req: any): Promise<Buffer> {
 
 export function initStorage(context: PluginContext, proxyFetch?: any) {
   const { storage } = context;
+  const pendingDownloads = new Map<string, Promise<any>>();
 
   const saveFile = async (repo: Repository, path: string, data: Buffer) => {
     const key = buildKey('npm', repo.id, path);
@@ -54,11 +56,64 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
 
   const getFile = async (repo: Repository, path: string) => {
     const keyId = buildKey('npm', repo.id, path);
-    const res = await storage.get(keyId);
+    const res = await storage.get(keyId).catch(() => null);
     if (res) return res;
 
     const keyName = buildKey('npm', repo.name, path);
-    return await storage.get(keyName);
+    return await storage.get(keyName).catch(() => null);
+  };
+
+  const updatePackageMetadata = async (
+    repo: Repository,
+    metaPath: string,
+    incoming: NpmMetadata,
+  ): Promise<{ metaResult: any; lastAttachmentResult: any; merged: NpmMetadata }> => {
+    // Unique lock key per repository + file path
+    const lockKey = `npm:${repo.id}:${metaPath}`;
+
+    // Use Mutex to safely update metadata
+    console.log('[DEBUG] About to call runWithLock with key:', lockKey);
+    return await runWithLock(context, lockKey, async () => {
+      // Re-read inside the lock to get the latest version
+      const metadata = await getFile(repo, metaPath);
+      let current: NpmMetadata | undefined;
+      if (metadata) {
+        try {
+          current = JSON.parse(metadata.toString());
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const merged = mergeMetadata(
+        current || createInitialMetadata(incoming.name),
+        incoming,
+      );
+
+      // Handle attachments from metadata (if any)
+      let lastAttachmentResult: any;
+      if (incoming._attachments) {
+        for (const [filename, attachment] of Object.entries(
+          incoming._attachments,
+        )) {
+          const attachmentData = Buffer.from(attachment.data, 'base64');
+          const attachmentPath = `${merged.name}/-/${filename}`;
+          lastAttachmentResult = await saveFile(
+            repo,
+            attachmentPath,
+            attachmentData,
+          );
+        }
+      }
+
+      const metaResult = await saveFile(
+        repo,
+        metaPath,
+        Buffer.from(JSON.stringify(merged, null, 2)),
+      );
+
+      return { metaResult, lastAttachmentResult, merged };
+    });
   };
 
   const handlePut = async (
@@ -132,7 +187,9 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
       };
     }
 
+    let incoming: NpmMetadata | undefined;
     let buffer: Buffer;
+
     // If body is already parsed by NestJS/Express (e.g. application/json)
     if (
       req.body &&
@@ -140,13 +197,24 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     ) {
       if (Buffer.isBuffer(req.body)) {
         buffer = req.body;
+        try {
+          incoming = JSON.parse(buffer.toString('utf8'));
+        } catch (e) {
+          // ignore
+        }
       } else if (typeof req.body === 'object') {
+        incoming = req.body;
         buffer = Buffer.from(JSON.stringify(req.body));
       } else {
         buffer = Buffer.from(String(req.body));
       }
     } else {
       buffer = await streamToBuffer(req);
+      try {
+        incoming = JSON.parse(buffer.toString('utf8'));
+      } catch (e) {
+        // ignore
+      }
     }
 
     // Simple heuristic: if path contains "/-/", it is likely a tarball or attachment
@@ -155,12 +223,8 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
       return { ok: true, message: 'File uploaded' };
     }
 
-    let incoming: NpmMetadata;
-    try {
-      incoming = JSON.parse(buffer.toString());
-    } catch (e) {
-      console.error('[NPM] Invalid JSON metadata', e);
-      return { ok: false, message: 'Invalid JSON' };
+    if (!incoming) {
+      return { ok: false, message: 'Invalid JSON metadata' };
     }
 
     // If path is a package name, store as package.json inside the directory
@@ -170,69 +234,40 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         ? `${path}/package.json`
         : path;
 
-    const metadata = await getFile(repo, metaPath);
-    let current: NpmMetadata | undefined;
-    if (metadata) {
-      try {
-        current = JSON.parse(metadata.toString());
-      } catch (e) {
-        // ignore
+    // Use Mutex to safely update metadata
+    try {
+      const { merged, metaResult, lastAttachmentResult } = await updatePackageMetadata(repo, metaPath, incoming);
+
+      const result = {
+        ok: true,
+        message: 'Package published',
+        metadata: {
+          name: merged.name,
+          version:
+            merged['dist-tags']?.latest ||
+            Object.keys(merged.versions).pop() ||
+            '0.0.0',
+          storageKey: metaPath,
+          size: lastAttachmentResult?.size ?? metaResult.size,
+          contentHash:
+            lastAttachmentResult?.contentHash ?? metaResult.contentHash,
+        },
+      };
+
+      // Index artifact in DB for UI listing
+      if (context.indexArtifact) {
+        try {
+          await context.indexArtifact(repo, result);
+        } catch (e) {
+          console.error('[NPM] Failed to index artifact:', e);
+        }
       }
+
+      return result;
+    } catch (err: any) {
+      console.error('[NPM] Failed to update package metadata:', err);
+      return { ok: false, message: String(err) };
     }
-
-    const merged = mergeMetadata(
-      current || createInitialMetadata(incoming.name),
-      incoming,
-    );
-
-    // Handle attachments from metadata (if any)
-    let lastAttachmentResult: any;
-    if (incoming._attachments) {
-      for (const [filename, attachment] of Object.entries(
-        incoming._attachments,
-      )) {
-        const attachmentData = Buffer.from(attachment.data, 'base64');
-        const attachmentPath = `${merged.name}/-/${filename}`;
-        lastAttachmentResult = await saveFile(
-          repo,
-          attachmentPath,
-          attachmentData,
-        );
-      }
-    }
-
-    const metaResult = await saveFile(
-      repo,
-      metaPath,
-      Buffer.from(JSON.stringify(merged, null, 2)),
-    );
-
-    const result = {
-      ok: true,
-      message: 'Package published',
-      metadata: {
-        name: merged.name,
-        version:
-          merged['dist-tags']?.latest ||
-          Object.keys(merged.versions).pop() ||
-          '0.0.0',
-        storageKey: metaPath,
-        size: lastAttachmentResult?.size ?? metaResult.size,
-        contentHash:
-          lastAttachmentResult?.contentHash ?? metaResult.contentHash,
-      },
-    };
-
-    // Index artifact in DB for UI listing
-    if (context.indexArtifact) {
-      try {
-        await context.indexArtifact(repo, result);
-      } catch (e) {
-        console.error('[NPM] Failed to index artifact:', e);
-      }
-    }
-
-    return result;
   };
 
   const download = async (repo: Repository, path: string): Promise<any> => {
@@ -274,16 +309,48 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     if (repo.type === 'proxy') {
       if (!proxyFetch) return { ok: false, message: 'Proxy not available' };
 
-      const res = await proxyFetch(repo, path);
-      if (res.status === 200 || res.status === 304) {
+      const proxyKey = buildKey('npm', repo.id, 'proxy', path);
+
+      // 1. Check Cache
+      const cached = await storage.get(proxyKey).catch(() => null);
+      if (cached) {
         return {
           ok: true,
-          data: res.body,
-          contentType:
-            res.headers?.['content-type'] || 'application/octet-stream',
+          data: cached,
+          contentType: 'application/octet-stream' // Should ideally store content-type too or guess it
         };
       }
-      return { ok: false, message: 'Not found in upstream' };
+
+      // 2. Coalescing
+      const coalescingKey = `npm:${repo.id}:${path}`;
+      if (pendingDownloads.has(coalescingKey)) {
+        return await pendingDownloads.get(coalescingKey);
+      }
+
+      const fetchTask = (async () => {
+        try {
+          const res = await proxyFetch(repo, path);
+          if (res.status === 200 || res.status === 304) {
+            // 3. Save to Cache
+            if (res.body) {
+              await storage.save(proxyKey, Buffer.from(res.body));
+              // Optional: Index artifact? NPM usually monolithic metadata. TBD.
+            }
+
+            return {
+              ok: true,
+              data: res.body,
+              contentType: res.headers?.['content-type'] || 'application/octet-stream',
+            };
+          }
+          return { ok: false, message: 'Not found in upstream' };
+        } finally {
+          pendingDownloads.delete(coalescingKey);
+        }
+      })();
+
+      pendingDownloads.set(coalescingKey, fetchTask);
+      return await fetchTask;
     }
 
     // Hosted logic

@@ -70,6 +70,48 @@ describe('DockerPlugin Proxy Fetch', () => {
     });
 
     // Add more scenarios: 401 handling, caching, etc.
+
+    it('should return cached content and not hit upstream if cache exists', async () => {
+      const mockFetch = proxyHelperModule.default as jest.Mock;
+      const cachedData = Buffer.from('cached-blob');
+      mockStorage.get.mockResolvedValue(cachedData);
+
+      const repo: Repository = {
+        id: 'r1',
+        config: { docker: { proxyUrl: 'http://up' } },
+      } as any;
+      const url = 'http://up/v2/name/blobs/sha256:digest';
+
+      const result = await proxyFetch(repo, url);
+
+      expect(mockStorage.get).toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled(); // CRITICAL: Cache hit should bypass upstream
+      expect(result.ok).toBe(true);
+      expect(result.body).toBe(cachedData);
+      expect(result.storageKey).toBeDefined();
+    });
+
+    it('should hit upstream if cache misses', async () => {
+      const mockFetch = proxyHelperModule.default as jest.Mock;
+      mockStorage.get.mockResolvedValue(null);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: Buffer.from('upstream'),
+      });
+
+      const repo: Repository = {
+        id: 'r1',
+        config: { docker: { proxyUrl: 'http://up' } },
+      } as any;
+      const url = 'http://up/v2/name/blobs/sha256:digest';
+
+      const result = await proxyFetch(repo, url);
+
+      expect(mockStorage.get).toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalled();
+      expect(result.body.toString()).toBe('upstream');
+    });
   });
 
   describe('pingUpstream', () => {

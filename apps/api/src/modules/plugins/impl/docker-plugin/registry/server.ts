@@ -1,25 +1,16 @@
-/**
- * Docker Registry Server module
- * Implements a lightweight in-process HTTP server for Docker Registry V2 API
+/*
+ * Copyright (C) 2026 RavHub Team
  *
- * Extracted from docker-plugin.ts lines 1536-2528
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * Main functions:
- * - startRegistryForRepo: Start registry server for a repository
- * - stopRegistryForRepo: Stop registry server for a repository
- *
- * The server implements Docker Registry V2 endpoints:
- * - GET /v2/ - API version check
- * - GET /v2/token - Token authentication (proxied to main API)
- * - GET /v2/<name>/manifests/<reference> - Get manifest
- * - PUT /v2/<name>/manifests/<reference> - Put manifest
- * - GET /v2/<name>/blobs/<digest> - Get blob
- * - POST /v2/<name>/blobs/uploads/ - Initiate blob upload
- * - PATCH /v2/<name>/blobs/uploads/<uuid> - Append to blob upload
- * - PUT /v2/<name>/blobs/uploads/<uuid> - Complete blob upload
- * - GET /v2/<name>/tags/list - List tags
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  */
-
 import { selectPort } from './port-manager';
 import { checkTokenAllows } from './auth';
 import { readBody, sendAuthChallenge } from './utils';

@@ -12,19 +12,35 @@
  * GNU Affero General Public License for more details.
  */
 
-import { PluginManagerService } from '../../modules/plugins/plugin-manager.service';
-import DockerPlugin from '../../modules/plugins/impl/docker-plugin';
+import { PluginManagerService } from '../../src/modules/plugins/plugin-manager.service';
+import DockerPlugin from '../../src/modules/plugins/impl/docker-plugin';
 
 describe('e2e: docker proxy auth + cache', () => {
   it('forwards Authorization and caches proxy fetch results', async () => {
-    // simple in-memory storage like other tests
+    // simple in-memory storage with implicit 2s TTL for test
     const storage: any = {
-      saved: new Map<string, Buffer | string>(),
+      saved: new Map<string, { data: Buffer | string; time: number }>(),
       async save(k: string, d: Buffer | string) {
-        this.saved.set(k, d);
+        this.saved.set(k, { data: d, time: Date.now() });
+      },
+      async get(k: string) {
+        const entry = this.saved.get(k);
+        if (!entry) return undefined;
+        // Verify expiry (2s)
+        if (Date.now() - entry.time > 2000) {
+          this.saved.delete(k);
+          return undefined;
+        }
+        return entry.data;
       },
       async exists(k: string) {
-        return this.saved.has(k);
+        const entry = this.saved.get(k);
+        if (!entry) return false;
+        if (Date.now() - entry.time > 2000) {
+          this.saved.delete(k);
+          return false;
+        }
+        return true;
       },
       async getUrl(k: string) {
         if (!this.saved.has(k)) throw new Error('not found');
@@ -69,19 +85,17 @@ describe('e2e: docker proxy auth + cache', () => {
     const base = `http://127.0.0.1:${port}`;
 
     // plugin manager with DockerPlugin available
-    const pluginsSvc: any = {
-      list: () => [{ key: 'docker' }],
-      getInstance: () => DockerPlugin,
+    // Mock services
+    const delegatorMock: any = {
+      proxyFetch: (repo, url) => (DockerPlugin as any).proxyFetch(repo, url),
+      getPluginForRepo: () => DockerPlugin,
     };
-    const monitor: any = { increment: jest.fn().mockResolvedValue(undefined) };
+
     const manager = new PluginManagerService(
-      pluginsSvc,
-      monitor,
-      {} as any,
-      {} as any,
-      { isEnabled: () => false } as any,
-      {} as any,
-      {} as any,
+      {} as any, // upstreamMock
+      delegatorMock,
+      {} as any, // jobMock
+      {} as any, // cacheMock
     );
 
     const repo: any = {
@@ -96,10 +110,10 @@ describe('e2e: docker proxy auth + cache', () => {
       },
     };
 
-    const url = `${base}/v2/upstream/repo/blobs/${encodeURIComponent(digest)}`;
+    const url = `${base}/v2/upstream/repo/blobs/${digest}`;
 
     // first fetch -> should hit upstream and forward Authorization
-    const first = await manager.proxyFetch(repo, url);
+    const first: any = await manager.proxyFetch(repo, url);
     expect(first?.ok).toBeTruthy();
     expect(first?.storageKey).toBeDefined();
     expect(hits).toBe(1);
@@ -107,14 +121,14 @@ describe('e2e: docker proxy auth + cache', () => {
     expect(lastAuth!.startsWith('Basic ')).toBeTruthy();
 
     // second fetch -> should be a cache hit, upstream should not be hit again
-    const second = await manager.proxyFetch(repo, url);
+    const second: any = await manager.proxyFetch(repo, url);
     expect(second?.ok).toBeTruthy();
     expect(second?.storageKey).toBeDefined();
     expect(hits).toBe(1); // cached
 
     // wait past TTL and fetch again -> should hit upstream again
     await new Promise((r) => setTimeout(r, 2200));
-    const third = await manager.proxyFetch(repo, url);
+    const third: any = await manager.proxyFetch(repo, url);
     expect(third?.ok).toBeTruthy();
     expect(hits).toBeGreaterThanOrEqual(2);
 

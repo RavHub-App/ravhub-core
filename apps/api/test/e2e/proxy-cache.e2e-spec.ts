@@ -49,7 +49,7 @@ describe('Proxy Cache Management E2E', () => {
     });
 
     describe('💾 Cache Operations', () => {
-        it.skip('should get cache statistics for repository', async () => {
+        it('should get cache statistics for repository', async () => {
             const res = await request(context.app.getHttpServer())
                 .get(`/api/repository/${proxyRepoId}/cache/stats`)
                 .set('Authorization', `Bearer ${authToken}`)
@@ -59,7 +59,7 @@ describe('Proxy Cache Management E2E', () => {
             expect(res.body).toHaveProperty('cacheEntries');
         });
 
-        it.skip('should clear repository cache', async () => {
+        it('should clear repository cache', async () => {
             const res = await request(context.app.getHttpServer())
                 .delete(`/api/repository/${proxyRepoId}/cache`)
                 .set('Authorization', `Bearer ${authToken}`)
@@ -68,7 +68,7 @@ describe('Proxy Cache Management E2E', () => {
             expect(res.body.ok).toBe(true);
         });
 
-        it.skip('should get global cache statistics', async () => {
+        it('should get global cache statistics', async () => {
             const res = await request(context.app.getHttpServer())
                 .get('/api/repository/cache/stats')
                 .set('Authorization', `Bearer ${authToken}`)
@@ -77,11 +77,11 @@ describe('Proxy Cache Management E2E', () => {
             expect(res.body.ok).toBe(true);
         });
 
-        it.skip('should clear all proxy cache', async () => {
+        it('should clear all proxy cache', async () => {
             const res = await request(context.app.getHttpServer())
                 .post('/api/repository/cache/clear-all')
                 .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
+                .expect(201);
 
             expect(res.body.ok).toBe(true);
         });

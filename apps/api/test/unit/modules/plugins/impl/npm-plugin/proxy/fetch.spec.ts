@@ -5,11 +5,6 @@
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
  */
 
 import { initProxy } from 'src/modules/plugins/impl/npm-plugin/proxy/fetch';
@@ -39,6 +34,7 @@ describe('NpmPlugin Proxy Fetch', () => {
     mockStorage = {
       get: jest.fn(),
       save: jest.fn().mockResolvedValue({ ok: true }),
+      getMetadata: jest.fn().mockResolvedValue(null),
     };
     mockContext = {
       storage: mockStorage,
@@ -56,6 +52,7 @@ describe('NpmPlugin Proxy Fetch', () => {
     const repo: Repository = {
       id: 'r1',
       type: 'proxy',
+      name: 'npm-repo',
       config: { cacheEnabled: true, cacheMaxAgeDays: 7 },
     } as any;
 
@@ -72,12 +69,16 @@ describe('NpmPlugin Proxy Fetch', () => {
 
       expect(result.ok).toBe(true);
       expect(result.headers?.['x-proxy-cache']).toBe('HIT');
-      expect(result.body).toEqual(cachedData);
+      expect((result as any).body).toEqual(cachedData);
     });
 
     it('should return cached metadata on cache hit', async () => {
       const metadata = JSON.stringify({ name: 'test-pkg', versions: {} });
       mockStorage.get.mockResolvedValue(Buffer.from(metadata));
+      mockStorage.getMetadata.mockResolvedValue({
+        mtime: new Date(),
+        size: 100,
+      });
 
       const result = await proxyMethods.proxyFetch(repo, 'test-pkg');
 
@@ -171,6 +172,36 @@ describe('NpmPlugin Proxy Fetch', () => {
 
       // Should not return cache even if available
       expect(mockProxyFetchWithAuth).toHaveBeenCalled();
+    });
+
+    it('should re-fetch metadata from upstream if cache is expired', async () => {
+      const metadata = JSON.stringify({ name: 'test-pkg', versions: {} });
+      mockStorage.get.mockResolvedValue(Buffer.from(metadata));
+
+      const oldDate = new Date();
+      oldDate.setMinutes(oldDate.getMinutes() - 10); // 10 mins old
+
+      mockStorage.getMetadata.mockResolvedValue({
+        mtime: oldDate,
+        size: 100
+      });
+
+      const cachedRepo = {
+        ...repo,
+        config: { ...repo.config, cacheTtlSeconds: 300 }
+      } as any;
+
+      mockProxyFetchWithAuth.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: { name: 'test-pkg', version: 'updated' },
+      });
+
+      const result = await proxyMethods.proxyFetch(cachedRepo, 'test-pkg');
+
+      expect(mockProxyFetchWithAuth).toHaveBeenCalled();
+      expect((result as any).body).toEqual({ name: 'test-pkg', version: 'updated' });
     });
   });
 });

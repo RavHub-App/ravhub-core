@@ -77,6 +77,10 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  getUpstreamPingStatus(idOrName: string) {
+    return this.upstreamPingService.getUpstreamPingStatus(idOrName);
+  }
+
   getPluginForRepo(repo: RepositoryEntity) {
     return this.pluginDelegatorService.getPluginForRepo(repo);
   }
@@ -119,5 +123,9 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
 
   async clearAllProxyCache() {
     return this.proxyCacheService.clearAllProxyCache();
+  }
+
+  async request(repo: RepositoryEntity, req: any) {
+    return this.pluginDelegatorService.request(repo, req);
   }
 }

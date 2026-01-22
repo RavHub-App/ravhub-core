@@ -12,17 +12,25 @@
  * GNU Affero General Public License for more details.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { RepositoryEntity } from '../../entities/repository.entity';
 import AppDataSource from '../../data-source';
 
 @Injectable()
-export class UpstreamPingService {
+export class UpstreamPingService implements OnModuleDestroy {
   private readonly logger = new Logger(UpstreamPingService.name);
   private upstreamPingStatus: Map<
     string,
     { ts: number; ok: boolean; status?: number; message?: string }
   > = new Map();
+  private interval: NodeJS.Timeout | null = null;
+
+  onModuleDestroy() {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
 
   async pingUpstreamForRepo(repo: RepositoryEntity, pluginInstance: any) {
     if (!pluginInstance || typeof pluginInstance.pingUpstream !== 'function') {
@@ -35,7 +43,9 @@ export class UpstreamPingService {
       repo.config?.npm?.proxyUrl ||
       repo.config?.maven?.proxyUrl ||
       repo.config?.pypi?.proxyUrl ||
-      repo.config?.docker?.proxyUrl;
+      repo.config?.docker?.proxyUrl ||
+      repo.config?.proxyUrl || // Added generic proxyUrl
+      repo.config?.url; // Added generic url (Helm)
 
     if (!upstreamUrl) {
       return { ok: false, message: 'No upstream URL configured' };
@@ -75,20 +85,8 @@ export class UpstreamPingService {
     }
   }
 
-  async getUpstreamPingStatus(idOrName: string) {
-    const cached = this.upstreamPingStatus.get(idOrName);
-    if (cached) return cached;
-
-    if (!AppDataSource.isInitialized) return null;
-
-    const repoRepo = AppDataSource.getRepository(RepositoryEntity);
-    const repo = await repoRepo.findOne({
-      where: [{ id: idOrName }, { name: idOrName }],
-    });
-
-    if (!repo) return null;
-
-    return this.upstreamPingStatus.get(repo.id || repo.name) ?? null;
+  getUpstreamPingStatus(idOrName: string) {
+    return this.upstreamPingStatus.get(idOrName) ?? null;
   }
 
   async triggerUpstreamPingForRepo(repo: any, pluginInstance: any) {
@@ -133,6 +131,6 @@ export class UpstreamPingService {
     this.logger.log(
       `Starting upstream ping scheduler (interval ${interval / 1000}s)`,
     );
-    setInterval(run, interval);
+    this.interval = setInterval(run, interval);
   }
 }

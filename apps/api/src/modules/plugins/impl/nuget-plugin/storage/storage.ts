@@ -14,6 +14,7 @@
 
 import { buildKey } from '../utils/key-utils';
 import { PluginContext, Repository } from '../utils/types';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 async function streamToBuffer(req: any): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -54,7 +55,7 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
           return resource['@id'];
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     return null;
   };
 
@@ -127,10 +128,10 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
       buf = Buffer.isBuffer(pkg) ? pkg : Buffer.from(JSON.stringify(pkg));
     }
 
-    const allowRedeploy = repo.config?.nuget?.allowRedeploy !== false;
+    const allowRedeploy = (repo.config as any)?.nuget?.allowRedeploy !== false && repo.config?.allowRedeploy !== false;
     if (!allowRedeploy) {
-      const existingId = await storage.get(keyId);
-      const existingName = await storage.get(keyName);
+      const existingId = await storage.get(keyId).catch(() => null);
+      const existingName = await storage.get(keyName).catch(() => null);
       if (existingId || existingName) {
         return {
           ok: false,
@@ -141,6 +142,7 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
 
     try {
       await storage.save(keyId, buf);
+      console.log(`[NuGetPlugin] Successfully uploaded package: ${name}:${version} to key: ${keyId}`);
 
       if (context.indexArtifact) {
         try {
@@ -149,7 +151,7 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
             id: `${name}:${version}`,
             metadata: { name, version, storageKey: keyId, size: buf.length },
           });
-        } catch (ie) {}
+        } catch (ie) { }
       }
 
       return {
@@ -158,18 +160,24 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         metadata: { name, version, storageKey: keyId, size: buf.length },
       };
     } catch (err: any) {
+      console.error(`[NuGetPlugin] Failed to upload package: ${name}:${version} to repo: ${repo.id}. Error: ${String(err)}`);
       return { ok: false, message: String(err) };
     }
   };
 
   const download = async (repo: Repository, name: string, version?: string) => {
+    let pkgName = name;
+    let pkgVersion = version;
+
+    console.log(`[NuGetPlugin] Attempting to download package: ${pkgName}:${pkgVersion || 'latest'} from repo: ${repo.id}`);
+
     if (repo.type === 'hosted' || repo.type === 'group') {
       const host = process.env.API_HOST || 'localhost:3000';
       const proto = process.env.API_PROTOCOL || 'http';
       const baseUrl = `${proto}://${host}/repository/${repo.name}`;
       const isV3 = (repo.config?.nuget?.version || 'v3') === 'v3';
 
-      if (name === 'index.json' && isV3) {
+      if (pkgName === 'index.json' && isV3) {
         return {
           ok: true,
           contentType: 'application/json',
@@ -225,8 +233,28 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         };
       }
 
+      // Handle V3 FlatContainer paths: v3/flatcontainer/{id}/{version}/{id}.{version}.nupkg
+      if (isV3 && pkgName.startsWith('v3/flatcontainer/')) {
+        const flatParts = pkgName.split('/').filter(Boolean);
+        if (flatParts.length >= 4) {
+          pkgName = flatParts[2];
+          pkgVersion = flatParts[3];
+          console.log(`[NuGetPlugin] V3 FlatContainer path parsed. Package: ${pkgName}, Version: ${pkgVersion}`);
+        }
+      }
+
+      // Handle V2 /package/{id}/{version} paths
+      if (pkgName.startsWith('package/')) {
+        const pkgParts = pkgName.split('/').filter(Boolean);
+        if (pkgParts.length >= 3) {
+          pkgName = pkgParts[1];
+          pkgVersion = pkgParts[2];
+          console.log(`[NuGetPlugin] V2 package path parsed. Package: ${pkgName}, Version: ${pkgVersion}`);
+        }
+      }
+
       if (!isV3) {
-        if (name === '' || name === '/' || name.toLowerCase() === '$metadata') {
+        if (pkgName === '' || pkgName === '/' || pkgName.toLowerCase() === '$metadata') {
           return {
             ok: true,
             contentType: 'application/xml',
@@ -243,12 +271,13 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         }
 
         if (
-          name.startsWith('FindPackagesById') ||
-          name.startsWith('Packages')
+          pkgName.startsWith('FindPackagesById') ||
+          pkgName.startsWith('Packages')
         ) {
           let pkgId = '';
-          const idMatch = name.match(/id='([^']+)'/i);
+          const idMatch = pkgName.match(/id='([^']+)'/i);
           if (idMatch) pkgId = idMatch[1];
+          console.log(`[NuGetPlugin] V2 feed query for package ID: ${pkgId}`);
           const uniqueVersions = new Set<string>();
           if (pkgId) {
             try {
@@ -287,13 +316,16 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
                         if (v) uniqueVersions.add(v);
                       }
                     }
-                  } catch {}
+                  } catch { }
                 }
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error(`[NuGetPlugin] Error listing versions for ${pkgId}: ${String(e)}`);
+            }
           }
 
           const versions = Array.from(uniqueVersions);
+          console.log(`[NuGetPlugin] Found versions for ${pkgId}: ${versions.join(', ')}`);
 
           const entries = versions
             .map((v) => {
@@ -340,7 +372,7 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         const proto = process.env.API_PROTOCOL || 'http';
         const baseUrl = `${proto}://${host}/repository/${repo.name}`;
 
-        if (name === '' || name === '/' || name.toLowerCase() === '$metadata') {
+        if (pkgName === '' || pkgName === '/' || pkgName.toLowerCase() === '$metadata') {
           return {
             ok: true,
             contentType: 'application/xml',
@@ -357,10 +389,11 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
         }
 
         if (
-          name.startsWith('FindPackagesById') ||
-          name.startsWith('Packages')
+          pkgName.startsWith('FindPackagesById') ||
+          pkgName.startsWith('Packages')
         ) {
-          const res = await proxyFetch(repo, name);
+          console.log(`[NuGetPlugin] Proxying V2 feed query for path: ${pkgName}`);
+          const res = await proxyFetch(repo, pkgName);
           if (res.status === 200 && res.body) {
             let xml = res.body.toString();
 
@@ -384,16 +417,30 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
       }
     }
 
-    if (!version && name.includes('/')) {
-      const parts = name.split('/');
+    // Try to guess from path if version still missing
+    if (!pkgVersion && pkgName.includes('/')) {
+      const parts = pkgName.split('/').filter(Boolean);
       if (parts.length >= 2) {
-        name = parts[0];
-        version = parts[1];
+        if (parts[parts.length - 1].toLowerCase().endsWith('.nupkg')) {
+          if (parts.length >= 3) {
+            pkgVersion = parts[parts.length - 2];
+            pkgName = parts[parts.length - 3];
+          }
+        } else {
+          pkgVersion = parts[parts.length - 1];
+          pkgName = parts[parts.length - 2];
+        }
+        console.log(`[NuGetPlugin] Guessed package from path: ${pkgName}:${pkgVersion}`);
       }
     }
 
-    if (!version)
+    if (!pkgVersion) {
+      console.warn(`[NuGetPlugin] Download failed for ${pkgName}: Version required but not found.`);
       return { ok: false, message: 'Version required for download' };
+    }
+
+    const idLower = pkgName.toLowerCase();
+    const versionLower = pkgVersion.toLowerCase();
 
     if (repo.type === 'group') {
       const members = repo.config?.members || [];
@@ -404,65 +451,31 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
           const m = await context.getRepo(id);
           if (!m) continue;
 
-          if (m.type === 'hosted') {
-            const res = await download(m, name, version);
-            if (res.ok) return res;
-          } else if (m.type === 'proxy' && proxyFetch) {
-            const idLower = name.toLowerCase();
-            const versionLower = version.toLowerCase();
-
-            // Resolve PackageBaseAddress
-            const base = await getPackageBase(m);
-            let url: string;
-
-            if (base) {
-              // base usually ends with /
-              url = `${base}${idLower}/${versionLower}/${idLower}.${versionLower}.nupkg`;
-            } else {
-              url = `${idLower}/${versionLower}/${idLower}.${versionLower}.nupkg`;
-            }
-
-            const res = await proxyFetch(m, url);
-            if (res.status === 200) {
-              return {
-                ok: true,
-                data: res.body,
-                contentType: 'application/octet-stream',
-              };
-            }
-          }
+          // Delegate entirely to download logic of the member (hosted or proxy)
+          const res = await download(m, idLower, versionLower);
+          if (res.ok) return res;
         } catch (e) {
           // ignore
         }
       }
       return { ok: false, message: 'Not found in group' };
     }
+
     if (repo.type === 'proxy') {
-      const idLower = name.toLowerCase();
-      const versionLower = version.toLowerCase();
-
-      const base = await getPackageBase(repo);
-      let url: string;
-      if (base) {
-        url = `${base}${idLower}/${versionLower}/${idLower}.${versionLower}.nupkg`;
-      } else {
-        url = `${idLower}/${versionLower}/${idLower}.${versionLower}.nupkg`;
-      }
-
-      const fileName = `${name}.${version}.nupkg`;
+      const fileName = `${idLower}.${versionLower}.nupkg`;
       const proxyKey = buildKey(
         'nuget',
         repo.id,
         'proxy',
-        name,
-        version,
+        idLower,
+        versionLower,
         fileName,
       );
-      const legacyProxyKey = buildKey('nuget', repo.id, 'proxy', name, version);
+      const legacyProxyKey = buildKey('nuget', repo.id, 'proxy', idLower, versionLower);
 
       try {
-        let cached = await storage.get(proxyKey);
-        if (!cached) cached = await storage.get(legacyProxyKey);
+        let cached = await storage.get(proxyKey).catch(() => null);
+        if (!cached) cached = await storage.get(legacyProxyKey).catch(() => null);
 
         if (cached) {
           return {
@@ -471,37 +484,67 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
             contentType: 'application/octet-stream',
           };
         }
-      } catch {}
+      } catch { }
 
-      const res = await proxyFetch(repo, url);
-      if (res.status === 200) {
-        return {
-          ok: true,
-          data: res.body,
-          contentType: 'application/octet-stream',
-        };
-      }
-      return { ok: false, message: 'Not found in upstream' };
+      if (!proxyFetch) return { ok: false, message: 'Proxy not available' };
+
+      // Locking & Coalescing
+      const lockKey = `nuget:${repo.id}:${idLower}:${versionLower}`;
+      return await runWithLock(context, lockKey, async () => {
+        let cached = await storage.get(proxyKey).catch(() => null);
+        if (!cached)
+          cached = await storage.get(legacyProxyKey).catch(() => null);
+
+        if (cached) {
+          return {
+            ok: true,
+            data: cached,
+            contentType: 'application/octet-stream',
+          };
+        }
+
+        const base = await getPackageBase(repo);
+        let url: string;
+        if (base) {
+          url = `${base}${idLower}/${versionLower}/${idLower}.${versionLower}.nupkg`;
+        } else {
+          url = `${idLower}/${versionLower}/${idLower}.${versionLower}.nupkg`;
+        }
+
+        const res = await proxyFetch(repo, url);
+        if (res.status === 200) {
+          try {
+            await storage.save(proxyKey, res.body);
+          } catch { }
+
+          return {
+            ok: true,
+            data: res.body,
+            contentType: 'application/octet-stream',
+          };
+        }
+        return { ok: false, message: 'Not found in upstream' };
+      });
     }
 
-    const fileName = `${name}.${version}.nupkg`;
-    const storageKeyId = buildKey('nuget', repo.id, name, version, fileName);
+    const fileName = `${idLower}.${versionLower}.nupkg`;
+    const storageKeyId = buildKey('nuget', repo.id, idLower, versionLower, fileName);
     const storageKeyName = buildKey(
       'nuget',
       repo.name,
-      name,
-      version,
+      idLower,
+      versionLower,
       fileName,
     );
 
-    const legacyKeyId = buildKey('nuget', repo.id, name, version);
-    const legacyKeyName = buildKey('nuget', repo.name, name, version);
+    const legacyKeyId = buildKey('nuget', repo.id, idLower, versionLower);
+    const legacyKeyName = buildKey('nuget', repo.name, idLower, versionLower);
 
     try {
-      let data = await storage.get(storageKeyId);
-      if (!data) data = await storage.get(storageKeyName);
-      if (!data) data = await storage.get(legacyKeyId);
-      if (!data) data = await storage.get(legacyKeyName);
+      let data = await storage.get(storageKeyId).catch(() => null);
+      if (!data) data = await storage.get(storageKeyName).catch(() => null);
+      if (!data) data = await storage.get(legacyKeyId).catch(() => null);
+      if (!data) data = await storage.get(legacyKeyName).catch(() => null);
 
       if (!data) return { ok: false, message: 'Not found' };
       return {
@@ -580,29 +623,46 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     }
 
     const parts = path.split('/').filter((p) => p);
-    let name = 'unknown';
-    let version = '0.0.0';
+    let pkgName = 'unknown';
+    let pkgVersion = '0.0.0';
 
     if (parts.length >= 2) {
-      name = parts[0];
-      version = parts[1];
+      if (parts[parts.length - 1].toLowerCase().endsWith('.nupkg')) {
+        if (parts.length >= 3) {
+          pkgName = parts[parts.length - 3];
+          pkgVersion = parts[parts.length - 2];
+        } else {
+          pkgName = parts[0];
+          pkgVersion = parts[1];
+        }
+      } else {
+        pkgName = parts[0];
+        pkgVersion = parts[1];
+      }
     }
 
+    // Standardize casing for storage
+    pkgName = pkgName.toLowerCase();
+    pkgVersion = pkgVersion.toLowerCase();
+
+    console.log(`[NuGetPlugin] handlePut: Attempting to put package ${pkgName}:${pkgVersion} to repo: ${repo.id} via path: ${path}`);
+
+    const fileName = `${pkgName}.${pkgVersion}.nupkg`;
     const keyId = buildKey(
       'nuget',
       repo.id,
-      name,
-      version,
-      parts[parts.length - 1] || `${name}.${version}.nupkg`,
+      pkgName,
+      pkgVersion,
+      fileName,
     );
 
-    const allowRedeploy = repo.config?.allowRedeploy !== false;
+    const allowRedeploy = (repo.config as any)?.nuget?.allowRedeploy !== false && repo.config?.allowRedeploy !== false;
     if (!allowRedeploy) {
-      const exists = await storage.exists(keyId);
+      const exists = await storage.exists(keyId).catch(() => false);
       if (exists) {
         return {
           ok: false,
-          message: `Redeployment of ${name}:${version} is not allowed`,
+          message: `Redeployment of ${pkgName}:${pkgVersion} is not allowed`,
         };
       }
     }
@@ -637,10 +697,10 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
 
       const artifactResult = {
         ok: true,
-        id: `${name}:${version}`,
+        id: `${pkgName}:${pkgVersion}`,
         metadata: {
-          name,
-          version,
+          name: pkgName,
+          version: pkgVersion,
           storageKey: keyId,
           size: result.size,
           contentHash: result.contentHash,
@@ -659,6 +719,7 @@ export function initStorage(context: PluginContext, proxyFetch?: any) {
     } catch (err: any) {
       return { ok: false, message: String(err) };
     }
+
   };
 
   return { upload, download, handlePut };

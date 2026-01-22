@@ -1,9 +1,15 @@
-/**
- * Helper used across plugin to normalize image names for upstream requests.
- * Behavior is repository-configurable (repo.config.docker.libraryPrefix):
- *  - 'auto' (default) — apply library/ only for Docker Hub upstreams
- *  - 'enabled' — always add library/ for images without namespace
- *  - 'disabled' — never add library/
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  */
 export function normalizeImageName(
   imageName: string,

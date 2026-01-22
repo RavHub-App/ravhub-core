@@ -154,6 +154,23 @@ export function initProxy(context: PluginContext) {
               };
             }
           } else {
+            if (cleanUrl.endsWith('maven-metadata.xml')) {
+              const ttlSeconds = repo.config?.cacheTtlSeconds ?? 300;
+              try {
+                // @ts-ignore - getMetadata exists on FilesystemStorageAdapter
+                const meta = await context.storage.getMetadata(key);
+                if (meta) {
+                  const ageSeconds = (Date.now() - meta.mtime.getTime()) / 1000;
+                  if (ageSeconds > ttlSeconds) {
+                    throw new Error('Metadata expired');
+                  }
+                }
+              } catch (e) {
+                // Fall through to upstream
+                throw e;
+              }
+            }
+
             return {
               ok: true,
               body: cached,

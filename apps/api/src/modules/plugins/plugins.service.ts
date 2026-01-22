@@ -44,7 +44,7 @@ export class PluginsService implements OnModuleInit {
     private readonly auditService: AuditService,
     private readonly redis: RedisService,
     private readonly redlock: RedlockService,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     if (!AppDataSource.isInitialized) {
@@ -145,10 +145,13 @@ export class PluginsService implements OnModuleInit {
     }
   }
 
-  private getPluginContext() {
+  /**
+   * Get the common context shared with all plugins
+   */
+  public getPluginContext() {
     return {
       storage: this.storage,
-      redis: this.redis,
+      redis: this.redis.getClient(),
       redlock: this.redlock,
       getRepo: async (id: string) => {
         if (!AppDataSource.isInitialized) return null;
@@ -195,7 +198,7 @@ export class PluginsService implements OnModuleInit {
           if (typeof metadata === 'string') {
             try {
               metadata = JSON.parse(metadata);
-            } catch (e) {}
+            } catch (e) { }
           }
 
           let packageName =
@@ -240,8 +243,8 @@ export class PluginsService implements OnModuleInit {
             artifactPath ||
             metadata.path ||
             (normalizedResult.id &&
-            typeof normalizedResult.id === 'string' &&
-            normalizedResult.id.includes('/')
+              typeof normalizedResult.id === 'string' &&
+              normalizedResult.id.includes('/')
               ? normalizedResult.id
               : null);
 
@@ -294,7 +297,7 @@ export class PluginsService implements OnModuleInit {
                 source: 'plugin-context',
               },
             })
-            .catch(() => {});
+            .catch(() => { });
         } catch (err: any) {
           this.logger.error(`indexArtifact error: ${err.message}`);
         }

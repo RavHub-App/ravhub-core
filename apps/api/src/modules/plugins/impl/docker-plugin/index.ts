@@ -186,9 +186,9 @@ export function createDockerPlugin(context: PluginContext) {
   };
 
   // Initialize all modules with their dependencies
-  initProxyFetch({ storage, indexArtifact });
+  initProxyFetch({ ...context, indexArtifact });
   initUpload({ storage, getRepo, redis });
-  initDownload({ storage, proxyFetch });
+  initDownload({ storage, proxyFetch, getRepo });
   initManifest({ storage, getRepo, getBlob, proxyFetch, indexArtifact });
   initPackages({ storage, getRepo });
 

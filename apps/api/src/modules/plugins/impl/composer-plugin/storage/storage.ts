@@ -14,6 +14,7 @@
 
 import { buildKey } from '../utils/key-utils';
 import { PluginContext, Repository } from '../utils/types';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 export function initStorage(context: PluginContext) {
   const { storage } = context;
@@ -99,7 +100,10 @@ export function initStorage(context: PluginContext) {
 
     if (repo.config?.allowRedeploy === false) {
       const keyName = buildKey('composer', repo.name, name, storageVersion);
-      if ((await storage.get(keyId)) || (await storage.get(keyName))) {
+      if (
+        (await storage.get(keyId).catch(() => null)) ||
+        (await storage.get(keyName).catch(() => null))
+      ) {
         return {
           ok: false,
           message: `Redeployment of ${name}:${version} is not allowed`,
@@ -139,6 +143,73 @@ export function initStorage(context: PluginContext) {
   };
 
   const handlePut = async (repo: Repository, path: string, req: any) => {
+    // Group Write Policy Logic
+    if (repo.type === 'group') {
+      const writePolicy = repo.config?.writePolicy || 'none';
+      const members = repo.config?.members || [];
+
+      if (writePolicy === 'none') {
+        return { ok: false, message: 'Group is read-only' };
+      }
+
+      const getHostedMembers = async () => {
+        const hosted: Repository[] = [];
+        if (!context.getRepo) return hosted;
+        for (const id of members) {
+          const m = await context.getRepo(id);
+          if (m && m.type === 'hosted') hosted.push(m);
+        }
+        return hosted;
+      };
+
+      // For group writes, we currently buffer to support multiple members/retries
+      let buf: Buffer;
+      if (req.body && Buffer.isBuffer(req.body)) {
+        buf = req.body;
+      } else if (req.buffer && Buffer.isBuffer(req.buffer)) {
+        buf = req.buffer;
+      } else {
+        const chunks: any[] = [];
+        for await (const chunk of req) chunks.push(chunk);
+        buf = Buffer.concat(chunks);
+      }
+      const delegateReq = { ...req, body: buf, buffer: buf };
+      // Ensure the stream is not consumed again if we pass the original req object
+      // (which we shouldn't do anyway for delegations, we pass the buffered body)
+
+      if (writePolicy === 'first') {
+        const hosted = await getHostedMembers();
+        for (const member of hosted) {
+          const result = await handlePut(member, path, delegateReq);
+          if (result.ok) return result;
+        }
+        return { ok: false, message: 'No writable member found' };
+      }
+
+      if (writePolicy === 'preferred' || writePolicy === 'broadcast') {
+        const preferredId = repo.config?.preferredWriter;
+        if (!preferredId)
+          return { ok: false, message: 'Preferred writer not configured' };
+        const member = await context.getRepo?.(preferredId);
+        if (!member || member.type !== 'hosted')
+          return { ok: false, message: 'Preferred writer unavailable' };
+        return await handlePut(member, path, delegateReq);
+      }
+
+      if (writePolicy === 'mirror') {
+        const hosted = await getHostedMembers();
+        if (hosted.length === 0)
+          return { ok: false, message: 'No hosted members' };
+        const results = await Promise.all(
+          hosted.map((m) => handlePut(m, path, delegateReq)),
+        );
+        const success = results.find((r) => r.ok);
+        if (success) return success;
+        return { ok: false, message: 'Mirror write failed on all members' };
+      }
+
+      return { ok: false, message: 'Unknown write policy' };
+    }
     if (
       path.endsWith('.zip') &&
       typeof storage.saveStream === 'function' &&
@@ -203,7 +274,7 @@ export function initStorage(context: PluginContext) {
     try {
       const json = JSON.parse(buf.toString());
       if (json.name) pkg = { ...json, content: buf };
-    } catch {}
+    } catch { }
 
     if (path && path !== '/') {
       const parts = path.split('/').filter((p) => p);
@@ -228,9 +299,10 @@ export function initStorage(context: PluginContext) {
 
     const keyId = buildKey('composer', repo.id, 'proxy', name, storageVersion);
 
+    let skipCacheCheck = false;
     if (cacheEnabled) {
       try {
-        const existing = await storage.get(keyId);
+        const existing = await storage.get(keyId).catch(() => null);
         if (existing) {
           const proxyHelper = getProxyHelper();
           if (proxyHelper) {
@@ -242,21 +314,32 @@ export function initStorage(context: PluginContext) {
               if (headRes.ok && headRes.headers) {
                 const cl = headRes.headers['content-length'];
                 if (cl && parseInt(cl) !== existing.length) {
-                } // Size mismatch, redownload
-                else return { ok: true, data: existing, skipCache: true };
+                  skipCacheCheck = true;
+                } else {
+                  return { ok: true, data: existing, skipCache: true };
+                }
               }
             } catch {
               return { ok: true, data: existing, skipCache: true };
             }
           }
         }
-      } catch {}
+      } catch { }
     }
 
     const proxyHelper = getProxyHelper();
     if (!proxyHelper) return { ok: false, message: 'Proxy helper missing' };
 
-    try {
+    // Locking & Coalescing
+    const lockKey = `composer:${repo.id}:${name}:${version}`;
+    return await runWithLock(context, lockKey, async () => {
+      if (cacheEnabled && !skipCacheCheck) {
+        const cached = await storage.get(keyId).catch(() => null);
+        if (cached) {
+          return { ok: true, data: cached, skipCache: true };
+        }
+      }
+
       const res = await proxyHelper(repo, url);
       if (res.ok && res.body) {
         const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
@@ -276,14 +359,12 @@ export function initStorage(context: PluginContext) {
                 },
               });
             }
-          } catch {}
+          } catch { }
         }
         return { ...res, skipCache: true };
       }
       return res;
-    } catch (err: any) {
-      return { ok: false, message: String(err) };
-    }
+    });
   };
 
   const download = async (
@@ -393,10 +474,10 @@ export function initStorage(context: PluginContext) {
       : `${version!}.zip`;
     const storageKeyId = buildKey('composer', repo.id, name, storageVersion);
     try {
-      let data = await storage.get(storageKeyId);
+      let data = await storage.get(storageKeyId).catch(() => null);
       if (!data) {
         const keyName = buildKey('composer', repo.name, name, storageVersion);
-        data = await storage.get(keyName);
+        data = await storage.get(keyName).catch(() => null);
       }
       if (!data) return { ok: false, message: 'Not found' };
       return { ok: true, data, contentType: 'application/zip' };

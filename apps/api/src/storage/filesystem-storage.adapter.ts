@@ -26,6 +26,13 @@ export class FilesystemStorageAdapter implements StorageAdapter {
       basePath ||
       process.env.STORAGE_PATH ||
       path.resolve(process.cwd(), 'data', 'storage');
+    // In test environment, enforce the environment variable to ensure isolation
+    // providing a fail-safe against any hardcoded DB config leaks.
+    const envPath = process.env.STORAGE_PATH;
+    if (process.env.NODE_ENV === 'test' && envPath) {
+      this.base = envPath;
+    }
+
     fs.mkdirSync(this.base, { recursive: true });
   }
 
@@ -92,8 +99,8 @@ export class FilesystemStorageAdapter implements StorageAdapter {
   }
 
   async exists(key: string): Promise<boolean> {
-    const dest = path.join(this.base, key);
-    return fs.existsSync(dest);
+    const fullPath = path.join(this.base, key);
+    return fs.existsSync(fullPath);
   }
 
   async getStream(
@@ -119,10 +126,10 @@ export class FilesystemStorageAdapter implements StorageAdapter {
   }
 
   async get(key: string): Promise<Buffer | null> {
+    const fullPath = path.join(this.base, key);
     try {
-      const dest = path.join(this.base, key);
-      if (!fs.existsSync(dest)) return null;
-      return fs.readFileSync(dest);
+      if (!fs.existsSync(fullPath)) return null;
+      return fs.readFileSync(fullPath);
     } catch (err) {
       return null;
     }

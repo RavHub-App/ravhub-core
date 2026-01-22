@@ -32,6 +32,7 @@ describe('UsersService (Unit)', () => {
         .mockImplementation((d) => Promise.resolve({ id: 'u1', ...d })),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      preload: jest.fn().mockImplementation((u) => Promise.resolve(u)),
     } as any;
     auditService = {
       logSuccess: jest.fn().mockResolvedValue({}),
@@ -78,9 +79,13 @@ describe('UsersService (Unit)', () => {
   });
 
   it('should update a user', async () => {
-    repo.findOne.mockResolvedValue({ id: 'u1', username: 'updated' } as any);
+    // Mock save to return the "updated" user
+    repo.save.mockResolvedValue({ id: 'u1', username: 'updated' } as any);
+
     const res = await service.update('u1', { username: 'updated' });
-    expect(repo.update).toHaveBeenCalledWith('u1', { username: 'updated' });
+
+    expect(repo.preload).toHaveBeenCalledWith({ id: 'u1', username: 'updated' });
+    expect(repo.save).toHaveBeenCalled();
     expect(res?.username).toBe('updated');
   });
 

@@ -161,14 +161,14 @@ describe('RawPlugin Storage', () => {
 
     it('should handle missing preferred writer', async () => {
       const prefRepo = { ...groupRepo, config: { writePolicy: 'preferred' } };
-      const result = await storageMethods.handlePut(prefRepo as any, 'f', {});
+      const result = await storageMethods.handlePut(prefRepo as any, 'f', { body: 'd' });
       expect(result.ok).toBe(false);
     });
 
     it('should handle unavailable preferred writer', async () => {
       const prefRepo = { ...groupRepo, config: { writePolicy: 'preferred', preferredWriter: 'm1' } };
       context.getRepo.mockResolvedValue(null);
-      const result = await storageMethods.handlePut(prefRepo as any, 'f', {});
+      const result = await storageMethods.handlePut(prefRepo as any, 'f', { body: 'd' });
       expect(result.ok).toBe(false);
     });
 
@@ -176,7 +176,7 @@ describe('RawPlugin Storage', () => {
       const firstRepo = { ...groupRepo, config: { writePolicy: 'first' } };
       context.getRepo.mockResolvedValue({ id: 'm1', type: 'hosted' });
       context.storage.saveStream.mockRejectedValue(new Error('fail'));
-      const result = await storageMethods.handlePut(firstRepo as any, 'f', {});
+      const result = await storageMethods.handlePut(firstRepo as any, 'f', { body: 'd' });
       expect(result.ok).toBe(false);
     });
 

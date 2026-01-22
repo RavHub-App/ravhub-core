@@ -13,17 +13,7 @@
  */
 
 export type { PluginContext } from '../../../../../plugins-core/plugin.interface';
-/**
- * Shared TypeScript types for Docker plugin
- */
 
-/**
- * Plugin context provided during initialization
- */
-
-/**
- * Repository entity (simplified interface)
- */
 export interface Repository {
   id: string;
   name: string;

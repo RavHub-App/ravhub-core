@@ -39,7 +39,7 @@ describe('NpmPlugin Storage', () => {
 
   beforeEach(() => {
     mockStorage = {
-      get: jest.fn(),
+      get: jest.fn().mockResolvedValue(null),
       save: jest
         .fn()
         .mockResolvedValue({ ok: true, size: 100, contentHash: 'abc123' }),
@@ -148,7 +148,7 @@ describe('NpmPlugin Storage', () => {
       const result = await storageMethods.handlePut(repo, 'test-pkg', mockReq);
 
       expect(result.ok).toBe(false);
-      expect(result.message).toBe('Invalid JSON');
+      expect(result.message).toContain('Invalid JSON');
     });
 
     it('should delegate to first hosted member in group', async () => {

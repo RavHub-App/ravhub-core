@@ -12,16 +12,22 @@
  * GNU Affero General Public License for more details.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { RepositoryEntity } from '../../entities/repository.entity';
 import { Artifact } from '../../entities/artifact.entity';
 import AppDataSource from '../../data-source';
+import { RedisService } from '../redis/redis.service';
+import { runWithLock } from '../../plugins-core/lock-helper';
 
 @Injectable()
 export class ArtifactIndexService {
   private readonly logger = new Logger(ArtifactIndexService.name);
   private pendingArtifacts: Array<{ repo: any; result: any; userId?: string }> =
     [];
+
+  constructor(
+    @Optional() private readonly redisService: RedisService,
+  ) { }
 
   async indexArtifact(
     repo: RepositoryEntity,
@@ -34,63 +40,75 @@ export class ArtifactIndexService {
       return;
     }
 
+    if (!repo || !repo.id) {
+      this.logger.error('Cannot index artifact: Missing repository ID');
+      return;
+    }
+
     if (!AppDataSource.isInitialized) {
       this.logger.warn('DB not ready, queuing artifact for later indexing');
       this.pendingArtifacts.push({ repo, result, userId });
       return;
     }
 
+    const meta = result.metadata;
+    const packageName = meta.packageName || meta.name || artifactPath;
+    const version = meta.version || 'unknown';
+
+    if (!packageName) {
+      this.logger.warn('Cannot index artifact without package name');
+      return;
+    }
+
+    // Use hybrid lock (Redis if available, else local memory)
+    const lockKey = `ix:${repo.id}:${packageName}:${version}`;
+    const redis = this.redisService?.getClient();
+
     try {
-      const artifactRepo = AppDataSource.getRepository(Artifact);
-      const meta = result.metadata;
+      await runWithLock({ redis }, lockKey, async () => {
+        const artifactRepo = AppDataSource.getRepository(Artifact);
 
-      const manager = (repo.manager || 'generic').toLowerCase();
-      const packageName = meta.packageName || meta.name || artifactPath;
-      const version = meta.version || 'unknown';
+        const existing = await artifactRepo.findOne({
+          where: {
+            repositoryId: repo.id,
+            packageName,
+            version,
+          },
+        });
 
-      if (!packageName) {
-        this.logger.warn('Cannot index artifact without package name');
-        return;
-      }
+        if (existing) {
+          existing.size = meta.size || existing.size;
+          existing.contentHash = meta.contentHash || existing.contentHash;
+          existing.lastAccessedAt = new Date();
 
-      const existing = await artifactRepo.findOne({
-        where: {
-          repositoryId: repo.id,
-          packageName,
-          version,
-        },
-      });
+          if (meta.metadata) {
+            existing.metadata = {
+              ...(existing.metadata || {}),
+              ...meta.metadata,
+            };
+          }
 
-      if (existing) {
-        existing.size = meta.size || existing.size;
-        existing.contentHash = meta.contentHash || existing.contentHash;
-        existing.lastAccessedAt = new Date();
+          await artifactRepo.save(existing);
+          this.logger.debug(`Updated artifact index: ${packageName}@${version}`);
+        } else {
+          const artifact = artifactRepo.create({
+            repositoryId: repo.id,
+            repository: { id: repo.id } as any,
+            packageName,
+            version,
+            size: meta.size || 0,
+            contentHash: meta.contentHash,
+            storageKey: meta.storageKey || artifactPath,
+            metadata: meta.metadata || {},
+            lastAccessedAt: new Date(),
+          } as any);
 
-        if (meta.metadata) {
-          existing.metadata = {
-            ...(existing.metadata || {}),
-            ...meta.metadata,
-          };
+          await artifactRepo.save(artifact);
+          this.logger.log(`Indexed new artifact: ${packageName}@${version}`);
         }
-
-        await artifactRepo.save(existing);
-        this.logger.debug(`Updated artifact index: ${packageName}@${version}`);
-      } else {
-        const artifact = artifactRepo.create({
-          repositoryId: repo.id,
-          packageName,
-          version,
-          size: meta.size || 0,
-          contentHash: meta.contentHash,
-          storageKey: meta.storageKey || artifactPath,
-          metadata: meta.metadata || {},
-        } as any);
-
-        await artifactRepo.save(artifact);
-        this.logger.log(`Indexed new artifact: ${packageName}@${version}`);
-      }
+      });
     } catch (err: any) {
-      this.logger.error(`Failed to index artifact: ${err.message}`);
+      this.logger.error(`Failed to index artifact: ${err.message}`, err.stack);
     }
   }
 

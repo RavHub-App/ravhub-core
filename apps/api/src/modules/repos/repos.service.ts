@@ -60,6 +60,14 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
   private repoCache: Map<string, { ent: RepositoryEntity; expires: number }> =
     new Map();
 
+  public clearCache(idOrName?: string) {
+    if (idOrName) {
+      this.repoCache.delete(idOrName);
+    } else {
+      this.repoCache.clear();
+    }
+  }
+
   async findOneCached(idOrName: string): Promise<RepositoryEntity | null> {
     const cached = this.repoCache.get(idOrName);
     if (cached && cached.expires > Date.now()) {
@@ -303,7 +311,10 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
     const ent = await this.findOne(id);
     if (!ent) return null;
     Object.assign(ent, data as any);
-    return this.repo.save(ent);
+    const saved = await this.repo.save(ent);
+    this.clearCache(id);
+    if (saved.name) this.clearCache(saved.name);
+    return saved;
   }
   async delete(id: string): Promise<void> {
     const ent = await this.findOne(id);

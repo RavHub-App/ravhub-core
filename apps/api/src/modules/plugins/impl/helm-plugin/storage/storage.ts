@@ -13,6 +13,7 @@
  */
 
 import { PluginContext } from '../../../../../plugins-core/plugin.interface';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 import * as yaml from 'js-yaml';
 import * as path from 'path';
 import { buildKey } from '../utils/key-utils';
@@ -33,7 +34,7 @@ const getBufferFromPackage = (pkg: any): Buffer => {
     if (isBase64(content)) {
       try {
         return Buffer.from(content, 'base64');
-      } catch {}
+      } catch { }
     }
     return Buffer.from(content);
   }
@@ -96,47 +97,51 @@ export function initStorage(context: PluginContext) {
     const targetUrl = `${cleanUpstream}/${packageName}`;
     const proxyKey = buildKey('helm', repo.id, 'proxy', packageName);
 
-    try {
-      const cached = await storage.get(proxyKey);
-      if (cached)
-        return {
-          ok: true,
-          data: cached,
-          contentType: 'application/octet-stream',
-        };
-    } catch {}
+    // Locking & Coalescing
+    const lockKey = `helm:${repo.id}:${packageName}`;
+    return await runWithLock(context, lockKey, async () => {
+      try {
+        const cached = await storage.get(proxyKey);
+        if (cached)
+          return {
+            ok: true,
+            data: cached,
+            contentType: 'application/octet-stream',
+          };
+      } catch { }
 
-    try {
-      const res = await proxyFetchWithAuth(repo, targetUrl);
-      if (res.ok && res.body) {
-        const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
-        if (cacheMaxAgeDays > 0) {
-          await storage.save(proxyKey, res.body);
-          if (context.indexArtifact && packageName.endsWith('.tgz')) {
-            try {
-              await context.indexArtifact(repo, {
-                ok: true,
-                id: packageName,
-                metadata: {
-                  storageKey: proxyKey,
-                  size: res.body.length,
-                  path: packageName,
-                },
-              });
-            } catch {}
+      try {
+        const res = await proxyFetchWithAuth(repo, targetUrl);
+        if (res.ok && res.body) {
+          const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
+          if (cacheMaxAgeDays > 0) {
+            await storage.save(proxyKey, res.body);
+            if (context.indexArtifact && packageName.endsWith('.tgz')) {
+              try {
+                await context.indexArtifact(repo, {
+                  ok: true,
+                  id: packageName,
+                  metadata: {
+                    storageKey: proxyKey,
+                    size: res.body.length,
+                    path: packageName,
+                  },
+                });
+              } catch { }
+            }
           }
+          return {
+            ok: true,
+            data: res.body,
+            contentType:
+              res.headers?.['content-type'] || 'application/octet-stream',
+          };
         }
-        return {
-          ok: true,
-          data: res.body,
-          contentType:
-            res.headers?.['content-type'] || 'application/octet-stream',
-        };
-      }
-    } catch {}
-
-    return { ok: false, message: 'Not found' };
+      } catch { }
+      return { ok: false, message: 'Not found' };
+    });
   }
+
 
   async function downloadImpl(
     repo: any,
@@ -153,7 +158,7 @@ export function initStorage(context: PluginContext) {
       try {
         const content = await storage.get(key);
         return { ok: true, data: content, contentType: 'application/x-yaml' };
-      } catch {}
+      } catch { }
     }
 
     if (repo.type === 'proxy') return handleProxyRead(repo, packageName);
@@ -168,33 +173,41 @@ export function initStorage(context: PluginContext) {
   }
 
   async function updateIndexYaml(repo: any, pkg: any, filename: string) {
-    const indexKey = buildKey('helm', repo.id, 'index.yaml');
-    let index: any = { apiVersion: 'v1', entries: {} };
+    const repoId = repo.id;
+    const lockKey = `helm:index:${repoId}`;
 
-    try {
-      const existing = await storage.get(indexKey);
-      if (existing) index = yaml.load(existing.toString());
-    } catch {}
+    return await runWithLock(context, lockKey, async () => {
+      const indexKey = buildKey('helm', repo.id, 'index.yaml');
+      let index: any = { apiVersion: 'v1', entries: {} };
 
-    const name = pkg.name || 'unknown';
-    const version = pkg.version || '0.0.0';
+      try {
+        const existing = await storage.get(indexKey);
+        if (existing) {
+          index = yaml.load(existing.toString());
+        }
+      } catch { }
 
-    if (!index.entries[name]) index.entries[name] = [];
+      const name = pkg.name || 'unknown';
+      const version = pkg.version || '0.0.0';
 
-    const existingVersion = index.entries[name].find(
-      (e: any) => e.version === version,
-    );
-    if (!existingVersion) {
-      index.entries[name].push({
-        apiVersion: 'v2',
-        name,
-        version,
-        urls: [filename],
-        created: new Date().toISOString(),
-      });
-    }
+      if (!index.entries[name]) index.entries[name] = [];
 
-    await storage.save(indexKey, Buffer.from(yaml.dump(index)));
+      const existingVersion = index.entries[name].find(
+        (e: any) => e.version === version,
+      );
+      if (!existingVersion) {
+        index.entries[name].push({
+          apiVersion: 'v2',
+          name,
+          version,
+          urls: [filename],
+          created: new Date().toISOString(),
+        });
+      }
+
+      const buf = Buffer.from(yaml.dump(index));
+      await storage.save(indexKey, buf);
+    });
   }
 
   async function handleGroupUpload(
@@ -288,6 +301,73 @@ export function initStorage(context: PluginContext) {
   };
 
   const handlePut = async (repo: any, filePath: string, req: any) => {
+    // Group Write Policy Logic
+    if (repo.type === 'group') {
+      const writePolicy = repo.config?.writePolicy || 'none';
+      const members = repo.config?.members || [];
+
+      if (writePolicy === 'none') {
+        return { ok: false, message: 'Group is read-only' };
+      }
+
+      const getHostedMembers = async () => {
+        const hosted: any[] = [];
+        if (!context.getRepo) return hosted;
+        for (const id of members) {
+          const m = await context.getRepo(id);
+          if (m && m.type === 'hosted') hosted.push(m);
+        }
+        return hosted;
+      };
+
+      // For group writes, we currently buffer to support multiple members/retries
+      let buf: Buffer;
+      if (req.body && Buffer.isBuffer(req.body)) {
+        buf = req.body;
+      } else if (req.buffer && Buffer.isBuffer(req.buffer)) {
+        buf = req.buffer;
+      } else {
+        const chunks: any[] = [];
+        for await (const chunk of req) chunks.push(chunk);
+        buf = Buffer.concat(chunks);
+      }
+      const delegateReq = { ...req, body: buf, buffer: buf };
+      // Ensure specific fields required by handlePut for buffer detection are present if needed
+      // but passing body/buffer usually suffices.
+
+      if (writePolicy === 'first') {
+        const hosted = await getHostedMembers();
+        for (const member of hosted) {
+          const result = await handlePut(member, filePath, delegateReq);
+          if (result.ok) return result;
+        }
+        return { ok: false, message: 'No writable member found' };
+      }
+
+      if (writePolicy === 'preferred') {
+        const preferredId = repo.config?.preferredWriter;
+        if (!preferredId)
+          return { ok: false, message: 'Preferred writer not configured' };
+        const member = await resolveRepo(preferredId);
+        if (!member || member.type !== 'hosted')
+          return { ok: false, message: 'Preferred writer unavailable' };
+        return await handlePut(member, filePath, delegateReq);
+      }
+
+      if (writePolicy === 'mirror') {
+        const hosted = await getHostedMembers();
+        if (hosted.length === 0)
+          return { ok: false, message: 'No hosted members' };
+        const results = await Promise.all(
+          hosted.map((m) => handlePut(m, filePath, delegateReq)),
+        );
+        const success = results.find((r) => r.ok);
+        if (success) return success;
+        return { ok: false, message: 'Mirror write failed on all members' };
+      }
+
+      return { ok: false, message: 'Unknown write policy' };
+    }
     if (
       filePath.endsWith('.tgz') &&
       typeof storage.saveStream === 'function' &&
@@ -297,6 +377,14 @@ export function initStorage(context: PluginContext) {
       const key = buildKey('helm', repo.id, filePath);
       try {
         const result = await storage.saveStream(key, req);
+
+        // FIX: Update index.yaml for streaming uploads too
+        await updateIndexYaml(repo, {
+          name: filePath.replace(/-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/, ''), // best effort name extraction
+          version: (filePath.match(/-([0-9]+\.[0-9]+\.[0-9]+)\.tgz$/) || [])[1] || '0.0.0',
+          filename: filePath
+        }, filePath);
+
         return {
           ok: true,
           id: filePath,

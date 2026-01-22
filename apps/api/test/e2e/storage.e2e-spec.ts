@@ -28,24 +28,24 @@ describe('Storage Configuration E2E', () => {
     });
 
     describe('💾 Storage Backends', () => {
-        it.skip('should list storage configurations', async () => {
+        it('should list storage configurations', async () => {
             const res = await request(context.app.getHttpServer())
-                .get('/api/storage')
+                .get('/api/storage/configs')
                 .set('Authorization', `Bearer ${authToken}`)
                 .expect(200);
 
             expect(Array.isArray(res.body)).toBeTruthy();
         });
 
-        it.skip('should get default storage configuration', async () => {
+        it('should get default storage configuration', async () => {
             const listRes = await request(context.app.getHttpServer())
-                .get('/api/storage')
+                .get('/api/storage/configs')
                 .set('Authorization', `Bearer ${authToken}`);
 
             const defaultStorage = listRes.body.find((s: any) => s.isDefault);
             if (defaultStorage) {
                 const res = await request(context.app.getHttpServer())
-                    .get(`/api/storage/${defaultStorage.id}`)
+                    .get(`/api/storage/configs/${defaultStorage.id}`)
                     .set('Authorization', `Bearer ${authToken}`)
                     .expect(200);
 
@@ -59,6 +59,7 @@ describe('Storage Configuration E2E', () => {
         let testRepoId: string;
 
         beforeAll(async () => {
+            // ... (setup code remains in beforeAll, just enabling the test below)
             const repoRes = await request(context.app.getHttpServer())
                 .post('/api/repositories')
                 .set('Authorization', `Bearer ${authToken}`)
@@ -79,14 +80,14 @@ describe('Storage Configuration E2E', () => {
             }
         });
 
-        it.skip('should handle storage migration request', async () => {
+        it('should handle storage migration request', async () => {
             const res = await request(context.app.getHttpServer())
                 .post(`/api/repository/${testRepoId}/migrate-storage`)
                 .set('Authorization', `Bearer ${authToken}`)
                 .send({
                     newStorageId: null
                 })
-                .expect(200);
+                .expect(201);
 
             expect(res.body).toHaveProperty('ok');
         });

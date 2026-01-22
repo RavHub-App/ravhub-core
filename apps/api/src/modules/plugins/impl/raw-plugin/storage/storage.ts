@@ -93,11 +93,17 @@ export function initStorage(context: PluginContext) {
 
     try {
       await storage.save(key, buf);
-      return {
+      const result = {
         ok: true,
         id: name,
         metadata: { name, version, storageKey: key, size: buf.length },
       };
+
+      if (context.indexArtifact) {
+        await context.indexArtifact(repo, result);
+      }
+
+      return result;
     } catch (err: any) {
       return { ok: false, message: String(err) };
     }
@@ -123,10 +129,42 @@ export function initStorage(context: PluginContext) {
         return hosted;
       };
 
+      // Buffer request for group operations to allow multiple attempts/mirroring
+      let buf: Buffer;
+      // If body is already parsed (e.g. by previous middleware) or buffered
+      if (
+        req.body &&
+        (Object.keys(req.body).length > 0 || Buffer.isBuffer(req.body))
+      ) {
+        if (Buffer.isBuffer(req.body)) {
+          buf = req.body;
+        } else if (typeof req.body === 'object') {
+          buf = Buffer.from(JSON.stringify(req.body));
+        } else {
+          buf = Buffer.from(String(req.body));
+        }
+      } else if (req.buffer && Buffer.isBuffer(req.buffer)) {
+        buf = req.buffer;
+      } else {
+        const chunks: any[] = [];
+        for await (const chunk of req) {
+          chunks.push(chunk);
+        }
+        buf = Buffer.concat(chunks);
+      }
+
+      // Create a function to get a fresh stream/req object for delegation
+      const createDelegateReq = () => {
+        // We can pass the buffer directly if the target supports it (which handlePut does below)
+        // But handlePut below checks for req.body or req.buffer first.
+        // So we can constructing an object with .buffer
+        return { ...req, buffer: buf, body: buf };
+      };
+
       if (writePolicy === 'first') {
         const hosted = await getHostedMembers();
         for (const member of hosted) {
-          const result = await handlePut(member, path, req);
+          const result = await handlePut(member, path, createDelegateReq());
           if (result.ok) return result;
         }
         return { ok: false, message: 'No writable member found' };
@@ -139,33 +177,15 @@ export function initStorage(context: PluginContext) {
         const member = await context.getRepo?.(preferredId);
         if (!member || member.type !== 'hosted')
           return { ok: false, message: 'Preferred writer unavailable' };
-        return await handlePut(member, path, req);
+        return await handlePut(member, path, createDelegateReq());
       }
 
       if (writePolicy === 'mirror') {
-        // Mirroring streams is tricky because the stream is consumed.
-        // We need to buffer it first.
-        const chunks: any[] = [];
-        for await (const chunk of req) {
-          chunks.push(chunk);
-        }
-        const buf = Buffer.concat(chunks);
-
-        // Create a fake req object that yields the buffer
-        const createReq = () => {
-          const Readable = require('stream').Readable;
-          const s = new Readable();
-          s.push(buf);
-          s.push(null);
-          return s;
-        };
-
         const hosted = await getHostedMembers();
         if (hosted.length === 0)
           return { ok: false, message: 'No hosted members' };
-
         const results = await Promise.all(
-          hosted.map((m) => handlePut(m, path, createReq())),
+          hosted.map((m) => handlePut(m, path, createDelegateReq())),
         );
         const success = results.find((r) => r.ok);
         if (success) return success;
@@ -230,7 +250,7 @@ export function initStorage(context: PluginContext) {
         result = { ok: true, size: buf.length };
       }
 
-      return {
+      const uploadResult = {
         ok: true,
         id: name,
         metadata: {
@@ -241,6 +261,12 @@ export function initStorage(context: PluginContext) {
           contentHash: result.contentHash,
         },
       };
+
+      if (context.indexArtifact) {
+        await context.indexArtifact(repo, uploadResult);
+      }
+
+      return uploadResult;
     } catch (err: any) {
       return { ok: false, message: String(err) };
     }

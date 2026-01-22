@@ -18,6 +18,7 @@ import * as crypto from 'crypto';
 import * as toml from '@iarna/toml';
 import * as tar from 'tar-stream';
 import * as zlib from 'zlib';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 export function initStorage(context: PluginContext) {
   const { storage } = context;
@@ -46,7 +47,7 @@ export function initStorage(context: PluginContext) {
           stream.on('end', () => {
             try {
               cargoData = toml.parse(Buffer.concat(chunks).toString('utf-8'));
-            } catch {}
+            } catch { }
             next();
           });
         } else {
@@ -117,40 +118,45 @@ export function initStorage(context: PluginContext) {
     buf: Buffer,
     meta: any,
   ) => {
-    const relPath = getIndexPath(name);
-    const key = buildKey('rust', repo.id, 'index', relPath);
+    const repoId = repo.id;
+    const lockKey = `rust:index:${repoId}`;
 
-    let finalDeps = meta.deps;
-    let finalFeatures = meta.features;
-    if (!finalDeps || !finalFeatures) {
-      const cargo = await parseCrateMetadata(buf);
-      if (cargo) {
-        if (!finalDeps) finalDeps = mapDependencies(cargo);
-        if (!finalFeatures) finalFeatures = cargo.features || {};
+    return await runWithLock(context, lockKey, async () => {
+      const relPath = getIndexPath(name);
+      const key = buildKey('rust', repo.id, 'index', relPath);
+
+      let finalDeps = meta.deps;
+      let finalFeatures = meta.features;
+      if (!finalDeps || !finalFeatures) {
+        const cargo = await parseCrateMetadata(buf);
+        if (cargo) {
+          if (!finalDeps) finalDeps = mapDependencies(cargo);
+          if (!finalFeatures) finalFeatures = cargo.features || {};
+        }
       }
-    }
 
-    const entry = {
-      name,
-      vers: version,
-      deps: finalDeps || [],
-      cksum: getSha256(buf),
-      features: finalFeatures || {},
-      yanked: false,
-      links: meta.links || undefined,
-    };
-    const line = JSON.stringify(entry);
+      const entry = {
+        name,
+        vers: version,
+        deps: finalDeps || [],
+        cksum: getSha256(buf),
+        features: finalFeatures || {},
+        yanked: false,
+        links: meta.links || undefined,
+      };
+      const line = JSON.stringify(entry);
 
-    let content = '';
-    try {
-      const existing = await storage.get(key);
-      if (existing) content = existing.toString() + '\n';
-    } catch {}
+      let content = '';
+      try {
+        const existing = await storage.get(key).catch(() => null);
+        if (existing) content = existing.toString() + '\n';
+      } catch { }
 
-    if (!content.includes(`"vers":"${version}"`)) {
-      content += line;
-      await storage.save(key, Buffer.from(content));
-    }
+      if (!content.includes(`"vers":"${version}"`)) {
+        content += line;
+        await storage.save(key, Buffer.from(content));
+      }
+    });
   };
 
   const handleGroupUpload = async (
@@ -222,7 +228,7 @@ export function initStorage(context: PluginContext) {
         : Buffer.from(String(pkg.content || pkg.buffer || ''));
 
     if (repo.config?.allowRedeploy === false) {
-      if (await storage.exists(keyId))
+      if (await storage.exists(keyId).catch(() => false))
         return { ok: false, message: `Redeployment not allowed` };
     }
 
@@ -300,12 +306,12 @@ export function initStorage(context: PluginContext) {
     );
     const cacheEnabled = repo.config?.cacheEnabled !== false;
 
-    try {
-      const existing = cacheEnabled ? await storage.get(keyId) : null;
+    // Locking & Coalescing
+    const lockKey = `rust:${repo.id}:${name}:${version}`;
+    return await runWithLock(context, lockKey, async () => {
+      const existing = cacheEnabled ? await storage.get(keyId).catch(() => null) : null;
       if (existing) return { ok: true, data: existing, skipCache: true };
-    } catch {}
 
-    try {
       let proxyFetchWithAuth;
       try {
         proxyFetchWithAuth =
@@ -337,13 +343,11 @@ export function initStorage(context: PluginContext) {
                 size: buf.length,
               },
             });
-          } catch {}
+          } catch { }
         }
       }
       return { ok: true, data: buf, contentType: 'application/octet-stream' };
-    } catch (err: any) {
-      return { ok: false, message: String(err) };
-    }
+    });
   };
 
   const download = async (
@@ -361,7 +365,7 @@ export function initStorage(context: PluginContext) {
             const res = await download(m, name, version);
             if (res.ok) return res;
           }
-        } catch {}
+        } catch { }
       }
       return { ok: false, message: 'Not found in group' };
     }
@@ -381,11 +385,13 @@ export function initStorage(context: PluginContext) {
       };
     }
     if (!version && !name.endsWith('.crate') && name !== 'download') {
-      const key = buildKey('rust', repo.id, 'index', name);
+      // Handle "index/" prefix if present
+      const indexPath = name.startsWith('index/') ? name.substring(6) : name;
+      const key = buildKey('rust', repo.id, 'index', indexPath);
       try {
-        const data = await storage.get(key);
+        const data = await storage.get(key).catch(() => null);
         if (data) return { ok: true, data, contentType: 'text/plain' };
-      } catch {}
+      } catch { }
     }
     if (repo.type === 'proxy') {
       const upstream = repo.config?.proxyUrl || repo.config?.url;
@@ -412,11 +418,11 @@ export function initStorage(context: PluginContext) {
     const fileName = `${name}-${version}.crate`;
     const keyId = buildKey('rust', repo.id, 'crates', name, version, fileName);
     try {
-      let data = await storage.get(keyId);
+      let data = await storage.get(keyId).catch(() => null);
       if (!data)
         data = await storage.get(
           buildKey('rust', repo.id, name, version, fileName),
-        );
+        ).catch(() => null);
       if (!data) return { ok: false, message: 'Not found' };
       return { ok: true, data, contentType: 'application/octet-stream' };
     } catch (err: any) {

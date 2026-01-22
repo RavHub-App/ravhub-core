@@ -735,8 +735,13 @@ export class ReposController {
 
     const userId = req?.user?.id;
     try {
-      return await this.pluginManager.handlePut(r, path, req, userId);
+      const result = await this.pluginManager.handlePut(r, path, req, userId);
+      if (result && typeof result === 'object' && result.ok === false) {
+        throw new BadRequestException(result.message || 'Artifact upload failed');
+      }
+      return result;
     } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
       throw new BadRequestException(err.message);
     }
   }
@@ -791,21 +796,46 @@ export class ReposController {
       return;
     }
 
-    if (r.manager === 'raw' || r.type === 'hosted' || r.type === 'group') {
+    if (r.manager === 'raw' || r.type === 'hosted' || r.type === 'group' || (r.manager === 'docker' && r.type === 'proxy')) {
       const plugin = this.pluginManager.getPluginForRepo(r);
-      if (plugin && typeof plugin.download === 'function') {
-        const result = await plugin.download(r, path);
-        if (result.ok && result.url) {
-          if (result.url.startsWith('file://')) {
-            const p = result.url.replace('file://', '');
-            return res.sendFile(p);
+      if (plugin) {
+        if (typeof plugin.download === 'function') {
+          const result = await plugin.download(r, path);
+          if (result.ok && result.url) {
+            if (result.url.startsWith('file://')) {
+              const p = result.url.replace('file://', '');
+              return res.sendFile(p);
+            }
+            return res.redirect(result.url);
           }
-          return res.redirect(result.url);
+          if (result.ok && result.data) {
+            if (result.contentType)
+              res.setHeader('Content-Type', result.contentType);
+            else if (r.manager === 'raw') {
+              const mime = require('mime-types');
+              const contentType = mime.lookup(path) || 'application/octet-stream';
+              res.setHeader('Content-Type', contentType);
+            }
+            return res.send(result.data);
+          }
         }
-        if (result.ok && result.data) {
-          if (result.contentType)
-            res.setHeader('Content-Type', result.contentType);
-          return res.send(result.data);
+
+        // Fallback to generic request (e.g. for Docker /v2/token)
+        const pluginResult: any = await this.pluginManager.request(r, {
+          path: '/' + path,
+          query: req.query,
+          headers: req.headers,
+          method: req.method,
+        });
+
+        if (pluginResult) {
+          if (pluginResult.headers) {
+            for (const [k, v] of Object.entries(pluginResult.headers)) {
+              res.setHeader(k, v as string);
+            }
+          }
+          if (pluginResult.status) res.status(pluginResult.status);
+          return res.send(pluginResult.body);
         }
       }
     }

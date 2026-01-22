@@ -1,14 +1,25 @@
-/**
- * Proxy fetch module for Docker plugin
- * Handles fetching images and manifests from upstream registries
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  */
 
 import { buildKey } from '../utils/key-utils';
-import type { Repository } from '../utils/types';
+import type { Repository, PluginContext } from '../utils/types';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 // Plugin context references (will be set by init)
 let storage: any = null;
 let indexArtifact: any = null;
+let context: PluginContext | null = null;
 
 function loadProxyFetchWithAuth():
   | ((repo: Repository, url: string, opts?: any) => Promise<any>)
@@ -23,15 +34,16 @@ function loadProxyFetchWithAuth():
 /**
  * Initialize the proxy fetch module with plugin context
  */
-export function initProxyFetch(context: { storage: any; indexArtifact?: any }) {
-  storage = context.storage;
-  indexArtifact = context.indexArtifact;
+export function initProxyFetch(ctx: PluginContext) {
+  storage = ctx.storage;
+  indexArtifact = (ctx as any).indexArtifact;
+  context = ctx;
 }
 
 /**
  * Fetch content from upstream registry with authentication and caching
  */
-export async function proxyFetch(repo: Repository, urlStr: string) {
+export async function proxyFetch(repo: Repository, urlStr: string, opts?: any) {
   try {
     const proxyFetchWithAuth = loadProxyFetchWithAuth();
     if (!proxyFetchWithAuth) {
@@ -42,11 +54,94 @@ export async function proxyFetch(repo: Repository, urlStr: string) {
       };
     }
 
+    // choose storage key based on path (digest // manifests // fallback)
+    const pathStr = new URL(urlStr).pathname || '';
+    let key = null as string | null;
+    // try to extract image name between /v2/ and /{manifests|blobs}/
+    const nameMatch = pathStr.match(/\/v2\/(.+?)\/(?:manifests|blobs)\//);
+    const imgName = nameMatch ? decodeURIComponent(nameMatch[1]) : null;
+    const blobMatch = pathStr.match(/blobs\/(sha256:[A-Fa-f0-9:\-]+)/i);
+    if (blobMatch) {
+      // Save under global digest path; getBlob searches this.
+      key = buildKey('docker', repo.id, 'blobs', blobMatch[1]);
+    }
+    const maniMatch = pathStr.match(/manifests\/(.+)$/);
+    if (!key && maniMatch) {
+      // Save manifests under name-aware path so download()/getBlob() can locate them
+      if (imgName) {
+        key = buildKey('docker', repo.id, 'manifests', imgName, maniMatch[1]);
+      } else {
+        key = buildKey('docker', repo.id, 'manifests', maniMatch[1]);
+      }
+    }
+
+    const cacheEnabled = repo.config?.cacheEnabled !== false;
+    const skipCache = opts?.skipCache || false;
+
     const headers: any = {
       Accept:
         'application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, */*',
     };
 
+    if (!skipCache && cacheEnabled && key) {
+      const lockKey = `docker:proxy:${key}`;
+      return await runWithLock(context!, lockKey, async () => {
+        try {
+          const cached = await storage.get(key);
+          if (cached) {
+            if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
+              console.debug('[PROXY FETCH CACHE HIT]', key);
+            return {
+              ok: true,
+              status: 200,
+              body: cached,
+              headers: {
+                'content-type': pathStr.includes('/manifests/')
+                  ? 'application/vnd.docker.distribution.manifest.v2+json'
+                  : 'application/octet-stream',
+                'x-proxy-cache': 'HIT',
+              },
+              storageKey: key,
+            };
+          }
+        } catch (e) {
+          /* ignore */
+        }
+
+        return await performProxyFetch(repo, urlStr, key, headers, pathStr, imgName, maniMatch);
+      });
+    }
+
+    return await performProxyFetch(repo, urlStr, key, headers, pathStr, imgName, maniMatch);
+  } catch (err: any) {
+    return { ok: false, status: 500, message: String(err?.message ?? err) };
+  }
+}
+
+/**
+ * Internal helper to perform the actual fetch and save to storage
+ */
+async function performProxyFetch(
+  repo: Repository,
+  urlStr: string,
+  key: string | null,
+  headers: any,
+  pathStr: string,
+  imgName: string | null,
+  maniMatch: RegExpMatchArray | null,
+) {
+  const proxyFetchWithAuth = loadProxyFetchWithAuth();
+  if (!proxyFetchWithAuth) {
+    return {
+      ok: false,
+      status: 500,
+      message: 'proxy-helper not found (plugins-core/proxy-helper)',
+    };
+  }
+
+  const cacheEnabled = repo.config?.cacheEnabled !== false;
+
+  try {
     let res = await proxyFetchWithAuth(repo, urlStr, { stream: true, headers });
     if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
       console.debug('[PROXY FETCH result]', {
@@ -98,57 +193,10 @@ export async function proxyFetch(repo: Repository, urlStr: string) {
       }
     }
 
-    // choose storage key based on path (digest // manifests // fallback)
-    const pathStr = new URL(urlStr).pathname || '';
-    let key = null as string | null;
-    // try to extract image name between /v2/ and /{manifests|blobs}/
-    const nameMatch = pathStr.match(/\/v2\/(.+?)\/(?:manifests|blobs)\//);
-    const imgName = nameMatch ? decodeURIComponent(nameMatch[1]) : null;
-    const blobMatch = pathStr.match(/blobs\/(sha256:[A-Fa-f0-9:\-]+)/i);
-    if (blobMatch) {
-      // Save under global digest path; getBlob searches this.
-      key = buildKey('docker', repo.id, 'blobs', blobMatch[1]);
-    }
-    const maniMatch = pathStr.match(/manifests\/(.+)$/);
-    if (!key && maniMatch) {
-      // Save manifests under name-aware path so download()/getBlob() can locate them
-      if (imgName) {
-        key = buildKey('docker', repo.id, 'manifests', imgName, maniMatch[1]);
-      } else {
-        key = buildKey('docker', repo.id, 'manifests', maniMatch[1]);
-      }
-    }
-
-    const cacheEnabled = repo.config?.cacheEnabled !== false;
-
     // Variable to store the buffer for later use in artifact indexing
     let savedBuffer: Buffer | null = null;
 
     try {
-      // 0. Try cache first for blobs/manifests
-      if (cacheEnabled) {
-        try {
-          const cached = await storage.get(key);
-          if (cached) {
-            if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
-              console.debug('[PROXY FETCH CACHE HIT]', key);
-            return {
-              ok: true,
-              status: 200,
-              body: cached,
-              headers: {
-                'content-type': pathStr.includes('/manifests/')
-                  ? 'application/vnd.docker.distribution.manifest.v2+json'
-                  : 'application/octet-stream',
-                'x-proxy-cache': 'HIT',
-              },
-            };
-          }
-        } catch (e) {
-          /* ignore */
-        }
-      }
-
       // if underlying response provides a stream, prefer saving via stream-to-buffer
       if (res.stream) {
         // Support both Node.js streams (have .on) and WHATWG ReadableStream

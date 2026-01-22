@@ -53,6 +53,7 @@ export interface PluginContext {
     delete(key: string): Promise<boolean>;
     getUrl(key: string): Promise<string>;
     list(prefix: string): Promise<string[]>;
+    getMetadata?(key: string): Promise<{ size: number; mtime: Date } | null>;
   };
   getRepo?: (id: string) => Promise<Repository | null>;
   indexArtifact?: (
@@ -68,12 +69,16 @@ export interface DownloadResult {
   url?: string;
   message?: string;
   data?: any;
+  body?: any;
   contentType?: string;
+  storageKey?: string;
+  size?: number;
 }
 
 export interface ListVersionsResult {
   ok: boolean;
-  versions: string[];
+  versions?: string[];
+  message?: string;
 }
 
 export interface InstallInstruction {

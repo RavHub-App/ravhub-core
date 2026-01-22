@@ -66,7 +66,7 @@ describe('MavenPlugin Storage', () => {
     );
 
     jest.clearAllMocks();
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => { });
   });
 
   afterEach(() => {
@@ -248,8 +248,8 @@ describe('MavenPlugin Storage', () => {
     it('should compute checksum on the fly if missing', async () => {
       // Mock get base artifact success, but checksum file invalid/missing
       context.storage.get.mockImplementation((key: string) => {
-        if (key.endsWith('.jar')) return Buffer.from('base-content');
-        return null;
+        if (key.endsWith('.jar')) return Promise.resolve(Buffer.from('base-content'));
+        return Promise.resolve(null);
       });
 
       const result = await storageMethods.download(

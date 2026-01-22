@@ -16,6 +16,7 @@ import { buildKey } from '../utils/key-utils';
 import { PluginContext, Repository } from '../utils/types';
 import { parseMavenCoordsFromPath, normalizeRepoPath } from '../utils/maven';
 import * as crypto from 'crypto';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 // normalizeRepoPath imported from utils/maven
 // parseMavenCoordsFromPath imported from utils/maven
@@ -128,46 +129,11 @@ export function initStorage(context: PluginContext) {
       const key = String(repo.id || repo.name || '');
       if (key) visited.add(key);
 
-      // Lazily require proxy initializer to avoid circular refs
-      const { initProxy } = require('../proxy/fetch');
-      const { proxyFetch } = initProxy(context);
-
       for (const m of members) {
         const child = await resolveRepo(m);
         if (!child) continue;
         const childKey = String(child.id || child.name || '');
         if (childKey && visited.has(childKey)) continue;
-
-        if (child.type === 'proxy') {
-          const proxyKey = buildKey('maven', child.id, 'proxy', p);
-          try {
-            const cached = await storage.get(proxyKey);
-            if (cached) {
-              return {
-                ok: true,
-                data: cached,
-                contentType: getContentTypeByPath(p),
-              };
-            }
-          } catch {}
-
-          const proxied = await proxyFetch(child as any, p);
-          if (proxied?.ok && proxied.body) {
-            // Cache to storage
-            const cacheMaxAgeDays = child.config?.cacheMaxAgeDays ?? 7;
-            if (cacheMaxAgeDays > 0) {
-              await storage.save(proxyKey, proxied.body);
-            }
-
-            return {
-              ok: true,
-              data: proxied.body,
-              contentType:
-                proxied.headers?.['content-type'] || getContentTypeByPath(p),
-            };
-          }
-          continue;
-        }
 
         const res = await downloadImpl(child as any, p, visited);
         if (res?.ok) return res;
@@ -181,56 +147,61 @@ export function initStorage(context: PluginContext) {
       const proxyKey = buildKey('maven', repo.id, 'proxy', p);
 
       try {
-        const cached = await storage.get(proxyKey);
-        if (cached) {
-          return {
-            ok: true,
-            data: cached,
-            contentType: getContentTypeByPath(p),
-          };
-        }
-      } catch {}
-
-      const proxied = await proxyFetch(repo as any, p);
-      if (proxied?.ok && proxied.body) {
-        const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
-        if (cacheMaxAgeDays > 0) {
-          await storage.save(proxyKey, proxied.body);
-
-          // Index artifact if it's a jar/pom/aar
-          if (
-            context.indexArtifact &&
-            (p.endsWith('.jar') || p.endsWith('.pom') || p.endsWith('.aar'))
-          ) {
-            try {
-              const coords = parseMavenCoordsFromPath(p);
-              if (coords) {
-                // Ensure we pass the correct storageKey (proxyKey)
-                await context.indexArtifact(repo, {
-                  ok: true,
-                  id: p,
-                  metadata: {
-                    name: coords.packageName,
-                    version: coords.version,
-                    path: p,
-                    storageKey: proxyKey,
-                    size: proxied.body.length,
-                  },
-                });
-              }
-            } catch (e) {
-              // ignore
-            }
+        // Coalescing & Locking
+        const lockKey = `maven:${repo.id}:${p}`;
+        return await runWithLock(context, lockKey, async () => {
+          const cached = await storage.get(proxyKey);
+          if (cached) {
+            return {
+              ok: true,
+              data: cached,
+              contentType: getContentTypeByPath(p),
+            };
           }
-        }
-        return {
-          ok: true,
-          data: proxied.body,
-          contentType:
-            proxied.headers?.['content-type'] || getContentTypeByPath(p),
-        };
+
+          const proxied = await proxyFetch(repo as any, p);
+          if (proxied?.ok && proxied.body) {
+            const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
+            if (cacheMaxAgeDays > 0) {
+              await storage.save(proxyKey, proxied.body);
+
+              // Index artifact if it's a jar/pom/aar
+              if (
+                context.indexArtifact &&
+                (p.endsWith('.jar') || p.endsWith('.pom') || p.endsWith('.aar'))
+              ) {
+                try {
+                  const coords = parseMavenCoordsFromPath(p);
+                  if (coords) {
+                    await context.indexArtifact(repo, {
+                      ok: true,
+                      id: p,
+                      metadata: {
+                        name: coords.packageName,
+                        version: coords.version,
+                        path: p,
+                        storageKey: proxyKey,
+                        size: proxied.body.length,
+                      },
+                    });
+                  }
+                } catch (e) {
+                  // ignore
+                }
+              }
+            }
+            return {
+              ok: true,
+              data: proxied.body,
+              contentType:
+                proxied.headers?.['content-type'] || getContentTypeByPath(p),
+            };
+          }
+          return { ok: false, message: 'Not found in upstream' };
+        });
+      } catch (err) {
+        // ignore
       }
-      return { ok: false, message: 'Not found in upstream' };
     }
 
     // Hosted read
@@ -241,8 +212,8 @@ export function initStorage(context: PluginContext) {
     const algo = checksumAlgoForPath(p);
     if (algo) {
       try {
-        let existing = await storage.get(storageKeyId);
-        if (!existing) existing = await storage.get(storageKeyName);
+        let existing = await storage.get(storageKeyId).catch(() => null);
+        if (!existing) existing = await storage.get(storageKeyName).catch(() => null);
         if (existing) {
           return { ok: true, data: existing, contentType: 'text/plain' };
         }
@@ -254,8 +225,8 @@ export function initStorage(context: PluginContext) {
       const baseKeyId = buildKey('maven', repo.id, basePath);
       const baseKeyName = buildKey('maven', repo.name, basePath);
       try {
-        let base = await storage.get(baseKeyId);
-        if (!base) base = await storage.get(baseKeyName);
+        let base = await storage.get(baseKeyId).catch(() => null);
+        if (!base) base = await storage.get(baseKeyName).catch(() => null);
         if (!base) return { ok: false, message: 'Not found' };
         const sum = crypto.createHash(algo).update(base).digest('hex') + '\n';
         return { ok: true, data: Buffer.from(sum), contentType: 'text/plain' };
@@ -265,8 +236,8 @@ export function initStorage(context: PluginContext) {
     }
 
     try {
-      let data = await storage.get(storageKeyId);
-      if (!data) data = await storage.get(storageKeyName);
+      let data = await storage.get(storageKeyId).catch(() => null);
+      if (!data) data = await storage.get(storageKeyName).catch(() => null);
       if (!data) return { ok: false, message: 'Not found' };
       return {
         ok: true,
@@ -473,7 +444,7 @@ export function initStorage(context: PluginContext) {
     }
 
     const p = normalizeRepoPath(repoPath);
-    const key = buildKey('maven', repo.name, p);
+    const key = buildKey('maven', repo.id, p);
 
     const coords = parseMavenCoordsFromPath(p);
     const packageName = coords?.packageName;

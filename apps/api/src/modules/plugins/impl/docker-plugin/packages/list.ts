@@ -1,6 +1,15 @@
-/**
- * Package listing and metadata module for Docker plugin
- * Handles listPackages, getPackage, and listVersions operations
+/*
+ * Copyright (C) 2026 RavHub Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  */
 
 import type { Repository } from '../utils/types';
@@ -32,12 +41,12 @@ export async function listPackages(repo: Repository) {
         : [];
       if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
         console.debug(
-          `[LIST PACKAGES GROUP] repo=${repo.name} (id=${repo.id}), type=${repo.type}, members=${JSON.stringify(members)}`,
+          `[LIST PACKAGES GROUP] repo=${repo.name || repo.id || 'unknown'} (id=${repo.id}), type=${repo.type}, members=${JSON.stringify(members)}`,
         );
 
       if (members.length === 0) {
         console.warn(
-          `[LIST PACKAGES GROUP] WARNING: Group ${repo.name} has no members configured`,
+          `[LIST PACKAGES GROUP] WARNING: Group ${repo.name || repo.id || 'unknown'} has no members configured`,
         );
         return { ok: true, packages: [] };
       }
@@ -321,7 +330,7 @@ export async function listVersions(repo: Repository, name: string) {
           let tag = key.slice(prefix.length);
           try {
             tag = decodeURIComponent(tag);
-          } catch (e) {}
+          } catch (e) { }
 
           if (tag.includes('/')) continue;
           if (

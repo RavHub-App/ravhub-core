@@ -70,7 +70,7 @@ class ReadOnlyStorageWrapper implements StorageAdapter {
   constructor(
     private readonly adapter: StorageAdapter,
     private readonly storageType: string,
-  ) {}
+  ) { }
 
   async get(key: string): Promise<Buffer | null> {
     return this.adapter.get(key);
@@ -117,8 +117,8 @@ class ReadOnlyStorageWrapper implements StorageAdapter {
   private throwLicenseError(action: string) {
     throw new ForbiddenException(
       `Cannot ${action} ${this.storageType} storage: Enterprise license required. ` +
-        `Your existing data is still accessible in read-only mode. ` +
-        `Please renew your license to enable write operations.`,
+      `Your existing data is still accessible in read-only mode. ` +
+      `Please renew your license to enable write operations.`,
     );
   }
 }
@@ -131,7 +131,7 @@ export class StorageService implements OnModuleInit {
   private smallFilesCache: Map<string, { data: Buffer; expires: number }> =
     new Map();
 
-  constructor(private readonly redlock: RedlockService) {}
+  constructor(private readonly redlock: RedlockService) { }
 
   async onModuleInit() {
     this.adapters.clear();
@@ -382,11 +382,13 @@ export class StorageService implements OnModuleInit {
 
   // Public API delegates to adapters
   async save(key: string, data: Buffer | string) {
+    this.smallFilesCache.delete(key); // Invalidate cache
     const adapter = await this.getAdapterForKey(key);
     return adapter.save(key, data);
   }
 
   async saveStream(key: string, stream: Readable) {
+    this.smallFilesCache.delete(key); // Invalidate cache
     const adapter = await this.getAdapterForKey(key);
     if (adapter.saveStream) {
       return adapter.saveStream(key, stream);
@@ -411,6 +413,7 @@ export class StorageService implements OnModuleInit {
   }
 
   async delete(key: string) {
+    this.smallFilesCache.delete(key); // Invalidate cache
     const adapter = await this.getAdapterForKey(key);
     return adapter.delete(key);
   }
@@ -496,7 +499,7 @@ export class StorageService implements OnModuleInit {
       if (!hasLicense) {
         logger.warn(
           `Enterprise storage '${cfg.type}' requires a license. ` +
-            `Enabling READ-ONLY mode for existing data.`,
+          `Enabling READ-ONLY mode for existing data.`,
         );
         isReadOnly = true;
       }
@@ -560,13 +563,13 @@ export class StorageService implements OnModuleInit {
       const config: any = cfg.config || {};
       const driverConfig = config.bucket
         ? {
-            bucket: config.bucket,
-            region: config.region,
-            accessKey: config.accessKey,
-            secretKey: config.secretKey,
-            endpoint: config.endpoint,
-            s3ForcePathStyle: config.s3ForcePathStyle,
-          }
+          bucket: config.bucket,
+          region: config.region,
+          accessKey: config.accessKey,
+          secretKey: config.secretKey,
+          endpoint: config.endpoint,
+          s3ForcePathStyle: config.s3ForcePathStyle,
+        }
         : config;
       return this.loadEnterpriseDriver(STORAGE_TYPE.S3, driverConfig);
     }

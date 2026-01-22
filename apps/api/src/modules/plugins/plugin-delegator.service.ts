@@ -28,7 +28,7 @@ export class PluginDelegatorService {
     private readonly licenseService: LicenseService,
     private readonly redlock: RedlockService,
     private readonly artifactIndex: ArtifactIndexService,
-  ) {}
+  ) { }
 
   getPluginForRepo(repo: RepositoryEntity) {
     const manager = (repo as any).manager || repo.config?.registry || 'npm';
@@ -72,9 +72,12 @@ export class PluginDelegatorService {
       const result = await plugin.handlePut!(repo, path, req);
 
       if (result?.ok && result?.metadata) {
-        this.artifactIndex
-          .indexArtifact(repo, result, userId, path)
-          .catch(() => {});
+        // Only index if not a group (groups delegate to members which index themselves)
+        if (repo.type !== 'group') {
+          this.artifactIndex
+            .indexArtifact(repo, result, userId, path)
+            .catch(() => { });
+        }
       }
 
       return result;
@@ -96,7 +99,10 @@ export class PluginDelegatorService {
       const result = await plugin.upload!(repo, pkg);
 
       if (result?.ok && result?.metadata) {
-        this.artifactIndex.indexArtifact(repo, result, userId).catch(() => {});
+        // Only index if not a group
+        if (repo.type !== 'group') {
+          this.artifactIndex.indexArtifact(repo, result, userId).catch(() => { });
+        }
       }
 
       return result;
@@ -167,5 +173,13 @@ export class PluginDelegatorService {
     }
 
     return plugin.authenticate(repo, credentials);
+  }
+
+  async request(repo: RepositoryEntity, req: any) {
+    const plugin = this.getPluginForRepo(repo);
+    if (!plugin || typeof (plugin as any).request !== 'function') {
+      return null;
+    }
+    return (plugin as any).request(this.plugins.getPluginContext(), req);
   }
 }

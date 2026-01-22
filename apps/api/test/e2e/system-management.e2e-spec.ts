@@ -55,13 +55,13 @@ describe('System Management E2E', () => {
     });
 
     describe('📊 System Monitor', () => {
-        it.skip('should get system metrics', async () => {
+        it('should get system metrics', async () => {
             const res = await request(context.app.getHttpServer())
                 .get('/api/monitor/metrics')
                 .set('Authorization', `Bearer ${authToken}`)
                 .expect(200);
 
-            expect(res.body).toHaveProperty('ok');
+            expect(res.body).toHaveProperty('uptime');
         });
 
         it.skip('should get system status', async () => {
@@ -98,22 +98,21 @@ describe('System Management E2E', () => {
     });
 
     describe('🧹 Cleanup Operations', () => {
-        it.skip('should get cleanup status', async () => {
+        it('should list cleanup policies', async () => {
             const res = await request(context.app.getHttpServer())
-                .get('/api/cleanup/status')
+                .get('/api/cleanup/policies')
                 .set('Authorization', `Bearer ${authToken}`)
                 .expect(200);
 
-            expect(res.body).toHaveProperty('ok');
+            expect(Array.isArray(res.body)).toBeTruthy();
+        });
+
+        it.skip('should get cleanup status', async () => {
+            // Endpoint does not exist
         });
 
         it.skip('should trigger cleanup', async () => {
-            const res = await request(context.app.getHttpServer())
-                .post('/api/cleanup/run')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
-
-            expect(res.body).toHaveProperty('ok');
+            // Endpoint does not exist (requires policy id)
         });
     });
 });

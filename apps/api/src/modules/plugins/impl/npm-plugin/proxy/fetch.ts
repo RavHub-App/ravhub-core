@@ -16,6 +16,7 @@ import { PluginContext, Repository } from '../utils/types';
 import { initMetadata } from './metadata';
 import { proxyFetchWithAuth } from '../../../../../plugins-core/proxy-helper';
 import { buildKey } from '../utils/key-utils';
+import { runWithLock } from '../../../../../plugins-core/lock-helper';
 
 export function initProxy(context: PluginContext) {
   const { storage } = context;
@@ -35,7 +36,7 @@ export function initProxy(context: PluginContext) {
           }
         }
         cleanPath = p.startsWith('/') ? p.slice(1) : p;
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const storagePath =
@@ -45,24 +46,37 @@ export function initProxy(context: PluginContext) {
     const proxyKey = buildKey('npm', repo.id, 'proxy', storagePath);
     const cacheEnabled = repo.config?.cacheEnabled !== false;
 
-    // 1. Try persistent storage first
-    try {
-      const cachedData = await storage.get(proxyKey);
-      if (cachedData && cacheEnabled) {
-        if (storagePath.endsWith('.tgz')) {
-          // Revalidate tarballs with HEAD request
-          try {
-            const headRes = await proxyFetchWithAuth(repo, url, {
-              method: 'HEAD',
-              timeoutMs: 5000,
-            });
-            if (headRes.ok && headRes.headers) {
-              const contentLength = headRes.headers['content-length'];
-              if (
-                contentLength &&
-                parseInt(contentLength) !== cachedData.length
-              ) {
-                // Fall through to fetch from upstream
+    const lockKey = `npm:proxy:${storagePath}`;
+    return await runWithLock(context, lockKey, async () => {
+      // 1. Try persistent storage first (Inside lock to handle seconder)
+      try {
+        const cachedData = await storage.get(proxyKey);
+        if (cachedData && cacheEnabled) {
+          if (storagePath.endsWith('.tgz')) {
+            // Revalidate tarballs with HEAD request (fast)
+            try {
+              const headRes = await proxyFetchWithAuth(repo, url, {
+                method: 'HEAD',
+                timeoutMs: 5000,
+              });
+              if (headRes.ok && headRes.headers) {
+                const contentLength = headRes.headers['content-length'];
+                if (
+                  contentLength &&
+                  parseInt(contentLength) !== cachedData.length
+                ) {
+                  // Fall through to fetch from upstream
+                } else {
+                  return {
+                    ok: true,
+                    status: 200,
+                    headers: {
+                      'content-type': 'application/octet-stream',
+                      'x-proxy-cache': 'HIT',
+                    },
+                    body: cachedData,
+                  };
+                }
               } else {
                 return {
                   ok: true,
@@ -74,10 +88,7 @@ export function initProxy(context: PluginContext) {
                   body: cachedData,
                 };
               }
-            } else {
-              console.warn(
-                `[NPM] Revalidation failed (status ${headRes.status}). Serving cache as fallback.`,
-              );
+            } catch (revalErr) {
               return {
                 ok: true,
                 status: 200,
@@ -88,87 +99,84 @@ export function initProxy(context: PluginContext) {
                 body: cachedData,
               };
             }
-          } catch (revalErr) {
-            console.warn(
-              `[NPM] Revalidation error: ${revalErr}. Serving cache as fallback.`,
-            );
-            return {
-              ok: true,
-              status: 200,
-              headers: {
-                'content-type': 'application/octet-stream',
-                'x-proxy-cache': 'HIT',
-              },
-              body: cachedData,
-            };
+          } else if (storagePath.endsWith('package.json')) {
+            // Check TTL for mutable metadata
+            const ttlSeconds = repo.config?.cacheTtlSeconds ?? 300;
+            const meta = typeof storage.getMetadata === 'function'
+              ? await storage.getMetadata(proxyKey).catch(() => null)
+              : null;
+            if (meta) {
+              const ageSeconds = (Date.now() - meta.mtime.getTime()) / 1000;
+              if (ageSeconds <= ttlSeconds) {
+                let body = cachedData;
+                try {
+                  body = processMetadata(repo, cachedData);
+                } catch (e) {
+                  // ignore
+                }
+                return {
+                  ok: true,
+                  status: 200,
+                  headers: {
+                    'content-type': 'application/json',
+                    'x-proxy-cache': 'HIT',
+                  },
+                  body,
+                };
+              }
+            }
           }
-        } else if (storagePath.endsWith('package.json')) {
-          let body = cachedData;
-          try {
-            body = processMetadata(repo, cachedData);
-          } catch (e) {
-            console.error('[NPM] Failed to process cached metadata:', e);
-          }
-          return {
-            ok: true,
-            status: 200,
-            headers: {
-              'content-type': 'application/json',
-              'x-proxy-cache': 'HIT',
-            },
-            body,
-          };
         }
+      } catch (e) { }
+
+      // 2. Fetch from upstream
+      try {
+        const cleanUrl = url.split('?')[0].split('#')[0];
+        const result = await proxyFetchWithAuth(repo, cleanUrl);
+
+        if (result.ok && (result as any).body) {
+          const isMetadata =
+            result.headers &&
+            result.headers['content-type']?.includes('application/json');
+
+          // 3. Cache to persistent storage (ORIGINAL data)
+          const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
+          if (cacheEnabled && cacheMaxAgeDays > 0 && (result as any).body) {
+            let dataToSave: any = (result as any).body;
+            if (typeof dataToSave === 'object' && !Buffer.isBuffer(dataToSave)) {
+              dataToSave = JSON.stringify(dataToSave);
+            }
+            await storage.save(proxyKey, dataToSave);
+
+            // Index artifact if it's a tarball
+            if (storagePath.endsWith('.tgz') && context.indexArtifact) {
+              try {
+                await context.indexArtifact(repo, {
+                  ok: true,
+                  id: storagePath,
+                  metadata: {
+                    storageKey: proxyKey,
+                    size: Buffer.isBuffer(dataToSave)
+                      ? dataToSave.length
+                      : Buffer.byteLength(String(dataToSave)),
+                    path: storagePath,
+                  },
+                });
+              } catch (e) { }
+            }
+          }
+
+          // Process metadata for the response
+          if (isMetadata && (result as any).body) {
+            (result as any).body = processMetadata(repo, (result as any).body);
+          }
+        }
+
+        return result;
+      } catch (err: any) {
+        return { ok: false, message: String(err) };
       }
-    } catch (e) {}
-
-    // 2. Fetch from upstream
-    try {
-      const cleanUrl = url.split('?')[0].split('#')[0];
-      const result = await proxyFetchWithAuth(repo, cleanUrl);
-
-      if (result.ok && 'body' in result) {
-        const isMetadata =
-          result.headers &&
-          result.headers['content-type']?.includes('application/json');
-
-        // 3. Cache to persistent storage (ORIGINAL data)
-        const cacheMaxAgeDays = repo.config?.cacheMaxAgeDays ?? 7;
-        if (cacheEnabled && cacheMaxAgeDays > 0 && result.body) {
-          let dataToSave: any = result.body;
-          if (typeof dataToSave === 'object' && !Buffer.isBuffer(dataToSave)) {
-            dataToSave = JSON.stringify(dataToSave);
-          }
-          await storage.save(proxyKey, dataToSave);
-
-          // Index artifact if it's a tarball
-          if (storagePath.endsWith('.tgz') && context.indexArtifact) {
-            try {
-              await context.indexArtifact(repo, {
-                ok: true,
-                id: storagePath,
-                metadata: {
-                  storageKey: proxyKey,
-                  size: Buffer.isBuffer(dataToSave)
-                    ? dataToSave.length
-                    : Buffer.byteLength(String(dataToSave)),
-                  path: storagePath,
-                },
-              });
-            } catch (e) {}
-          }
-        }
-
-        // Process metadata for the response
-        if (isMetadata && result.body) {
-          result.body = processMetadata(repo, result.body);
-        }
-      }
-
-      return result;
-    } catch (err: any) {
-      return { ok: false, message: String(err) };
-    }
+    });
   };
 
   return { proxyFetch };

@@ -23,7 +23,7 @@ export class Migration1733540000000 implements MigrationInterface {
                 gen_random_uuid(),
                 'default-filesystem',
                 'filesystem',
-                '{"basePath": "/data/storage/repositories"}'::jsonb,
+                '{}'::jsonb,
                 true,
                 NOW(),
                 NOW()

@@ -46,7 +46,7 @@ export class UnifiedPermissionGuard implements CanActivate {
     private reflector: Reflector,
     private repoPermissionService?: RepositoryPermissionService,
     private reposService?: ReposService,
-  ) {}
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Get required permissions from @Permissions() decorator
@@ -97,17 +97,22 @@ export class UnifiedPermissionGuard implements CanActivate {
       }
     }
 
+    const url = req.originalUrl || req.url || '';
+
     // Allow unauthenticated GET to /repository for readiness checks
-    if (this.isReadinessCheck(req)) {
-      //   this.logger.debug(
-      //     'UnifiedPermissionGuard: allowing unauthenticated GET /repository for readiness',
-      //   );
+    // ALSO allow /v2/token without auth as it handles its own plugin-level auth
+    // ALLOW /v2/ registry requests to bypass global RBAC as they handle their 
+    // own token-based auth at the plugin level.
+    if (this.isReadinessCheck(req) || this.isDockerTokenRequest(req) || this.isDockerRegistryRequest(req)) {
+      if (process.env.DEBUG_GUARD === 'true') {
+        this.logger.debug(`UnifiedPermissionGuard: Bypassing for ${url}`);
+      }
       return true;
     }
 
     // User must be authenticated
     if (!req.user || !req.user.id) {
-      this.logger.debug('UnifiedPermissionGuard: no authenticated user found');
+      this.logger.debug(`UnifiedPermissionGuard: no authenticated user found for ${url}`);
       throw new UnauthorizedException('Authentication required');
     }
 
@@ -205,6 +210,37 @@ export class UnifiedPermissionGuard implements CanActivate {
         req.url &&
         typeof req.url === 'string' &&
         /(^|\/)repository(\/|$)/.test(req.url)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if request is for a Docker token
+   */
+  private isDockerTokenRequest(req: any): boolean {
+    try {
+      const url = req.originalUrl || req.url || '';
+      return (
+        url &&
+        typeof url === 'string' &&
+        /\/v2\/token(\/|\?|$)/.test(url)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private isDockerRegistryRequest(req: any): boolean {
+    try {
+      const url = req.originalUrl || req.url || '';
+      // Matches /api/repository/:id/v2/... but also direct registry access
+      // Pattern: must contain /v2/ and be a subpath of a repository
+      return (
+        url &&
+        typeof url === 'string' &&
+        /\/v2\//.test(url)
       );
     } catch {
       return false;

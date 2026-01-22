@@ -69,11 +69,11 @@ describe('Repository Advanced Features E2E', () => {
             expect(Array.isArray(res.body.packages)).toBeTruthy();
         });
 
-        it.skip('should scan repository artifacts', async () => {
+        it('should scan repository artifacts', async () => {
             const res = await request(context.app.getHttpServer())
                 .post(`/api/repository/${testRepoId}/scan`)
                 .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
+                .expect(201); // Scan creation usually returns 201
 
             expect(res.body).toHaveProperty('ok');
         });

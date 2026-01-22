@@ -27,32 +27,57 @@ export interface TestContext {
     authToken: string;
 }
 
-export async function setupTestApp(): Promise<TestContext> {
+export interface TestOptions {
+    useRealPlugins?: boolean;
+}
+
+export async function setupTestApp(options: TestOptions = {}): Promise<TestContext> {
     let adminUserId: string;
 
     const dbFile = `./test-e2e-${process.env.JEST_WORKER_ID || '1'}.sqlite`;
+    const storagePath = `./test-storage-${process.env.JEST_WORKER_ID || '1'}`;
     process.env.DB_TYPE = 'sqlite';
-    process.env.POSTGRES_DB = dbFile; // Use file db to share connection between AppDataSource and TypeORM module
+    process.env.POSTGRES_DB = dbFile;
     process.env.TYPEORM_SYNC = 'true';
+    process.env.STORAGE_PATH = storagePath;
 
-    // Clean up previous test db
+    // Clean up
     const fs = require('fs');
     if (fs.existsSync(dbFile)) {
         try { fs.unlinkSync(dbFile); } catch (e) { }
     }
+    if (fs.existsSync(storagePath)) {
+        try { fs.rmSync(storagePath, { recursive: true, force: true }); } catch (e) { }
+    }
+
     process.env.JWT_SECRET = 'test-secret';
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
+    const builder = Test.createTestingModule({
         imports: [AppModule],
-    })
-        .overrideProvider(PluginManagerService)
-        .useValue({
-            onModuleInit: jest.fn(),
-            startJobProcessor: jest.fn(),
-            getUpstreamPingStatus: jest.fn().mockReturnValue(null),
-            triggerUpstreamPingForRepo: jest.fn(),
-            getPluginForRepo: jest.fn().mockReturnValue(null),
-        })
+    });
+
+    if (!options.useRealPlugins) {
+        builder.overrideProvider(PluginManagerService)
+            .useValue({
+                onModuleInit: jest.fn(),
+                startJobProcessor: jest.fn(),
+                getUpstreamPingStatus: jest.fn().mockReturnValue(null),
+                triggerUpstreamPingForRepo: jest.fn(),
+                getPluginForRepo: jest.fn().mockReturnValue(null),
+                getCacheStats: jest.fn().mockResolvedValue({ byRepository: {}, total: 0 }),
+                clearProxyCache: jest.fn().mockResolvedValue(true),
+                cleanupProxyCache: jest.fn().mockResolvedValue(0),
+                clearAllProxyCache: jest.fn().mockResolvedValue(0),
+                proxyFetch: jest.fn().mockResolvedValue({ ok: true, status: 200, body: Buffer.from('') }),
+                authenticate: jest.fn().mockResolvedValue({ ok: true, token: 'mock-token', user: { username: 'mock' } }),
+                upload: jest.fn().mockResolvedValue({ ok: true }),
+                download: jest.fn().mockResolvedValue({ ok: true, url: 'http://mock' }),
+                listVersions: jest.fn().mockResolvedValue([]),
+                handlePut: jest.fn().mockResolvedValue({ ok: true }),
+            });
+    }
+
+    const moduleFixture: TestingModule = await builder
         .overrideProvider(ProxyCacheJobService)
         .useValue({
             startJobProcessor: jest.fn(),
@@ -97,6 +122,14 @@ export async function setupTestApp(): Promise<TestContext> {
 
     await app.init();
 
+    // Disable upstream ping scheduler during tests to avoid leaks
+    if (process.env.NODE_ENV === 'test') {
+        const pm = moduleFixture.get(PluginManagerService);
+        if (pm && (pm as any).pingTimeout) clearTimeout((pm as any).pingTimeout);
+        const ups = moduleFixture.get(require('../../src/modules/plugins/upstream-ping.service').UpstreamPingService);
+        if (ups) ups.onModuleDestroy();
+    }
+
     await seedDefaults();
 
     const usersService = moduleFixture.get(UsersService);
@@ -122,7 +155,7 @@ export async function setupTestApp(): Promise<TestContext> {
     return {
         app,
         adminUserId,
-        authToken: '', // Will be set after login
+        authToken: '',
     };
 }
 

@@ -108,7 +108,9 @@ export async function seedDefaults() {
     if (!existingDefault) {
       let type = 'filesystem';
       let key = 'default-fs';
-      let config: any = {};
+      let config: any = process.env.STORAGE_PATH
+        ? { basePath: process.env.STORAGE_PATH }
+        : {};
 
       if (process.env.STORAGE_TYPE === 's3' || process.env.S3_BUCKET) {
         type = 's3';

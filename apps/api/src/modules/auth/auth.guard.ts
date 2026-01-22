@@ -31,10 +31,16 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private auth: AuthService,
     @InjectRepository(User) private userRepo: Repository<User>,
-  ) {}
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
+    const url = req.originalUrl || req.url || '';
+    // Bypass if it's a Docker registry request - they have their own tokens
+    // which are validated at the controller/plugin level.
+    if (url.includes('/v2/')) {
+      return true;
+    }
     const headers = req.headers || {};
 
     if (headers['authorization']) {

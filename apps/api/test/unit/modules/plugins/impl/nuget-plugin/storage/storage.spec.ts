@@ -28,7 +28,7 @@ describe('NuGetPlugin Storage', () => {
   const createMockContext = () => ({
     storage: {
       save: jest.fn().mockResolvedValue({ size: 100, contentHash: 'abc' }),
-      get: jest.fn(),
+      get: jest.fn().mockResolvedValue(null),
       exists: jest.fn(),
       saveStream: jest.fn(),
       list: jest.fn().mockResolvedValue([]),

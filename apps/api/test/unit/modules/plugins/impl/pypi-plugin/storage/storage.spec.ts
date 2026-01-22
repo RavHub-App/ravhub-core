@@ -257,8 +257,8 @@ describe('PyPIPlugin Storage', () => {
             ]);
 
             context.storage.get.mockImplementation((key: string) => {
-                if (key.endsWith('.whl')) return Buffer.from('whl content');
-                return null;
+                if (key.endsWith('.whl')) return Promise.resolve(Buffer.from('whl content'));
+                return Promise.resolve(null);
             });
 
             const result = await storageMethods.download(repo, 'flask', '2.0.0');
