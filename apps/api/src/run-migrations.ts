@@ -31,7 +31,19 @@ async function runMigrations() {
     await AppDataSource.initialize();
     console.log('✓ Data source initialized successfully\n');
 
-    const migrationsDir = path.join(__dirname, 'migrations');
+    let migrationsDir = path.join(__dirname, 'migrations');
+    const srcDir = path.join(__dirname, 'src', 'migrations');
+
+    if (fs.existsSync(srcDir)) {
+      const defaultCount = fs.existsSync(migrationsDir) ? fs.readdirSync(migrationsDir).length : 0;
+      const srcCount = fs.readdirSync(srcDir).length;
+
+      if (srcCount > defaultCount) {
+        migrationsDir = srcDir;
+      }
+    }
+
+    console.log(`Scanning for migrations in: ${migrationsDir}`);
     const files = fs
       .readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.ts') || f.endsWith('.js'))
@@ -80,7 +92,7 @@ async function runMigrations() {
     );
 
     const executedTimestamps = new Set(
-      executedMigrations.map((m: any) => m.timestamp),
+      executedMigrations.map((m: any) => m.timestamp.toString()),
     );
 
     console.log(`\n✓ ${executedMigrations.length} migrations already executed`);

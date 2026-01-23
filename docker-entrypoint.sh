@@ -42,7 +42,11 @@ if [ "${NODE_ENV:-development}" = "test" ] || [ "${NODE_ENV:-production}" = "pro
 
 	echo "[entrypoint] Starting API..."
     # Run compiled NestJS directly (keeps runtime deps simple)
-    exec node /workspace/api/dist/main
+    if [ -f "/workspace/api/dist/main.js" ]; then
+        exec node /workspace/api/dist/main
+    else
+        exec node /workspace/api/dist/src/main
+    fi
     
 else
 	exec pnpm run start:dev

@@ -674,7 +674,7 @@ export class DockerCompatController {
       if (out.storageKey) {
         console.debug('[MANIFEST DEBUG] Using storageKey', out.storageKey);
         try {
-          const streamRes = await this.storage.getStream(out.storageKey);
+          const streamRes = await this.storage.getStream(out.storageKey) as any;
           if (!streamRes) return res.status(404).json({ ok: false, message: 'Stream not available' });
 
           const { stream, size, contentType } = streamRes;
@@ -807,7 +807,7 @@ export class DockerCompatController {
 
     if (result.storageKey) {
       try {
-        const streamRes = await this.storage.getStream(result.storageKey);
+        const streamRes = await this.storage.getStream(result.storageKey) as any;
         if (!streamRes) return res.status(404).json({ ok: false, message: 'Stream not available' });
         // Use 'any' cast to access stream/size/contentType
         const { stream, size, contentType } = streamRes;
@@ -1309,7 +1309,7 @@ export class DockerCompatController {
 
     if (result.storageKey) {
       try {
-        const streamRes = await this.storage.getStream(result.storageKey);
+        const streamRes = await this.storage.getStream(result.storageKey) as any;
         if (!streamRes) return res.status(404).json({ ok: false, message: 'Stream not available' });
         // Use 'any' cast to access stream/size/contentType
         const { stream, size, contentType } = streamRes;

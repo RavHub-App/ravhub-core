@@ -334,7 +334,7 @@ export function initStorage(context: PluginContext) {
           // Upstream: https://pypi.org/simple/<pkgName>/
           const target = `${upstream.replace(/\/$/, '')}/simple/${pkgName}/`;
           try {
-            const res = await proxyFetchWithAuth(repo, target);
+            const res = await proxyFetchWithAuth(repo, target) as any;
             if (res.ok && res.body) {
 
               return {

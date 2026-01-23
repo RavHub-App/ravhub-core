@@ -29,7 +29,7 @@ RUN pnpm install --frozen-lockfile
 WORKDIR /workspace/apps/api
 
 # Build the API app
-RUN pnpm build
+RUN pnpm build && npx tsc src/run-migrations.ts --outDir dist --esModuleInterop --skipLibCheck --experimentalDecorators --emitDecoratorMetadata --module commonjs --target ES2023
 
 # Remove declaration files to avoid migration runner picking them up as duplicates
 RUN find dist -type f -name "*.d.ts" -delete
@@ -72,6 +72,7 @@ WORKDIR /workspace
 
 # Install dependencies and setup non-root user permissions
 RUN apt-get update && apt-get install -y procps postgresql-client nginx --no-install-recommends \
+    && npm install -g pnpm@latest \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /data/storage /var/log/nginx /var/lib/nginx /workspace/api /workspace/web \
     && sed -i 's|/run/nginx.pid|/tmp/nginx.pid|g' /etc/nginx/nginx.conf \

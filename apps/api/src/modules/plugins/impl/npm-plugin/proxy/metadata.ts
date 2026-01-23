@@ -50,9 +50,9 @@ export function initMetadata(context: PluginContext) {
     }
 
     if (json.versions) {
-      for (const version of Object.values(json.versions)) {
+      for (const version of Object.values(json.versions) as any[]) {
         if (version.dist && version.dist.tarball) {
-          const tarball = version.dist.tarball;
+          const tarball = version.dist.tarball as string;
           // If tarball starts with upstreamUrl, replace it
           if (tarball.startsWith(upstreamUrl)) {
             version.dist.tarball = tarball.replace(upstreamUrl, proxyUrl);
@@ -72,7 +72,7 @@ export function initMetadata(context: PluginContext) {
               }
 
               version.dist.tarball = `${proxyUrl}/${path}`;
-            } catch (e) {}
+            } catch (e) { }
           }
         }
       }
