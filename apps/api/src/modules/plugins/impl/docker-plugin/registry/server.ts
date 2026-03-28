@@ -83,9 +83,18 @@ export async function startRegistryForRepo(
           (req.method === 'GET' || req.method === 'POST') &&
           /^\/v2\/token/.test(pathname)
         ) {
-          const apiBase = (
+          const apiBaseFromEnv = (
             process.env.API_URL || 'http://localhost:3000'
           ).replace(/\/$/, '');
+
+          // If a custom host (reverse proxy) is defined for this repo, we use that BASE
+          // so that the token URL doesn't leak internal IP/protocol.
+          const customHost = repo?.config?.docker?.host;
+          const customProtocol = repo?.config?.docker?.protocol || 'https';
+          const apiBase = customHost
+            ? `${customProtocol}://${customHost}`
+            : apiBaseFromEnv;
+
           const apiUrl = `${apiBase}/repository/${repo.id}${req.url}`;
           d('[TOKEN PROXY]', {
             method: req.method,
@@ -94,7 +103,9 @@ export async function startRegistryForRepo(
           });
 
           try {
-            const parsedUrl = new URL(apiUrl);
+            // ALWAYS Proxy to the REAL internal API, regardless of the public URL
+            const internalApiUrl = `${apiBaseFromEnv}/repository/${repo.id}${req.url}`;
+            const parsedUrl = new URL(internalApiUrl);
             const options = {
               hostname: parsedUrl.hostname,
               port: parsedUrl.port || 3000,
