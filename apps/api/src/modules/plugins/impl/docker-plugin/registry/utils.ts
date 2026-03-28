@@ -61,8 +61,11 @@ export function sendAuthChallenge(
 
   // service is usually the host:port that docker sees
   const service = customHost ? host : `${host}:${port}`;
-  // realm must be the full token URL. If a custom host (reverse proxy) is used, we use it without port
-  const realm = customHost ? `${proto}://${host}/v2/token` : `${proto}://${host === '0.0.0.0' ? 'localhost' : host}:${port}/v2/token`;
+
+  // realm must be the full token URL.
+  // CRITICAL: If no custom host, we must use a resolvable host (not 0.0.0.0) 
+  const displayHost = customHost ? host : (host === '0.0.0.0' ? 'localhost' : host);
+  const realm = customHost ? `${proto}://${host}/v2/token` : `${proto}://${displayHost}:${port}/v2/token`;
 
   const challengeHeader = `Bearer realm="${realm}",service="${service}",scope="repository:${name}:${action}"`;
 

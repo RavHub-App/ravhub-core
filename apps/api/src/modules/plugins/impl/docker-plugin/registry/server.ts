@@ -193,7 +193,7 @@ export async function startRegistryForRepo(
               res.end(JSON.stringify({ ok: true }));
               return;
             } catch (e) {
-              return sendAuthChallenge(res, '', 'pull', 401, undefined, repo);
+              return sendAuthChallenge(res, '', 'pull', 401, repo);
             }
           }
 
@@ -213,7 +213,7 @@ export async function startRegistryForRepo(
           }
 
           // No auth or invalid auth - send challenge to inform Docker that auth is required
-          return sendAuthChallenge(res, '', 'pull', 401, undefined, repo);
+          return sendAuthChallenge(res, '', 'pull', 401, repo);
         }
 
         // v1 ping
@@ -282,7 +282,7 @@ export async function startRegistryForRepo(
               );
             };
             if (!fastAllowFromRoles(req, 'push')) {
-              return sendAuthChallenge(res, name, 'push', undefined, repo);
+              return sendAuthChallenge(res, name, 'push', 401, repo);
             }
           } else {
             const allowed = checkTokenAllows(
@@ -299,7 +299,7 @@ export async function startRegistryForRepo(
               reason: allowed.reason,
             });
             if (!allowed.allowed) {
-              return sendAuthChallenge(res, name, 'push', 403, undefined, repo);
+              return sendAuthChallenge(res, name, 'push', 403, repo);
             }
           }
           // Auth passed or allowed by roles, handle upload initiation
@@ -381,7 +381,7 @@ export async function startRegistryForRepo(
               );
             };
             if (!fastAllowFromRoles(req, 'push')) {
-              return sendAuthChallenge(res, name, 'push', undefined, repo);
+              return sendAuthChallenge(res, name, 'push', 401, repo);
             }
           }
           const allowed = checkTokenAllows(
@@ -390,7 +390,7 @@ export async function startRegistryForRepo(
             'push',
           );
           if (!allowed.allowed) {
-            return sendAuthChallenge(res, name, 'push', 403, undefined, repo);
+            return sendAuthChallenge(res, name, 'push', 403, repo);
           }
         }
         if ((req.method === 'POST' || req.method === 'PATCH') && m) {
@@ -458,7 +458,7 @@ export async function startRegistryForRepo(
               );
             };
             if (!fastAllowFromRoles(req, 'push')) {
-              return sendAuthChallenge(res, name, 'push', undefined, repo);
+              return sendAuthChallenge(res, name, 'push', 401, repo);
             }
           }
           const allowed = checkTokenAllows(
@@ -467,7 +467,7 @@ export async function startRegistryForRepo(
             'push',
           );
           if (!allowed.allowed) {
-            return sendAuthChallenge(res, name, 'push', 403, undefined, repo);
+            return sendAuthChallenge(res, name, 'push', 403, repo);
           }
         }
         if (req.method === 'PUT' && m) {
@@ -578,7 +578,7 @@ export async function startRegistryForRepo(
                 );
               };
               if (!fastAllowFromRoles(req, 'push')) {
-                return sendAuthChallenge(res, name, 'push', undefined, repo);
+                return sendAuthChallenge(res, name, 'push', 401, repo);
               }
             } else {
               const allowed = checkTokenAllows(
@@ -587,7 +587,7 @@ export async function startRegistryForRepo(
                 'push',
               );
               if (!allowed.allowed) {
-                return sendAuthChallenge(res, name, 'push', 403, undefined, repo);
+                return sendAuthChallenge(res, name, 'push', 403, repo);
               }
             }
 
