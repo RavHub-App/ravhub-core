@@ -44,14 +44,14 @@ export const configSchema = {
                 type: 'string',
                 title: 'Custom registry host',
                 description:
-                  'External host used to build the pull URL for this registry. If not set, global REGISTRY_HOST will be used.',
+                  'Base hostname/IP for this registry. If you use a reverse proxy, put your domain here (e.g., registry.example.com). If set, the automatic port suffix will be omitted unless you include it manually (e.g., myhost.com:9000).',
                 default: '',
               },
               protocol: {
                 type: 'string',
                 title: 'Custom registry protocol',
                 description:
-                  'External protocol used to build the pull URL for this registry. If not set, global REGISTRY_PROTOCOL will be used.',
+                  'Communication protocol (http/https). If set, this overrides the global configuration. Recommended: https for production reverse proxies.',
                 enum: ['', 'http', 'https'],
                 default: '',
               },
@@ -96,14 +96,14 @@ export const configSchema = {
                 type: 'string',
                 title: 'Custom registry host',
                 description:
-                  'External host used to build the pull URL for this registry. If not set, global REGISTRY_HOST will be used.',
+                  'Base hostname/IP for this registry. If you use a reverse proxy, put your domain here (e.g., registry.example.com). If set, the automatic port suffix will be omitted unless you include it manually (e.g., myhost.com:9000).',
                 default: '',
               },
               protocol: {
                 type: 'string',
                 title: 'Custom registry protocol',
                 description:
-                  'External protocol used to build the pull URL for this registry. If not set, global REGISTRY_PROTOCOL will be used.',
+                  'Communication protocol (http/https). If set, this overrides the global configuration. Recommended: https for production reverse proxies.',
                 enum: ['', 'http', 'https'],
                 default: '',
               },
@@ -224,14 +224,14 @@ export const configSchema = {
                 type: 'string',
                 title: 'Custom registry host',
                 description:
-                  'External host used to build the pull URL for this registry. If not set, global REGISTRY_HOST will be used.',
+                  'Base hostname/IP for this registry. If you use a reverse proxy, put your domain here (e.g., registry.example.com). If set, the automatic port suffix will be omitted unless you include it manually (e.g., myhost.com:9000).',
                 default: '',
               },
               protocol: {
                 type: 'string',
                 title: 'Custom registry protocol',
                 description:
-                  'External protocol used to build the pull URL for this registry. If not set, global REGISTRY_PROTOCOL will be used.',
+                  'Communication protocol (http/https). If set, this overrides the global configuration. Recommended: https for production reverse proxies.',
                 enum: ['', 'http', 'https'],
                 default: '',
               },
