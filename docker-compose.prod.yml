@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "80:80"        # Web Interface & API Proxy (port 80)
+      - "${CORE_HTTP_PORT:-8080}:80"
       - "5000-5100:5000-5100" # Docker Registries (direct access)
     environment:
       - NODE_ENV=production
