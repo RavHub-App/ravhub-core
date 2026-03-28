@@ -484,7 +484,7 @@ export async function startRegistryForRepo(
                 if (parsedJson?.data)
                   buf = Buffer.from(parsedJson.data, 'base64');
               }
-            } catch (e) {}
+            } catch (e) { }
           }
 
           const out = await plugin.finalizeUpload?.(

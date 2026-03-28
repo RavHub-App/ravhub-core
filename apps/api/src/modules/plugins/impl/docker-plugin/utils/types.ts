@@ -48,6 +48,9 @@ export interface DockerConfig {
   requireAuth?: boolean;
   auth?: AuthConfig;
   allowRedeploy?: boolean;
+  host?: string;
+  protocol?: string;
+  [key: string]: any;
 }
 
 /**
