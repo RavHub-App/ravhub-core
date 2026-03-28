@@ -89,18 +89,10 @@ async function bootstrap() {
   });
 
   app.use((req: any, res: any, next: any) => {
-    if (
-      req.method === 'PUT' &&
-      (req.path.startsWith('/repository') ||
-        req.path.startsWith('/repositories'))
-    ) {
-      next();
-    } else {
-      express.json({ limit: '100mb' })(req, res, (err) => {
-        if (err) return next(err);
-        express.urlencoded({ extended: true, limit: '100mb' })(req, res, next);
-      });
-    }
+    express.json({ limit: '100mb' })(req, res, (err) => {
+      if (err) return next(err);
+      express.urlencoded({ extended: true, limit: '100mb' })(req, res, next);
+    });
   });
 
   app.enableShutdownHooks();
