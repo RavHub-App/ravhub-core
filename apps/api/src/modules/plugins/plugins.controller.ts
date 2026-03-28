@@ -25,12 +25,10 @@ import {
 } from '@nestjs/common';
 import { PluginsService } from './plugins.service';
 import { Response } from 'express';
-import * as path from 'path';
-import * as fs from 'fs';
 
 @Controller('plugins')
 export class PluginsController {
-  constructor(private readonly service: PluginsService) {}
+  constructor(private readonly service: PluginsService) { }
 
   @Get()
   list() {
@@ -44,26 +42,9 @@ export class PluginsController {
       throw new HttpException('Plugin not found', HttpStatus.NOT_FOUND);
     }
 
-    const possiblePaths = [
-      path.join(__dirname, 'impl', `${key}-plugin`, 'icon.png'),
-      path.join(__dirname, '..', 'impl', `${key}-plugin`, 'icon.png'),
-      path.join(
-        __dirname,
-        '..',
-        '..',
-        'src',
-        'modules',
-        'plugins',
-        'impl',
-        `${key}-plugin`,
-        'icon.png',
-      ),
-    ];
-
-    for (const iconPath of possiblePaths) {
-      if (fs.existsSync(iconPath)) {
-        return res.sendFile(iconPath);
-      }
+    const iconPath = this.service.getIconPath(key);
+    if (iconPath) {
+      return res.sendFile(iconPath);
     }
 
     throw new HttpException('Icon not found', HttpStatus.NOT_FOUND);

@@ -308,22 +308,49 @@ export class PluginsService implements OnModuleInit {
   list() {
     return Array.from(this.loaded.values()).map((p) => {
       const key = p.metadata.key;
-
-      const possibleIconPaths = [
-        path.join(__dirname, 'impl', `${key}-plugin`, 'icon.png'),
-        path.join(__dirname, '..', 'impl', `${key}-plugin`, 'icon.png'),
-      ];
-
-      const iconExists = possibleIconPaths.some((p) => fs.existsSync(p));
+      const iconPath = this.getIconPath(key);
 
       return {
         ...p.metadata,
-        icon: iconExists ? `/plugins/${key}/icon` : undefined,
+        icon: iconPath ? `/plugins/${key}/icon` : undefined,
         installed: {
           key: p.metadata.key,
         },
       };
     });
+  }
+
+  getIconPath(key: string): string | undefined {
+    const possibleIconPaths = [
+      path.resolve(__dirname, 'impl', `${key}-plugin`, 'icon.png'),
+      path.resolve(__dirname, '..', 'impl', `${key}-plugin`, 'icon.png'),
+      path.resolve(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'modules',
+        'plugins',
+        'impl',
+        `${key}-plugin`,
+        'icon.png',
+      ),
+      path.resolve(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        'src',
+        'modules',
+        'plugins',
+        'impl',
+        `${key}-plugin`,
+        'icon.png',
+      ),
+    ];
+
+    return possibleIconPaths.find((iconPath) => fs.existsSync(iconPath));
   }
 
   getInstance(key: string): IPlugin | undefined {
