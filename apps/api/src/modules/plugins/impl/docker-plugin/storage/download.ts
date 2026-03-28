@@ -128,6 +128,14 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
             data: fetchedEarly.body,
           };
         }
+        // If upstream returned 4xx, propagate error without fallback
+        if (fetchedEarly && !fetchedEarly.ok && fetchedEarly.status >= 400 && fetchedEarly.status < 500) {
+          return {
+            ok: false,
+            status: fetchedEarly.status,
+            message: fetchedEarly.message || 'not found',
+          };
+        }
       }
     } catch (e: any) {
       console.warn('[PROXY REVALIDATE TAG ERROR]', e.message);
@@ -275,5 +283,5 @@ export async function getBlob(repo: Repository, name: string, digest: string) {
   }
   if (process.env.DEBUG_DOCKER_PLUGIN === 'true')
     console.debug('[GETBLOB] Not found in any candidate or upstream');
-  return { ok: false };
+  return { ok: false, message: 'not found' };
 }

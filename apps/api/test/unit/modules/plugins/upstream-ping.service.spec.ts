@@ -135,20 +135,15 @@ describe('UpstreamPingService (Unit)', () => {
       expect(status).toBeNull();
     });
 
-    it('should lookup repository in DB if not in cache', async () => {
-      const repo = { id: 'repo1', name: 'test-repo' };
-      mockRepoRepo.findOne.mockResolvedValue(repo);
-
-      // Populate cache for ID
+    it('should return status when queried by name (stored by pingUpstreamForRepo)', async () => {
       const status = { ts: Date.now(), ok: true, status: 200 };
+      // pingUpstreamForRepo stores by both id and name
       (service as any).upstreamPingStatus.set('repo1', status);
+      (service as any).upstreamPingStatus.set('test-repo', status);
 
-      // Query by name, should lookup ID from DB then find in cache
-      const result = await service.getUpstreamPingStatus('test-repo');
+      // Query by name should find it directly in cache
+      const result = service.getUpstreamPingStatus('test-repo');
 
-      expect(mockRepoRepo.findOne).toHaveBeenCalledWith({
-        where: [{ id: 'test-repo' }, { name: 'test-repo' }],
-      });
       expect(result).toBe(status);
     });
   });

@@ -67,6 +67,11 @@ Use `jest.mock`. Do NOT rely on real DB/Storage in Unit Tests.
    - **Fix**: Ensure EVERY `save()` is followed by an `indexArtifact()` call inside a try/catch.
 2. **Proxy Keys**: Improper key usage leads to collision.
 
+## 🚀 Production Environment
+
+- **Production Server**: `213.165.74.85`
+- **Project Path**: `/root/projects/ravhub`
+
 ## 🧑‍💻 Coding Standards (Local)
 
 1. **SOLID & Small Classes**: Keep Services focused. Break `ReposService` if it grows too large.

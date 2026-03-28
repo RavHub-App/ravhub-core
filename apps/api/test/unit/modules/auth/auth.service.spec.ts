@@ -23,6 +23,7 @@ jest.mock('jsonwebtoken');
 describe('AuthService (Unit)', () => {
   let service: AuthService;
   let usersService: jest.Mocked<UsersService>;
+  let userRepo: any;
 
   beforeEach(() => {
     usersService = {
@@ -30,7 +31,16 @@ describe('AuthService (Unit)', () => {
       update: jest.fn(),
       findOne: jest.fn(),
     } as any;
-    service = new AuthService(usersService);
+
+    userRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        getOne: jest.fn(),
+      }),
+    };
+
+    service = new AuthService(usersService, userRepo);
     process.env.JWT_SECRET = 'test-secret';
     jest.clearAllMocks();
   });
@@ -106,20 +116,24 @@ describe('AuthService (Unit)', () => {
 
   describe('validateRefreshToken', () => {
     it('should validate refresh token successfully', async () => {
-      usersService.findOne.mockResolvedValue({
-        id: '1',
-        refreshTokenHash: 'hash',
-      } as any);
+      const mockUser = { id: '1', refreshTokenHash: 'hash' };
+      userRepo.createQueryBuilder.mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockUser),
+      });
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
       const result = await service.validateRefreshToken('1', 'token');
       expect(result).toBeDefined();
     });
 
     it('should return null if token does not match', async () => {
-      usersService.findOne.mockResolvedValue({
-        id: '1',
-        refreshTokenHash: 'hash',
-      } as any);
+      const mockUser = { id: '1', refreshTokenHash: 'hash' };
+      userRepo.createQueryBuilder.mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockUser),
+      });
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
       const result = await service.validateRefreshToken('1', 'token');
       expect(result).toBeNull();

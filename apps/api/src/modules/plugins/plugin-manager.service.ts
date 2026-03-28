@@ -63,10 +63,7 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async startProxyCacheCleanupScheduler() {
-    // Delegates to ProxyCacheJobService logic if needed, or implement scheduler here
-    // Original code seemed to imply logic existed here or in JobService
-    // Assuming simple placeholder for now or existing logic.
-    // Given the context, we just keep the method signature.
+    return this.proxyCacheJobService.startProxyCacheCleanupScheduler();
   }
 
   // Delegates

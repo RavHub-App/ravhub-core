@@ -1,0 +1,59 @@
+services:
+  app:
+    image: ravhub-core-app:latest
+    ports:
+      - "80:80"
+      - "5000-5100:5000-5100"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - FRONTEND_PORT=80
+      - VITE_API_URL=/api
+      - STORAGE_TYPE=filesystem
+      - STORAGE_PATH=/data/storage
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ravhub
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_ENABLED=true
+      - JWT_SECRET=e2e-test-secret-key-change-in-production
+      - LOG_LEVEL=warn
+      - REGISTRY_HOST=0.0.0.0
+    volumes:
+      - ravhub_storage_e2e:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ravhub
+    volumes:
+      - postgres-data-e2e:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data-e2e:
+  ravhub_storage_e2e:

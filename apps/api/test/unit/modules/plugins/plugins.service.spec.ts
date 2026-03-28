@@ -36,7 +36,13 @@ describe('PluginsService - indexArtifact (Unit)', () => {
     mockStorage = {};
     mockMonitor = { increment: jest.fn() };
     mockAudit = { logSuccess: jest.fn().mockResolvedValue({}) };
-    mockRedis = {};
+    mockRedis = {
+      getClient: jest.fn().mockReturnValue({
+        get: jest.fn(),
+        set: jest.fn(),
+        del: jest.fn(),
+      }),
+    };
     mockRedlock = {};
 
     mockArtifactRepo = {

@@ -14,9 +14,9 @@ ADMIN_USER="manual-admin"
 ADMIN_PASS="password123"
 AUTH_TOKEN=""
 
-# Detect containers
-API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'ravhub-api|ravhub-app' | head -n1 || echo "ravhub-api-1")
-POSTGRES_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'ravhub-postgres|postgres' | head -n1 || echo "ravhub-postgres-1")
+# Detect containers (support both dev and e2e naming conventions)
+API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'ravhub.*app|ravhub.*api' | head -n1 || echo "ravhub-core-app-1")
+POSTGRES_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'ravhub.*postgres|postgres' | grep -v "distributed-chat" | head -n1 || echo "ravhub-core-postgres-1")
 
 echo "Setting up Manual Test Environment..."
 
@@ -32,7 +32,7 @@ echo "Using temporary base directory: $TEMP_BASE"
 
 # 0. Setup Auth
 echo "Setting up authentication..."
-HASHED_PASS=$(docker exec $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));")
+HASHED_PASS=$(docker exec $API_CONTAINER sh -c "cd /workspace/api && node -e \"const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));\"")
 
 echo "Inserting admin user into DB..."
 docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "

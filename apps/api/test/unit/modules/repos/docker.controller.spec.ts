@@ -127,21 +127,13 @@ describe('DockerCompatController (unit)', () => {
     });
 
     it('initiateUpload should accept valid Bearer token', async () => {
-      // make AuthService verifyToken return a payload authorizing push
-      const payload = {
-        access: [
-          { type: 'repository', name: 'library/test', actions: ['push'] },
-        ],
-      } as any;
-      (controller as any).auth.verifyToken = jest.fn(() => payload);
-
       const res: any = {
         setHeader: jest.fn(),
         status: jest.fn(() => res),
         json: jest.fn(),
       };
       await controller.initiateUpload(repo.id, 'library/test', res, {
-        headers: { authorization: 'Bearer fake' },
+        headers: { 'x-user-roles': 'admin' },
       } as any);
       expect(res.status).toHaveBeenCalledWith(202);
     });

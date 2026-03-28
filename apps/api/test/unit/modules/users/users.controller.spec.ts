@@ -18,6 +18,8 @@ import { UsersService } from 'src/modules/users/users.service';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import AppDataSource from 'src/data-source';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Role } from 'src/entities/role.entity';
 
 jest.mock('bcryptjs');
 jest.mock('src/data-source', () => ({
@@ -55,6 +57,10 @@ describe('UsersController', () => {
                 {
                     provide: UsersService,
                     useValue: mockUsersService,
+                },
+                {
+                    provide: getRepositoryToken(Role),
+                    useValue: mockRoleRepo,
                 },
             ],
         })

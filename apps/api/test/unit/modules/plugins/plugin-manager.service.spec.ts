@@ -16,12 +16,14 @@ import { PluginManagerService } from 'src/modules/plugins/plugin-manager.service
 import { UpstreamPingService } from 'src/modules/plugins/upstream-ping.service';
 import { PluginDelegatorService } from 'src/modules/plugins/plugin-delegator.service';
 import { ProxyCacheJobService } from 'src/modules/plugins/proxy-cache-job.service';
+import { ProxyCacheService } from 'src/modules/plugins/proxy-cache.service';
 
 describe('PluginManagerService (Unit)', () => {
   let service: PluginManagerService;
   let upstreamPingService: jest.Mocked<UpstreamPingService>;
   let pluginDelegatorService: jest.Mocked<PluginDelegatorService>;
   let proxyCacheJobService: jest.Mocked<ProxyCacheJobService>;
+  let proxyCacheService: jest.Mocked<ProxyCacheService>;
 
   beforeEach(() => {
     upstreamPingService = {
@@ -32,11 +34,13 @@ describe('PluginManagerService (Unit)', () => {
       startJobProcessor: jest.fn(),
       startProxyCacheCleanupScheduler: jest.fn(),
     } as any;
+    proxyCacheService = {} as any;
 
     service = new PluginManagerService(
       upstreamPingService,
       pluginDelegatorService,
       proxyCacheJobService,
+      proxyCacheService,
     );
   });
 
