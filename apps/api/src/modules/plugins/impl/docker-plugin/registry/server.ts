@@ -39,11 +39,15 @@ export async function startRegistryForRepo(
     // Select port
     const { port, needsPersistence } = await selectPort(opts?.port);
 
-    const host =
-      repo.config?.docker?.host || process.env.REGISTRY_HOST || 'localhost';
+    const customHost = repo.config?.docker?.host;
+    const host = customHost || process.env.REGISTRY_HOST || 'localhost';
     const proto =
       repo.config?.docker?.protocol || process.env.REGISTRY_PROTOCOL || 'http';
-    const accessUrl = `${proto}://${host}:${port}`;
+
+    // Same logic as in frontend-facing services:
+    // If a custom host (manual override) is provided, we use it exactly as is (it may or may not include a port).
+    // If no custom host, we use the auto-selected port.
+    const accessUrl = customHost ? `${proto}://${host}` : `${proto}://${host}:${port}`;
 
     // Create a small HTTP server and wire the minimal registry endpoints
     const http = require('http');

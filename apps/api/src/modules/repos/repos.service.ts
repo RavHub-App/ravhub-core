@@ -192,12 +192,19 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
           ?.list()
           .find((m) => m.key === managerInferred);
         const pluginIcon = pluginMeta?.icon ? pluginMeta.icon : undefined;
-        const host =
-          ent.config?.docker?.host || process.env.REGISTRY_HOST || 'localhost';
+        const customHost = ent.config?.docker?.host;
+        const host = customHost || process.env.REGISTRY_HOST || 'localhost';
         const proto =
           ent.config?.docker?.protocol ||
           process.env.REGISTRY_PROTOCOL ||
           'http';
+
+        // If a custom host is provided, we respect exactly what the user put there (which might include a port)
+        // If no custom host, we use the default host and the auto-assigned docker port.
+        const accessUrl = customHost
+          ? `${proto}://${host}`
+          : `${proto}://${host}:${dockerPort}`;
+
         return {
           id: ent.id,
           name: ent.name,
@@ -205,7 +212,7 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
           manager: managerInferred,
           config: ent.config ?? {},
           roles: ent.roles ?? [],
-          accessUrl: `${proto}://${host}:${dockerPort}`,
+          accessUrl,
           upstreamStatus,
           icon: pluginIcon,
         } as any;
