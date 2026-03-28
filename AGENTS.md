@@ -69,7 +69,7 @@ Use `jest.mock`. Do NOT rely on real DB/Storage in Unit Tests.
 
 ## 🚀 Production Environment
 
-- **Production Server**: `213.165.74.85`
+- **Production Server**: `213.165.74.82`
 - **Project Path**: `/root/projects/ravhub`
 
 ## 🧑‍💻 Coding Standards (Local)
