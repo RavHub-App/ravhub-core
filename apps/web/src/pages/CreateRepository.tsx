@@ -515,7 +515,13 @@ export default function CreateRepository() {
             return (
                 <FormControl key={path.join('.')}>
                     <FormLabel>{schema.title ?? path[path.length - 1]}</FormLabel>
-                    <Input type="number" value={currentValue ?? 0} onChange={(e) => updateConfigAtPath(path, Number(e.target.value))} placeholder={schema.description ?? ''} />
+                    <Input
+                        type="number"
+                        value={currentValue ?? 0}
+                        onChange={(e) => updateConfigAtPath(path, e.target.value === '' ? '' : Number(e.target.value))}
+                        onFocus={(e) => e.target.select()}
+                        placeholder={schema.description ?? ''}
+                    />
                     {schema.description && (
                         <Typography level="body-xs" color="neutral" sx={{ mt: 0.5 }}>{schema.description}</Typography>
                     )}

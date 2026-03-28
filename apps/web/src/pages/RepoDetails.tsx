@@ -684,7 +684,8 @@ function RepoSettings({ repo, setRepo, confirmAction, setConfirmAction }: {
                     <Input
                         type="number"
                         value={currentValue ?? 0}
-                        onChange={(e) => updateConfigAtPath(path, Number(e.target.value))}
+                        onChange={(e) => updateConfigAtPath(path, e.target.value === '' ? '' : Number(e.target.value))}
+                        onFocus={(e) => e.target.select()}
                         placeholder={schema.description ?? ''}
                     />
                     {schema.description && (
