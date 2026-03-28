@@ -20,67 +20,67 @@ async function bootstrap() {
   const loggerOptions =
     process.env.LOG_FORMAT === 'json'
       ? {
-          logger: {
-            log: (msg: any, context?: string) =>
-              console.log(
-                JSON.stringify({
-                  level: 'info',
-                  message: msg,
-                  context,
-                  timestamp: new Date().toISOString(),
-                }),
-              ),
-            error: (msg: any, trace?: string, context?: string) => {
-              const serializedMsg =
-                msg instanceof Error
-                  ? Object.assign(
-                      {
-                        message: msg.message,
-                        stack: msg.stack,
-                        name: msg.name,
-                      },
-                      msg,
-                    )
-                  : msg;
-              console.error(
-                JSON.stringify({
-                  level: 'error',
-                  message: serializedMsg,
-                  trace,
-                  context,
-                  timestamp: new Date().toISOString(),
-                }),
-              );
-            },
-            warn: (msg: any, context?: string) =>
-              console.warn(
-                JSON.stringify({
-                  level: 'warn',
-                  message: msg,
-                  context,
-                  timestamp: new Date().toISOString(),
-                }),
-              ),
-            debug: (msg: any, context?: string) =>
-              console.debug(
-                JSON.stringify({
-                  level: 'debug',
-                  message: msg,
-                  context,
-                  timestamp: new Date().toISOString(),
-                }),
-              ),
-            verbose: (msg: any, context?: string) =>
-              console.log(
-                JSON.stringify({
-                  level: 'verbose',
-                  message: msg,
-                  context,
-                  timestamp: new Date().toISOString(),
-                }),
-              ),
+        logger: {
+          log: (msg: any, context?: string) =>
+            console.log(
+              JSON.stringify({
+                level: 'info',
+                message: msg,
+                context,
+                timestamp: new Date().toISOString(),
+              }),
+            ),
+          error: (msg: any, trace?: string, context?: string) => {
+            const serializedMsg =
+              msg instanceof Error
+                ? Object.assign(
+                  {
+                    message: msg.message,
+                    stack: msg.stack,
+                    name: msg.name,
+                  },
+                  msg,
+                )
+                : msg;
+            console.error(
+              JSON.stringify({
+                level: 'error',
+                message: serializedMsg,
+                trace,
+                context,
+                timestamp: new Date().toISOString(),
+              }),
+            );
           },
-        }
+          warn: (msg: any, context?: string) =>
+            console.warn(
+              JSON.stringify({
+                level: 'warn',
+                message: msg,
+                context,
+                timestamp: new Date().toISOString(),
+              }),
+            ),
+          debug: (msg: any, context?: string) =>
+            console.debug(
+              JSON.stringify({
+                level: 'debug',
+                message: msg,
+                context,
+                timestamp: new Date().toISOString(),
+              }),
+            ),
+          verbose: (msg: any, context?: string) =>
+            console.log(
+              JSON.stringify({
+                level: 'verbose',
+                message: msg,
+                context,
+                timestamp: new Date().toISOString(),
+              }),
+            ),
+        },
+      }
       : {};
 
   const app = await NestFactory.create(AppModule, {

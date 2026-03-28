@@ -40,6 +40,21 @@ export const configSchema = {
                 minimum: 0,
                 maximum: 65535,
               },
+              host: {
+                type: 'string',
+                title: 'Custom registry host',
+                description:
+                  'External host used to build the pull URL for this registry. If not set, global REGISTRY_HOST will be used.',
+                default: '',
+              },
+              protocol: {
+                type: 'string',
+                title: 'Custom registry protocol',
+                description:
+                  'External protocol used to build the pull URL for this registry. If not set, global REGISTRY_PROTOCOL will be used.',
+                enum: ['', 'http', 'https'],
+                default: '',
+              },
               allowRedeploy: {
                 type: 'boolean',
                 title: 'Allow redeployment',
@@ -76,6 +91,21 @@ export const configSchema = {
                 default: 0,
                 minimum: 0,
                 maximum: 65535,
+              },
+              host: {
+                type: 'string',
+                title: 'Custom registry host',
+                description:
+                  'External host used to build the pull URL for this registry. If not set, global REGISTRY_HOST will be used.',
+                default: '',
+              },
+              protocol: {
+                type: 'string',
+                title: 'Custom registry protocol',
+                description:
+                  'External protocol used to build the pull URL for this registry. If not set, global REGISTRY_PROTOCOL will be used.',
+                enum: ['', 'http', 'https'],
+                default: '',
               },
               proxyUrl: {
                 type: 'string',
@@ -189,6 +219,21 @@ export const configSchema = {
                 default: 0,
                 minimum: 0,
                 maximum: 65535,
+              },
+              host: {
+                type: 'string',
+                title: 'Custom registry host',
+                description:
+                  'External host used to build the pull URL for this registry. If not set, global REGISTRY_HOST will be used.',
+                default: '',
+              },
+              protocol: {
+                type: 'string',
+                title: 'Custom registry protocol',
+                description:
+                  'External protocol used to build the pull URL for this registry. If not set, global REGISTRY_PROTOCOL will be used.',
+                enum: ['', 'http', 'https'],
+                default: '',
               },
             },
           },

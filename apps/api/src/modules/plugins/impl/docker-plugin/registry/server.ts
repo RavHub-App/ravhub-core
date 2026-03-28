@@ -39,8 +39,10 @@ export async function startRegistryForRepo(
     // Select port
     const { port, needsPersistence } = await selectPort(opts?.port);
 
-    const host = process.env.REGISTRY_HOST || 'localhost';
-    const proto = process.env.REGISTRY_PROTOCOL || 'http';
+    const host =
+      repo.config?.docker?.host || process.env.REGISTRY_HOST || 'localhost';
+    const proto =
+      repo.config?.docker?.protocol || process.env.REGISTRY_PROTOCOL || 'http';
     const accessUrl = `${proto}://${host}:${port}`;
 
     // Create a small HTTP server and wire the minimal registry endpoints

@@ -192,8 +192,12 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
           ?.list()
           .find((m) => m.key === managerInferred);
         const pluginIcon = pluginMeta?.icon ? pluginMeta.icon : undefined;
-        const host = process.env.REGISTRY_HOST || 'localhost';
-        const proto = process.env.REGISTRY_PROTOCOL || 'http';
+        const host =
+          ent.config?.docker?.host || process.env.REGISTRY_HOST || 'localhost';
+        const proto =
+          ent.config?.docker?.protocol ||
+          process.env.REGISTRY_PROTOCOL ||
+          'http';
         return {
           id: ent.id,
           name: ent.name,
