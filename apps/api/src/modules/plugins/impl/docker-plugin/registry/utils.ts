@@ -21,6 +21,25 @@ export function readBody(req: any): Promise<Buffer> {
 }
 
 /**
+ * Helper to build a public URL for a given path, respecting custom repo host/protocol.
+ * If no custom host is defined, it returns a relative path (starting with /)
+ * so that the Docker client uses the host it's already talking to.
+ */
+export function buildPublicUrl(repo: any, path: string, res?: any): string {
+  const customHost = repo?.config?.docker?.host;
+  const customProto = repo?.config?.docker?.protocol;
+
+  if (customHost) {
+    const proto = customProto || 'https';
+    return `${proto}://${customHost}${path.startsWith('/') ? '' : '/'}${path}`;
+  }
+
+  // If no custom host, return relative path. 
+  // Docker clients handle relative Location headers by prepending the current host:port.
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+/**
  * Send an authentication challenge response
  */
 export function sendAuthChallenge(

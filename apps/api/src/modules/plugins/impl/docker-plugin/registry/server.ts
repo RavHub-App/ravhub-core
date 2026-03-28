@@ -13,7 +13,7 @@
  */
 import { selectPort } from './port-manager';
 import { checkTokenAllows } from './auth';
-import { readBody, sendAuthChallenge } from './utils';
+import { readBody, sendAuthChallenge, buildPublicUrl } from './utils';
 import type { Repository } from '../utils/types';
 
 // Storage for active registry servers
@@ -302,7 +302,7 @@ export async function startRegistryForRepo(
               `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             res.setHeader(
               'Location',
-              `/v2/${encodeURIComponent(name)}/blobs/uploads/${uuid}`,
+              buildPublicUrl(repo, `/v2/${encodeURIComponent(name)}/blobs/uploads/${uuid}`, res),
             );
             res.setHeader('Docker-Upload-UUID', uuid);
             res.statusCode = 202;
@@ -328,7 +328,7 @@ export async function startRegistryForRepo(
               `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             res.setHeader(
               'Location',
-              `/v2/${encodeURIComponent(name)}/blobs/uploads/${uuid}`,
+              buildPublicUrl(repo, `/v2/${encodeURIComponent(name)}/blobs/uploads/${uuid}`, res),
             );
             res.statusCode = 202;
             res.end(JSON.stringify({ ok: true, uuid }));
@@ -402,7 +402,7 @@ export async function startRegistryForRepo(
           if (out?.ok) {
             res.setHeader(
               'Location',
-              `/v2/${encodeURIComponent(name)}/blobs/uploads/${uuid}`,
+              buildPublicUrl(repo, `/v2/${encodeURIComponent(name)}/blobs/uploads/${uuid}`, res),
             );
             res.setHeader('Range', `0-${out.uploaded - 1}`);
             res.statusCode = 202;
@@ -503,7 +503,7 @@ export async function startRegistryForRepo(
             res.statusCode = 201;
             res.setHeader(
               'Location',
-              `/v2/${encodeURIComponent(name)}/blobs/${out.id}`,
+              buildPublicUrl(repo, `/v2/${encodeURIComponent(name)}/blobs/${out.id}`, res),
             );
             // Traceability headers for group operations
             if (out.metadata?.groupId)
