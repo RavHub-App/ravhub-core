@@ -28,14 +28,23 @@ export function sendAuthChallenge(
   name: string,
   action: string,
   statusCode: number = 401,
+  repo?: any,
 ): void {
   // Build challenge header
-  const host = process.env.REGISTRY_HOST || 'localhost';
-  const proto = process.env.REGISTRY_PROTOCOL || 'http';
+  const customHost = repo?.config?.docker?.host;
+  const customProto = repo?.config?.docker?.protocol;
+
+  const host = customHost || process.env.REGISTRY_HOST || 'localhost';
+  const proto = customProto || process.env.REGISTRY_PROTOCOL || 'http';
+
   // Get port from the request (since each repo has its own port)
   const port = res.socket?.localPort || 5000;
-  const service = `${host}:${port}`;
-  const realm = `${proto}://${host}:${port}/v2/token`;
+
+  // service is usually the host:port that docker sees
+  const service = customHost ? host : `${host}:${port}`;
+  // realm must be the full token URL. If a custom host (reverse proxy) is used, we use it without port
+  const realm = customHost ? `${proto}://${host}/v2/token` : `${proto}://${host}:${port}/v2/token`;
+
   const challengeHeader = `Bearer realm="${realm}",service="${service}",scope="repository:${name}:${action}"`;
 
   res.setHeader('WWW-Authenticate', challengeHeader);
