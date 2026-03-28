@@ -211,6 +211,7 @@ export class ReposController {
     @Param('id') id: string,
     @Body() body: Partial<RepositoryEntity>,
   ) {
+    const payload = body ?? {};
     const existingRepo = await this.repos.findOne(id);
     if (!existingRepo) {
       throw new NotFoundException(`Repository ${id} not found`);
@@ -218,9 +219,9 @@ export class ReposController {
 
     if (
       (existingRepo.manager || '').toLowerCase() === 'docker' &&
-      body.config?.docker?.port
+      payload.config?.docker?.port
     ) {
-      const requestedPort = body.config.docker.port;
+      const requestedPort = payload.config.docker.port;
       const currentPort = existingRepo.config?.docker?.port;
 
       if (requestedPort !== currentPort) {
@@ -238,23 +239,23 @@ export class ReposController {
       }
     }
 
-    const updated = await this.repos.update(id, body as any);
+    const updated = await this.repos.update(id, payload as any);
 
     const isDocker = (existingRepo.manager || '').toLowerCase() === 'docker';
     if (updated && isDocker) {
-      const requestedPort = body.config?.docker?.port;
+      const requestedPort = payload.config?.docker?.port;
       const portUnchanged =
         requestedPort === undefined ||
         requestedPort === existingRepo.config?.docker?.port;
       const dockerConfigTouched =
-        body.config !== undefined &&
-        (Object.prototype.hasOwnProperty.call(body.config as any, 'members') ||
+        payload.config !== undefined &&
+        (Object.prototype.hasOwnProperty.call(payload.config as any, 'members') ||
           Object.prototype.hasOwnProperty.call(
-            body.config as any,
+            payload.config as any,
             'writePolicy',
           ) ||
           Object.prototype.hasOwnProperty.call(
-            body.config as any,
+            payload.config as any,
             'preferredWriter',
           ));
 
