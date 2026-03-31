@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -20,6 +20,7 @@ import { RepositoryEntity } from '../../entities/repository.entity';
 import { AuditService } from '../audit/audit.service';
 import { RedisService } from '../redis/redis.service';
 import { RedlockService } from '../redis/redlock.service';
+import { createPluginContext } from './plugin-context.factory';
 
 import npmPlugin from './impl/npm-plugin';
 import pypiPlugin from './impl/pypi-plugin';
@@ -44,7 +45,7 @@ export class PluginsService implements OnModuleInit {
     private readonly auditService: AuditService,
     private readonly redis: RedisService,
     private readonly redlock: RedlockService,
-  ) { }
+  ) {}
 
   async onModuleInit() {
     if (!AppDataSource.isInitialized) {
@@ -149,160 +150,13 @@ export class PluginsService implements OnModuleInit {
    * Get the common context shared with all plugins
    */
   public getPluginContext() {
-    return {
+    return createPluginContext({
       storage: this.storage,
       redis: this.redis.getClient(),
       redlock: this.redlock,
-      getRepo: async (id: string) => {
-        if (!AppDataSource.isInitialized) return null;
-        try {
-          const repoRepo = AppDataSource.getRepository(RepositoryEntity);
-          const isUuid =
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-              id,
-            );
-          let repo: RepositoryEntity | null = null;
-          if (isUuid) {
-            repo = await repoRepo.findOne({ where: { id } });
-          }
-          if (!repo) {
-            repo = await repoRepo.findOne({ where: { name: id } });
-          }
-          return repo;
-        } catch (err: any) {
-          this.logger.error(`getRepo error: ${err.message}`);
-          throw err;
-        }
-      },
-      indexArtifact: async (
-        repo: any,
-        result: any,
-        userId?: string,
-        artifactPath?: string,
-      ) => {
-        try {
-          if (!AppDataSource?.isInitialized) return;
-          const { Artifact } = require('../../entities/artifact.entity');
-          const artifactRepo = AppDataSource.getRepository(Artifact);
-
-          let normalizedResult = result;
-          if (typeof result === 'string') {
-            try {
-              normalizedResult = JSON.parse(result);
-            } catch (e) {
-              normalizedResult = { id: result };
-            }
-          }
-
-          let metadata = normalizedResult.metadata ?? {};
-          if (typeof metadata === 'string') {
-            try {
-              metadata = JSON.parse(metadata);
-            } catch (e) { }
-          }
-
-          let packageName =
-            metadata.name || metadata.packageName || normalizedResult.name;
-          let packageVersion =
-            metadata.version ||
-            metadata.packageVersion ||
-            normalizedResult.version;
-
-          if (
-            !packageName &&
-            normalizedResult.id &&
-            typeof normalizedResult.id === 'string'
-          ) {
-            const id = normalizedResult.id;
-            if (id.includes('@') && !id.startsWith('@')) {
-              const parts = id.split('@');
-              packageName = parts[0];
-              packageVersion = parts[1];
-            } else if (id.includes(':')) {
-              const parts = id.split(':');
-              packageName = parts[0];
-              packageVersion = parts[1];
-            } else {
-              packageName = id;
-            }
-          }
-
-          if (!packageName) return;
-
-          const {
-            buildKey,
-            normalizeStorageKey,
-          } = require('../../storage/key-utils');
-          const storageKeyRaw =
-            metadata.storageKey || normalizedResult.id || null;
-          const storageKey = storageKeyRaw
-            ? normalizeStorageKey(storageKeyRaw)
-            : buildKey(repo.name, packageName || 'artifact');
-
-          const finalPath =
-            artifactPath ||
-            metadata.path ||
-            (normalizedResult.id &&
-              typeof normalizedResult.id === 'string' &&
-              normalizedResult.id.includes('/')
-              ? normalizedResult.id
-              : null);
-
-          let art = await artifactRepo.findOne({
-            where: {
-              repositoryId: repo.id,
-              packageName: packageName,
-              version: packageVersion,
-            },
-          });
-
-          if (art) {
-            art.size = metadata.size ?? art.size;
-            art.contentHash = metadata.contentHash ?? art.contentHash;
-            art.metadata = metadata;
-            art.storageKey = storageKey;
-            art.packageName = packageName;
-            art.version = packageVersion;
-            art.path = finalPath || art.path;
-            await artifactRepo.save(art);
-          } else {
-            art = artifactRepo.create({
-              repository: repo,
-              repositoryId: repo.id,
-              manager: repo.manager,
-              packageName: packageName,
-              version: packageVersion,
-              storageKey,
-              path: finalPath,
-              size: metadata.size ?? undefined,
-              contentHash: metadata.contentHash ?? undefined,
-              metadata,
-              userId,
-            });
-            await artifactRepo.save(art);
-          }
-
-          await this.auditService
-            .logSuccess({
-              userId: userId,
-              action: 'artifact.index',
-              entityType: 'artifact',
-              entityId: art.id,
-              details: {
-                repositoryId: repo.id,
-                repositoryName: repo.name,
-                packageName: metadata.name,
-                version: metadata.version,
-                size: art.size,
-                source: 'plugin-context',
-              },
-            })
-            .catch(() => { });
-        } catch (err: any) {
-          this.logger.error(`indexArtifact error: ${err.message}`);
-        }
-      },
-    };
+      auditService: this.auditService,
+      logger: this.logger,
+    });
   }
 
   list() {

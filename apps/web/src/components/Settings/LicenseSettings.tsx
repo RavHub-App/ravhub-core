@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -63,7 +63,6 @@ interface LicenseStatus {
 
 export default function LicenseSettings() {
     const [status, setStatus] = useState<LicenseStatus | null>(null);
-    // const [metrics, setMetrics] = useState<LicenseMetrics | null>(null);
     const [loading, setLoading] = useState(true);
     const [activating, setActivating] = useState(false);
     const [revalidating, setRevalidating] = useState(false);
@@ -108,7 +107,7 @@ export default function LicenseSettings() {
             const portalUrl = import.meta.env.VITE_LICENSE_PORTAL_URL || 'https://license.yourdomain.com';
             window.open(`${portalUrl}/checkout`, '_blank');
             notify('Opening license purchase page...');
-        } catch (error) {
+        } catch (_error) {
             notify('Failed to open purchase page');
         } finally {
             setPurchaseLoading(false);
@@ -563,15 +562,6 @@ export default function LicenseSettings() {
                 color={confirmAction.color}
             />
         </Stack>
-    );
-}
-
-function FeatureItem({ label }: { label: string }) {
-    return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CheckCircleIcon sx={{ fontSize: 18, color: 'success.main' }} />
-            <Typography level="body-sm">{label}</Typography>
-        </Box>
     );
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -80,7 +80,6 @@ describe('Users Page', () => {
         // Joy UI IconButton doesn't automatically add aria-label.
         // Let's find by role 'button' inside the list item.
 
-        const editButtons = screen.getAllByRole('button');
         // Filter for the one that is not "Create User" and likely in the list.
         // Or better, let's just create a test specific selector or rely on order.
         // The first button is "Create User". The next ones are per user.

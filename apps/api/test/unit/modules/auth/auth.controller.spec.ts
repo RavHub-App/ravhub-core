@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -98,8 +98,8 @@ describe('AuthController (Unit)', () => {
 
       const res = await controller.me(mockReq({ user: { id: '1' } }));
       expect(res.ok).toBeTruthy();
-      expect(res.user.username).toBe('admin');
-      expect(res.user.permissions).toContain('*');
+      expect(res.user?.username).toBe('admin');
+      expect(res.user?.permissions).toContain('*');
     });
   });
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -13,6 +13,7 @@
  */
 
 import { initProxy } from 'src/modules/plugins/impl/composer-plugin/proxy/fetch';
+import { initStorage } from 'src/modules/plugins/impl/composer-plugin/storage/storage';
 import { Repository } from 'src/modules/plugins/impl/composer-plugin/utils/types';
 
 jest.mock('src/modules/plugins/impl/composer-plugin/utils/key-utils', () => ({
@@ -33,10 +34,15 @@ jest.mock('src/plugins-core/proxy-helper', () => ({
   default: jest.fn(),
 }));
 
+jest.mock('src/modules/plugins/impl/composer-plugin/storage/storage', () => ({
+  initStorage: jest.fn(),
+}));
+
 describe('ComposerPlugin Proxy Fetch', () => {
   let mockContext: any;
   let proxyMethods: ReturnType<typeof initProxy>;
   let mockProxyHelper: jest.Mock;
+  let mockProxyDownload: jest.Mock;
 
   beforeEach(() => {
     mockContext = {
@@ -48,9 +54,16 @@ describe('ComposerPlugin Proxy Fetch', () => {
 
     mockProxyHelper = require('src/plugins-core/proxy-helper')
       .default as jest.Mock;
+    mockProxyDownload = jest.fn();
+    (initStorage as jest.Mock).mockReturnValue({
+      proxyDownload: mockProxyDownload,
+    });
 
     proxyMethods = initProxy(mockContext);
     jest.clearAllMocks();
+    (initStorage as jest.Mock).mockReturnValue({
+      proxyDownload: mockProxyDownload,
+    });
   });
 
   describe('proxyFetch', () => {
@@ -111,20 +124,11 @@ describe('ComposerPlugin Proxy Fetch', () => {
       const targetUrl = 'https://api.github.com/repos/vendor/pkg/zipball/ref';
       const base64Url = Buffer.from(targetUrl).toString('base64');
       const distUrl = `dist/${base64Url}/vendor/package/1.0.0.zip`;
-
-      // Mock proxyDownload from storage module
-      jest.mock(
-        'src/modules/plugins/impl/composer-plugin/storage/storage',
-        () => ({
-          initStorage: jest.fn(() => ({
-            proxyDownload: jest.fn().mockResolvedValue({
-              ok: true,
-              body: Buffer.from('zip'),
-              contentType: 'application/zip',
-            }),
-          })),
-        }),
-      );
+      mockProxyDownload.mockResolvedValue({
+        ok: true,
+        body: Buffer.from('zip'),
+        contentType: 'application/zip',
+      });
 
       mockContext.storage.get.mockResolvedValue(null);
 
@@ -136,19 +140,10 @@ describe('ComposerPlugin Proxy Fetch', () => {
 
     it('should handle dist URL with packageName option', async () => {
       mockContext.storage.get.mockResolvedValue(null);
-
-      // Mock storage module
-      jest.mock(
-        'src/modules/plugins/impl/composer-plugin/storage/storage',
-        () => ({
-          initStorage: jest.fn(() => ({
-            proxyDownload: jest.fn().mockResolvedValue({
-              ok: true,
-              body: Buffer.from('zip'),
-            }),
-          })),
-        }),
-      );
+      mockProxyDownload.mockResolvedValue({
+        ok: true,
+        body: Buffer.from('zip'),
+      });
 
       const result = await proxyMethods.proxyFetch(
         repo,
@@ -157,6 +152,28 @@ describe('ComposerPlugin Proxy Fetch', () => {
       );
 
       expect(result.ok).toBeDefined();
+    });
+
+    it('should return dist payload when proxyDownload serves cached data via data field', async () => {
+      const targetUrl = 'https://api.github.com/repos/vendor/pkg/zipball/ref';
+      const base64Url = Buffer.from(targetUrl).toString('base64');
+      const distUrl = `dist/${base64Url}/vendor/package/1.0.0.zip`;
+      const zipData = Buffer.from('zip-bytes');
+
+      mockContext.storage.get.mockResolvedValue(null);
+      mockProxyDownload.mockResolvedValue({
+        ok: true,
+        data: zipData,
+        skipCache: true,
+        contentType: 'application/zip',
+      });
+
+      const result = await proxyMethods.proxyFetch(repo, distUrl);
+
+      expect(result.ok).toBe(true);
+      expect(result.body).toEqual(zipData);
+      expect(result.headers?.['content-type']).toBe('application/zip');
+      expect(result.headers?.['x-proxy-cache']).toBe('HIT');
     });
 
     it('should process JSON metadata from upstream', async () => {

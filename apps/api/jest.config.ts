@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -14,8 +14,13 @@
 
 import type { Config } from 'jest';
 import { pathsToModuleNameMapper } from 'ts-jest';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { compilerOptions } = require('./tsconfig.json');
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// Workaround for process.cwd() or relative paths in Jest config
+const tsconfigPath = './tsconfig.json';
+const tsconfig = JSON.parse(readFileSync(tsconfigPath, 'utf8'));
+const { compilerOptions } = tsconfig;
 
 const config: Config = {
     moduleFileExtensions: ['js', 'json', 'ts'],

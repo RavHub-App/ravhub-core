@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -19,7 +19,10 @@ import {
   finalizeUpload,
 } from 'src/modules/plugins/impl/docker-plugin/storage/upload';
 import { Repository } from 'src/modules/plugins/impl/docker-plugin/utils/types';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
+import { Readable } from 'stream';
+import { uploadTargets } from 'src/modules/plugins/impl/docker-plugin/utils/helpers';
 
 jest.mock('stream/promises', () => ({
   pipeline: jest.fn().mockResolvedValue(undefined),
@@ -85,6 +88,7 @@ describe('DockerPlugin Upload Storage', () => {
       getRepo: mockGetRepo,
       redis: mockRedis,
     });
+    uploadTargets.clear();
     jest.clearAllMocks();
   });
 
@@ -150,6 +154,72 @@ describe('DockerPlugin Upload Storage', () => {
       const result = await initiateUpload(groupRepo as any, 'img');
       expect(result.ok).toBe(true);
     });
+
+    it('should handle group writePolicy mirror across hosted members', async () => {
+      const groupRepo = {
+        id: 'g1',
+        type: 'group',
+        config: { writePolicy: 'mirror', members: ['m1', 'm2'] },
+      };
+      mockGetRepo.mockImplementation(async (id: string) => ({
+        id,
+        type: 'hosted',
+        config: {},
+      }));
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      const result = await initiateUpload(groupRepo as any, 'img');
+
+      expect(result.ok).toBe(true);
+      expect(result.uuid).toBeDefined();
+      expect(uploadTargets.get(result.uuid)).toMatchObject({
+        groupId: 'g1',
+        policy: 'mirror',
+      });
+      expect(uploadTargets.get(result.uuid)?.targets).toHaveLength(2);
+    });
+
+    it('should handle group writePolicy broadcast across hosted members', async () => {
+      const groupRepo = {
+        id: 'g1',
+        type: 'group',
+        config: {
+          writePolicy: 'broadcast',
+          preferredWriter: 'm1',
+          members: ['m1', 'm2'],
+        },
+      };
+      mockGetRepo.mockImplementation(async (id: string) => ({
+        id,
+        type: 'hosted',
+        config: {},
+      }));
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      const result = await initiateUpload(groupRepo as any, 'img');
+
+      expect(result.ok).toBe(true);
+      expect(result.uuid).toBeDefined();
+      expect(uploadTargets.get(result.uuid)).toMatchObject({
+        groupId: 'g1',
+        policy: 'broadcast',
+      });
+      expect(uploadTargets.get(result.uuid)?.targets).toHaveLength(2);
+    });
+
+    it('should reject unsupported group writePolicy instead of falling back to hosted', async () => {
+      const result = await initiateUpload(
+        {
+          id: 'g1',
+          type: 'group',
+          config: { writePolicy: 'unknown', members: ['m1'] },
+        } as any,
+        'img',
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain('unsupported writePolicy');
+    });
   });
 
   describe('Redis integration', () => {
@@ -157,6 +227,7 @@ describe('DockerPlugin Upload Storage', () => {
       mockRedis.isEnabled.mockReturnValue(true);
       mockRedis.get = jest.fn().mockResolvedValue(null);
       mockRedis.set = jest.fn().mockResolvedValue('OK');
+      mockRedis.del = jest.fn().mockResolvedValue(1);
 
       const repo = { id: 'r1', type: 'hosted' };
       await initiateUpload(repo as any, 'img');
@@ -199,35 +270,62 @@ describe('DockerPlugin Upload Storage', () => {
       expect(result.ok).toBe(false);
       expect(result.message).toContain('not found');
     });
+
+    it('should delegate group stream uploads as buffered content', async () => {
+      uploadTargets.set('group-uuid', {
+        groupId: 'g1',
+        targets: [{ repoId: 'm1', uuid: 'child-uuid' }],
+        policy: 'first',
+      });
+      mockGetRepo.mockResolvedValue({ id: 'm1', type: 'hosted', config: {} });
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      const result = await appendUpload(
+        { id: 'g1', type: 'group', config: {} } as any,
+        'group-uuid',
+        undefined,
+        undefined,
+        Readable.from([Buffer.from('abc'), Buffer.from('def')]),
+      );
+
+      expect(result.ok).toBe(true);
+      expect(fs.appendFileSync).toHaveBeenCalledWith(
+        expect.any(String),
+        Buffer.from('abcdef'),
+      );
+    });
   });
 
   describe('finalizeUpload', () => {
     const repo = { id: 'r1', type: 'hosted' };
+    const contentBuffer = Buffer.from('content');
+    const contentDigest = `sha256:${crypto.createHash('sha256').update(contentBuffer).digest('hex')}`;
 
     it('should finalize with provided digest', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.createReadStream as jest.Mock).mockReturnValue({
-        pipe: jest.fn(),
+      const mockReadStream: any = {
         on: jest.fn((event, cb) => {
+          if (event === 'data') cb(contentBuffer);
           if (event === 'end') cb();
-          return this;
+          return mockReadStream;
         }),
-      });
+      };
+      (fs.createReadStream as jest.Mock).mockReturnValue(mockReadStream);
       const result = await finalizeUpload(
         repo as any,
         'img',
         'uuid',
-        'sha256:digest',
+        contentDigest,
       );
       expect(result.ok).toBe(true);
-      expect(result.id).toBe('sha256:digest');
+      expect(result.id).toBe(contentDigest);
     });
 
     it('should calculate digest if not provided', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       const mockReadStream: any = {
         on: jest.fn((event, cb) => {
-          if (event === 'data') cb(Buffer.from('content'));
+          if (event === 'data') cb(contentBuffer);
           if (event === 'end') cb();
           return mockReadStream;
         }),
@@ -246,16 +344,58 @@ describe('DockerPlugin Upload Storage', () => {
 
     it('should handle storage errors', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
+      const mockReadStream: any = {
+        on: jest.fn((event, cb) => {
+          if (event === 'data') cb(contentBuffer);
+          if (event === 'end') cb();
+          return mockReadStream;
+        }),
+      };
+      (fs.createReadStream as jest.Mock).mockReturnValue(mockReadStream);
       mockStorage.saveStream.mockRejectedValue(new Error('save-fail'));
 
       const result = await finalizeUpload(
         repo as any,
         'img',
         'uuid',
-        'sha256:d',
+        contentDigest,
       );
       expect(result.ok).toBe(false);
       expect(result.message).toContain('save-fail');
+    });
+
+    it('should delegate group finalize stream uploads as buffered content', async () => {
+      uploadTargets.set('group-uuid', {
+        groupId: 'g1',
+        targets: [{ repoId: 'm1', uuid: 'child-uuid' }],
+        policy: 'first',
+      });
+      mockGetRepo.mockResolvedValue({ id: 'm1', type: 'hosted', config: {} });
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      const mockReadStream: any = {
+        on: jest.fn((event, cb) => {
+          if (event === 'data') cb(contentBuffer);
+          if (event === 'end') cb();
+          return mockReadStream;
+        }),
+      };
+      (fs.createReadStream as jest.Mock).mockReturnValue(mockReadStream);
+
+      const result = await finalizeUpload(
+        { id: 'g1', type: 'group', config: {} } as any,
+        'img',
+        'group-uuid',
+        undefined,
+        undefined,
+        Readable.from([contentBuffer]),
+      );
+
+      expect(result.ok).toBe(true);
+      expect(fs.appendFileSync).toHaveBeenCalledWith(
+        expect.any(String),
+        contentBuffer,
+      );
     });
   });
 });

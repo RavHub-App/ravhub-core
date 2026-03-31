@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -17,7 +17,6 @@ import { renderWithProviders, screen, fireEvent, waitFor } from '../test-utils';
 import RepoDetails from '../pages/RepoDetails';
 import axios from 'axios';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { useAuth } from '../contexts/AuthContext';
 
 // Mock dependencies
 vi.mock('axios');

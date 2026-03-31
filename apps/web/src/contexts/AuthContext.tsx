@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -39,16 +39,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [isLoading, setIsLoading] = useState(true);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    setToken(null);
+    setUser(null);
+    delete axios.defaults.headers.common['Authorization'];
+    if (!window.location.pathname.startsWith('/login')) {
+      setTimeout(() => (window.location.href = '/login'), 50);
+    }
+  }, []);
+
   useEffect(() => {
     const initAuth = async () => {
-      // Do not change axios.defaults.baseURL here. The app prefixes all
-      // API routes with /api and the Vite dev proxy will map /api -> backend.
       const storedToken = localStorage.getItem('token');
       if (storedToken) {
         setToken(storedToken);
         axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         try {
-          // If the API exposes the /auth/me endpoint, prefer that to fetch current user + roles
           try {
             const me = await axios.get('/api/auth/me');
             if (me.data?.ok && me.data.user) {
@@ -58,8 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const storedUser = localStorage.getItem('user');
               if (storedUser) setUser(JSON.parse(storedUser));
             }
-          } catch (e) {
-            // fallback to stored user if /me fails
+          } catch (_fallbackError) {
             const storedUser = localStorage.getItem('user');
             if (storedUser) setUser(JSON.parse(storedUser));
           }
@@ -72,7 +80,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     initAuth();
 
-    // Setup axios response interceptor to auto-logout on 401 / JWT expiry
     const interceptorId = axios.interceptors.response.use(
       (resp) => resp,
       async (err) => {
@@ -87,7 +94,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (refreshToken) {
             try {
-              // Use _retry: true to avoid interceptor loops if the refresh itself fails
               const res = await axios.post('/api/auth/refresh', { refreshToken }, { _retry: true } as any);
               if (res.data.ok) {
                 const { token: newToken, refreshToken: newRefreshToken } = res.data;
@@ -98,19 +104,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setToken(newToken);
                 axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
-                // Update the original request header
                 originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
                 return axios(originalRequest);
               }
             } catch (refreshErr) {
               console.error('Token refresh failed:', refreshErr);
-              // If refresh fails, we must logout to avoid loops
               logout();
               return Promise.reject(refreshErr);
             }
           }
 
-          // call logout and redirect to login page
           logout();
         }
         return Promise.reject(err);
@@ -120,14 +123,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       axios.interceptors.response.eject(interceptorId);
     };
-  }, []);
+  }, [logout]);
 
   const login = useCallback(async (newToken: string, newUser: User, newRefreshToken?: string) => {
     localStorage.setItem('token', newToken);
     if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
     setToken(newToken);
     axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-    // try to fetch /auth/me for a richer user payload (roles/permissions)
     try {
       const me = await axios.get('/api/auth/me');
       if (me.data?.ok && me.data.user) {
@@ -135,24 +137,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('user', JSON.stringify(me.data.user));
         return;
       }
-    } catch (e) {
-      // fallback to provided user if /me isn't available
+    } catch (_fallbackError) {
+      void _fallbackError;
     }
     localStorage.setItem('user', JSON.stringify(newUser));
     setUser(newUser);
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
-    delete axios.defaults.headers.common['Authorization'];
-    // ensure UI navigates to login if not already there
-    if (!window.location.pathname.startsWith('/login')) {
-      setTimeout(() => (window.location.href = '/login'), 50);
-    }
   }, []);
 
   return (

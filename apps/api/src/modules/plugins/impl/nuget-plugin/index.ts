@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 /**
  * NuGet Plugin - Modular Entry Point
  */
@@ -8,10 +22,35 @@ import { initStorage } from './storage/storage';
 import { initProxy } from './proxy/fetch';
 import { initPackages } from './packages/list';
 import { PluginContext, Repository } from './utils/types';
+import type { ProxyFetchResponse } from './storage/storage-helpers';
 
 export function createNugetPlugin(context: PluginContext) {
   const { proxyFetch } = initProxy(context);
-  const { upload, download, handlePut } = initStorage(context, proxyFetch);
+  const storageProxyFetch = async (
+    repo: Repository,
+    url: string,
+  ): Promise<ProxyFetchResponse> => {
+    const result = await proxyFetch(repo, url);
+    const normalizedBody =
+      'body' in result &&
+        result.body !== undefined &&
+        result.body !== null &&
+        (Buffer.isBuffer(result.body) ||
+          typeof result.body === 'string' ||
+          typeof result.body === 'object')
+        ? result.body
+        : undefined;
+
+    return {
+      ...result,
+      body: normalizedBody,
+    };
+  };
+
+  const { upload, download, handlePut } = initStorage(
+    context,
+    storageProxyFetch,
+  );
   const { listVersions, getInstallCommand } = initPackages(context);
 
   /**

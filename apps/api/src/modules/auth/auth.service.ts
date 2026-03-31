@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -28,7 +28,7 @@ export class AuthService {
   constructor(
     private users: UsersService,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
-  ) { }
+  ) {}
 
   private authCache: Map<string, { result: any; expires: number }> = new Map();
 
@@ -85,7 +85,8 @@ export class AuthService {
   }
 
   async validateRefreshToken(userId: string, refreshToken: string) {
-    const user = await this.userRepo.createQueryBuilder('user')
+    const user = await this.userRepo
+      .createQueryBuilder('user')
       .where('user.id = :id', { id: userId })
       .addSelect('user.refreshTokenHash')
       .getOne();

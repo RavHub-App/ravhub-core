@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -21,7 +21,7 @@ export class RedlockService implements OnModuleInit {
   private readonly logger = new Logger(RedlockService.name);
   private redlock: Redlock | null = null;
 
-  constructor(private readonly redisService: RedisService) { }
+  constructor(private readonly redisService: RedisService) {}
 
   onModuleInit() {
     if (!this.redisService.isEnabled()) {
@@ -73,9 +73,11 @@ export class RedlockService implements OnModuleInit {
 
       const previous = this.memoryLocks.get(resource) || Promise.resolve();
 
-      const next = previous.catch(() => { }).then(async () => {
-        return await fn();
-      });
+      const next = previous
+        .catch(() => {})
+        .then(async () => {
+          return await fn();
+        });
 
       this.memoryLocks.set(resource, next as Promise<void>); // Cast to maintain map type
 

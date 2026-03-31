@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -40,6 +40,44 @@ export default function CreateRepository() {
     const [availableRepos, setAvailableRepos] = React.useState<any[]>([]);
     const [availableStorageConfigs, setAvailableStorageConfigs] = React.useState<any[]>([]);
     const [selectedStorageId, setSelectedStorageId] = React.useState<string | null>(null);
+
+    const generateDefaultsFromSchema = React.useCallback((schema: any): any => {
+        if (!schema) return {};
+
+        if (schema.allOf && Array.isArray(schema.allOf)) {
+            const merged: any = {};
+            for (const item of schema.allOf) {
+                const node = item.then ?? item;
+                const defaults = generateDefaultsFromSchema(node);
+                for (const [k, v] of Object.entries<any>(defaults || {})) {
+                    if (merged[k] === undefined) merged[k] = v;
+                    else if (typeof merged[k] === 'object' && typeof v === 'object') {
+                        merged[k] = { ...v, ...merged[k] };
+                    }
+                }
+            }
+            return merged;
+        }
+
+        if (schema.type === 'object' || schema.properties) {
+            const out: any = {};
+            const props = schema.properties || {};
+            for (const [k, v] of Object.entries<any>(props)) {
+                const defaultVal = generateDefaultsFromSchema(v);
+                if (defaultVal !== '') {
+                    out[k] = defaultVal;
+                }
+            }
+            return out;
+        }
+        if (schema.type === 'array') return [];
+        if (schema.default !== undefined) return schema.default;
+        if (schema.type === 'string') return '';
+        if (schema.enum && schema.enum.length) return schema.default ?? schema.enum[0];
+        if (schema.type === 'boolean') return false;
+        if (schema.type === 'number' || schema.type === 'integer') return schema.default ?? 0;
+        return '';
+    }, []);
 
     React.useEffect(() => {
         let mounted = true;
@@ -93,7 +131,7 @@ export default function CreateRepository() {
                         setConfigValues({});
                     }
                 }
-            } catch (err) {
+            } catch (_error) {
                 if (mounted) {
                     setAvailableRepoTypes([]);
                     setPluginConfigSchema(null);
@@ -103,56 +141,7 @@ export default function CreateRepository() {
             }
         })();
         return () => { mounted = false; };
-    }, [manager]);
-
-    React.useEffect(() => {
-        if (!repoType) return;
-        setConfigValues((prev: any) => {
-            const next = { ...(prev || {}) };
-            if (repoType === 'group') {
-                if (!Array.isArray(next.members)) next.members = [];
-            }
-            if (repoType === 'proxy') {
-                if (!next.proxyUrl && !next.target && !next.registry && !next.upstream && !next.indexUrl) next.proxyUrl = '';
-            }
-            return next;
-        });
-    }, [repoType]);
-
-    // Keep auth defaults in sync with requireAuth toggle so UI doesn't show 'none' when requireAuth=true
-    React.useEffect(() => {
-        try {
-            const pathsToCheck = [
-                { prefix: ['docker'], authPath: ['docker', 'auth'] },
-                { prefix: ['nuget'], authPath: ['nuget', 'auth'] },
-                { prefix: [], authPath: ['auth'] }
-            ];
-
-            pathsToCheck.forEach(({ prefix, authPath }) => {
-                // Check if this path exists in the current config structure
-                // We check if requireAuth exists at this prefix
-                const requireAuthPath = [...prefix, 'requireAuth'];
-                const requireAuthVal = getNested(configValues, requireAuthPath);
-
-                if (requireAuthVal !== undefined) {
-                    const requireAuth = requireAuthVal === true;
-
-                    if (requireAuth) {
-                        const authType = getNested(configValues, [...authPath, 'type']);
-                        if (!authType || authType === 'none') {
-                            setConfigValues((prev: any) => setNested(prev || {}, [...authPath, 'type'], 'basic'));
-                        }
-                    } else {
-                        // If requireAuth is false, ensure auth is applied as none (transparent to user)
-                        const authVal = getNested(configValues, authPath);
-                        if (!authVal || authVal?.type !== 'none') {
-                            setConfigValues((prev: any) => setNested(prev || {}, authPath, { type: 'none' }));
-                        }
-                    }
-                }
-            });
-        } catch (e) { }
-    }, [configValues, manager]);
+    }, [generateDefaultsFromSchema, manager]);
 
     const friendlyManager = (m: any) => m?.name || m?.key || m;
 
@@ -169,61 +158,64 @@ export default function CreateRepository() {
         return map[t] ?? t;
     };
 
-    const getNested = (obj: any, path: string[]) => {
+    const getNested = React.useCallback((obj: any, path: string[]) => {
         return path.reduce((acc, p) => (acc && acc[p] !== undefined ? acc[p] : undefined), obj);
-    };
+    }, []);
 
-    const setNested = (obj: any, path: string[], value: any) => {
+    const setNested = React.useCallback((obj: any, path: string[], value: any) => {
         if (!path.length) return value;
         const [first, ...rest] = path;
         const next = { ...(obj || {}) };
         next[first] = setNested(next[first], rest, value);
         return next;
-    };
+    }, []);
 
-    const generateDefaultsFromSchema = (schema: any): any => {
-        if (!schema) return {};
+    React.useEffect(() => {
+        if (!repoType) return;
+        setConfigValues((prev: any) => {
+            const next = { ...(prev || {}) };
+            if (repoType === 'group') {
+                if (!Array.isArray(next.members)) next.members = [];
+            }
+            if (repoType === 'proxy') {
+                if (!next.proxyUrl && !next.target && !next.registry && !next.upstream && !next.indexUrl) next.proxyUrl = '';
+            }
+            return next;
+        });
+    }, [repoType]);
 
-        // If schema contains allOf, merge defaults from each branch (useful when
-        // configSchema is conditional with multiple 'then' branches). We merge
-        // recursively so defaults like cacheRetentionDays present inside a
-        // branch are included in the final defaults object.
-        if (schema.allOf && Array.isArray(schema.allOf)) {
-            const merged: any = {};
-            for (const item of schema.allOf) {
-                const node = item.then ?? item;
-                const defaults = generateDefaultsFromSchema(node);
-                // shallow merge with existing values preserved
-                for (const [k, v] of Object.entries<any>(defaults || {})) {
-                    if (merged[k] === undefined) merged[k] = v;
-                    else if (typeof merged[k] === 'object' && typeof v === 'object') {
-                        // deep merge objects
-                        merged[k] = { ...v, ...merged[k] };
+    React.useEffect(() => {
+        try {
+            const pathsToCheck = [
+                { prefix: ['docker'], authPath: ['docker', 'auth'] },
+                { prefix: ['nuget'], authPath: ['nuget', 'auth'] },
+                { prefix: [], authPath: ['auth'] }
+            ];
+
+            pathsToCheck.forEach(({ prefix, authPath }) => {
+                const requireAuthPath = [...prefix, 'requireAuth'];
+                const requireAuthVal = getNested(configValues, requireAuthPath);
+
+                if (requireAuthVal !== undefined) {
+                    const requireAuth = requireAuthVal === true;
+
+                    if (requireAuth) {
+                        const authType = getNested(configValues, [...authPath, 'type']);
+                        if (!authType || authType === 'none') {
+                            setConfigValues((prev: any) => setNested(prev || {}, [...authPath, 'type'], 'basic'));
+                        }
+                    } else {
+                        const authVal = getNested(configValues, authPath);
+                        if (!authVal || authVal?.type !== 'none') {
+                            setConfigValues((prev: any) => setNested(prev || {}, authPath, { type: 'none' }));
+                        }
                     }
                 }
-            }
-            return merged;
+            });
+        } catch (_error) {
+            void _error;
         }
-
-        if (schema.type === 'object' || schema.properties) {
-            const out: any = {};
-            const props = schema.properties || {};
-            for (const [k, v] of Object.entries<any>(props)) {
-                const defaultVal = generateDefaultsFromSchema(v);
-                if (defaultVal !== '') {
-                    out[k] = defaultVal;
-                }
-            }
-            return out;
-        }
-        if (schema.type === 'array') return [];
-        if (schema.default !== undefined) return schema.default;
-        if (schema.type === 'string') return '';
-        if (schema.enum && schema.enum.length) return schema.default ?? schema.enum[0];
-        if (schema.type === 'boolean') return false;
-        if (schema.type === 'number' || schema.type === 'integer') return schema.default ?? 0;
-        return '';
-    };
+    }, [configValues, getNested, setNested]);
 
     const updateConfigAtPath = (path: string[], value: any) => {
         setConfigValues((prev: any) => setNested(prev || {}, path, value));
@@ -806,7 +798,9 @@ export default function CreateRepository() {
                         }
                     }
                 });
-            } catch (e) { }
+            } catch (_error) {
+                void _error;
+            }
 
             if (selectedStorageId) {
                 payloadConfig.storageId = selectedStorageId;

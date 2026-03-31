@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -52,6 +52,7 @@ describe('MavenPlugin Proxy Fetch', () => {
       storage: {
         get: jest.fn(),
         save: jest.fn(),
+        getMetadata: jest.fn(),
         exists: jest.fn(),
       } as any,
     } as any;
@@ -207,5 +208,68 @@ describe('MavenPlugin Proxy Fetch', () => {
 
     expect(result.ok).toBe(true);
     expect(result.headers['x-proxy-cache']).toBe('HIT');
+  });
+
+  it('should refresh expired maven metadata from upstream instead of failing', async () => {
+    const cachedContent = Buffer.from('<metadata>stale</metadata>');
+    (context.storage.get as jest.Mock).mockResolvedValue(cachedContent);
+    (context.storage.getMetadata as jest.Mock).mockResolvedValue({
+      mtime: new Date(Date.now() - 10 * 60 * 1000),
+    });
+    mockProxyFetch.mockResolvedValue({
+      ok: true,
+      body: Buffer.from('<metadata>fresh</metadata>'),
+      headers: { 'content-type': 'application/xml' },
+    });
+
+    const repoWithTtl: Repository = {
+      ...repo,
+      config: {
+        ...repo.config,
+        cacheTtlSeconds: 300,
+      },
+    } as Repository;
+
+    const result = await proxyFetch(
+      repoWithTtl,
+      'com/example/lib/1.0.0-SNAPSHOT/maven-metadata.xml',
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.body.toString()).toBe('<metadata>fresh</metadata>');
+    expect(mockProxyFetch).toHaveBeenCalledWith(
+      repoWithTtl,
+      'com/example/lib/1.0.0-SNAPSHOT/maven-metadata.xml',
+    );
+    expect(context.storage.save).toHaveBeenCalled();
+  });
+
+  it('should normalize full local artifact urls before upstream fetch and cache', async () => {
+    (context.storage.get as jest.Mock).mockResolvedValue(null);
+    mockProxyFetch.mockResolvedValue({
+      ok: true,
+      body: Buffer.from('jar-content'),
+      headers: { 'content-type': 'application/java-archive' },
+    });
+
+    const result = await proxyFetch(
+      repo,
+      'http://localhost:3000/repository/maven-proxy/com/example/lib/1.0.0/lib-1.0.0.jar',
+    );
+
+    expect(result.ok).toBe(true);
+    expect(mockProxyFetch).toHaveBeenCalledWith(
+      repo,
+      'com/example/lib/1.0.0/lib-1.0.0.jar',
+    );
+    expect(context.storage.save).toHaveBeenCalledWith(
+      'maven/r1/proxy/com/example/lib/1.0.0/lib-1.0.0.jar',
+      Buffer.from('jar-content'),
+    );
+    expect(result.metadata).toEqual(
+      expect.objectContaining({
+        path: 'com/example/lib/1.0.0/lib-1.0.0.jar',
+      }),
+    );
   });
 });

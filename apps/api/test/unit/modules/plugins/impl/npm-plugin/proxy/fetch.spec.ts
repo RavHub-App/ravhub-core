@@ -1,14 +1,21 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  */
 
 import { initProxy } from 'src/modules/plugins/impl/npm-plugin/proxy/fetch';
 import { Repository } from 'src/modules/plugins/impl/npm-plugin/utils/types';
+
+const mockProcessMetadata = jest.fn((repo, data) => data);
 
 jest.mock('src/modules/plugins/impl/npm-plugin/utils/key-utils', () => ({
   buildKey: jest.fn((...args) => args.join('/')),
@@ -16,7 +23,7 @@ jest.mock('src/modules/plugins/impl/npm-plugin/utils/key-utils', () => ({
 
 jest.mock('src/modules/plugins/impl/npm-plugin/proxy/metadata', () => ({
   initMetadata: jest.fn(() => ({
-    processMetadata: jest.fn((repo, data) => data),
+    processMetadata: mockProcessMetadata,
   })),
 }));
 
@@ -85,6 +92,24 @@ describe('NpmPlugin Proxy Fetch', () => {
       expect(result.ok).toBe(true);
       expect(result.headers?.['x-proxy-cache']).toBe('HIT');
       expect(result.headers?.['content-type']).toBe('application/json');
+    });
+
+    it('should serve raw cached metadata if metadata rewrite fails', async () => {
+      const metadata = JSON.stringify({ name: 'test-pkg', versions: {} });
+      mockStorage.get.mockResolvedValue(Buffer.from(metadata));
+      mockStorage.getMetadata.mockResolvedValue({
+        mtime: new Date(),
+        size: 100,
+      });
+      mockProcessMetadata.mockImplementationOnce(() => {
+        throw new Error('rewrite failed');
+      });
+
+      const result = await proxyMethods.proxyFetch(repo, 'test-pkg');
+
+      expect(result.ok).toBe(true);
+      expect(result.headers?.['x-proxy-cache']).toBe('HIT');
+      expect((result as any).body).toEqual(Buffer.from(metadata));
     });
 
     it('should fetch from upstream on cache miss', async () => {
@@ -159,6 +184,27 @@ describe('NpmPlugin Proxy Fetch', () => {
       expect(mockProxyFetchWithAuth).toHaveBeenCalled();
     });
 
+    it('should fetch upstream using canonical path for full local tarball urls', async () => {
+      mockStorage.get.mockResolvedValue(null);
+      mockProxyFetchWithAuth.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { 'content-type': 'application/octet-stream' },
+        body: Buffer.from('tarball'),
+      });
+
+      const fullUrl =
+        'http://localhost:3000/repository/npm-repo/pkg/-/pkg-1.0.0.tgz';
+
+      const result = await proxyMethods.proxyFetch(repo, fullUrl);
+
+      expect(result.ok).toBe(true);
+      expect(mockProxyFetchWithAuth).toHaveBeenCalledWith(
+        repo,
+        'pkg/-/pkg-1.0.0.tgz',
+      );
+    });
+
     it('should respect cache disabled config', async () => {
       const noCacheRepo = { ...repo, config: { cacheEnabled: false } };
       mockStorage.get.mockResolvedValue(Buffer.from('cached'));
@@ -183,12 +229,12 @@ describe('NpmPlugin Proxy Fetch', () => {
 
       mockStorage.getMetadata.mockResolvedValue({
         mtime: oldDate,
-        size: 100
+        size: 100,
       });
 
       const cachedRepo = {
         ...repo,
-        config: { ...repo.config, cacheTtlSeconds: 300 }
+        config: { ...repo.config, cacheTtlSeconds: 300 },
       } as any;
 
       mockProxyFetchWithAuth.mockResolvedValue({
@@ -201,7 +247,10 @@ describe('NpmPlugin Proxy Fetch', () => {
       const result = await proxyMethods.proxyFetch(cachedRepo, 'test-pkg');
 
       expect(mockProxyFetchWithAuth).toHaveBeenCalled();
-      expect((result as any).body).toEqual({ name: 'test-pkg', version: 'updated' });
+      expect((result as any).body).toEqual({
+        name: 'test-pkg',
+        version: 'updated',
+      });
     });
   });
 });

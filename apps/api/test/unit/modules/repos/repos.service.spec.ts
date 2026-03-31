@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -412,6 +412,22 @@ describe('ReposService (Unit)', () => {
       artifactRepo.findOne.mockResolvedValue({ id: 'a1' } as any);
 
       const res = await service.deletePath('r1', 'pkg');
+      expect(res.ok).toBe(true);
+      expect(res.count).toBe(2);
+      expect(artifactRepo.delete).toHaveBeenCalledTimes(2);
+    });
+
+    it('should delete scoped packages when folder path comes from the UI tree', async () => {
+      const ent = { id: 'r1', name: 'repo1' } as any;
+      repo.findOne.mockResolvedValue(ent);
+      artifactRepo.find.mockResolvedValue([
+        { packageName: '@scope/pkg-a', version: '1.0' },
+        { packageName: '@scope/pkg-b', version: '2.0' },
+        { packageName: '@other/pkg-c', version: '3.0' },
+      ] as any);
+      artifactRepo.findOne.mockResolvedValue({ id: 'a1' } as any);
+
+      const res = await service.deletePath('r1', 'scope');
       expect(res.ok).toBe(true);
       expect(res.count).toBe(2);
       expect(artifactRepo.delete).toHaveBeenCalledTimes(2);

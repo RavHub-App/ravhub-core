@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -39,7 +39,7 @@ export class StorageConfigService {
     private readonly auditService: AuditService,
     private readonly licenseService: LicenseService,
     private readonly storageService: StorageService,
-  ) { }
+  ) {}
 
   async list() {
     return this.repo.find();
@@ -71,7 +71,7 @@ export class StorageConfigService {
         entityId: saved.id,
         details: { key: saved.key, type: saved.type },
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return saved;
   }
@@ -90,7 +90,7 @@ export class StorageConfigService {
         entityId: id,
         details: { key: saved.key, changedFields: Object.keys(data) },
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return saved;
   }
@@ -108,7 +108,7 @@ export class StorageConfigService {
           entityId: id,
           details: { key: config.key },
         })
-        .catch(() => { });
+        .catch(() => {});
     }
 
     return { ok: true };
@@ -157,7 +157,9 @@ export class StorageConfigService {
                 try {
                   const artifacts = await this.artifactRepo
                     .createQueryBuilder('artifact')
-                    .where('artifact.repositoryId IN (:...repoIds)', { repoIds })
+                    .where('artifact.repositoryId IN (:...repoIds)', {
+                      repoIds,
+                    })
                     .getMany();
 
                   totalSize = artifacts.reduce((sum: number, artifact: any) => {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -67,7 +67,7 @@ describe('HelmPlugin Proxy Fetch', () => {
       );
 
       expect(result.ok).toBe(true);
-      expect(result.body).toEqual(chartData);
+      expect('body' in result ? result.body : undefined).toEqual(chartData);
       expect(mockContext.storage.save).toHaveBeenCalled();
     });
 
@@ -89,7 +89,7 @@ describe('HelmPlugin Proxy Fetch', () => {
 
       expect(result.ok).toBe(true);
       expect(result.headers?.['x-proxy-cache']).toBe('HIT');
-      expect(result.body).toEqual(cachedData);
+      expect('body' in result ? result.body : undefined).toEqual(cachedData);
     });
 
     it('should serve cache on revalidation failure', async () => {
@@ -196,6 +196,28 @@ describe('HelmPlugin Proxy Fetch', () => {
       await proxyMethods.proxyFetch(repo, 'stable/nginx-1.0.0.tgz');
 
       expect(mockProxyHelper).toHaveBeenCalledTimes(2);
+    });
+
+    it('should cache .prov files without indexing them as charts', async () => {
+      mockContext.storage.get.mockResolvedValue(null);
+      mockProxyHelper.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: Buffer.from('provenance data'),
+        headers: {},
+      });
+
+      const result = await proxyMethods.proxyFetch(
+        repo,
+        'stable/nginx-1.0.0.tgz.prov',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockContext.storage.save).toHaveBeenCalledWith(
+        'helm/r1/proxy/file/stable/nginx-1.0.0.tgz.prov',
+        Buffer.from('provenance data'),
+      );
+      expect(mockContext.indexArtifact).not.toHaveBeenCalled();
     });
   });
 

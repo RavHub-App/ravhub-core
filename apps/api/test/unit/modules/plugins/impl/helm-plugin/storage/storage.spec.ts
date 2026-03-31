@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -64,6 +64,60 @@ describe('HelmPlugin Storage', () => {
       expect(result.ok).toBe(true);
       expect(result.id).toBe('nginx-1.0.0.tgz');
       expect(mockContext.storage.save).toHaveBeenCalled();
+    });
+
+    it('should regenerate index when reading existing index.yaml fails', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      mockContext.storage.get.mockRejectedValue(new Error('index-read-fail'));
+
+      const pkg = {
+        name: 'nginx',
+        version: '1.0.0',
+        buffer: Buffer.from('chart data'),
+      };
+
+      const result = await storageMethods.upload(repo, pkg);
+
+      expect(result.ok).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[HelmPlugin] Failed to read existing index.yaml for r1: Error: index-read-fail',
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('should fallback to raw string when base64 decoding fails', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const originalBufferFrom = Buffer.from;
+      const bufferFromSpy = jest.spyOn(Buffer, 'from').mockImplementation(((
+        ...args: [
+          string | ArrayBuffer | SharedArrayBuffer | ArrayLike<number>,
+          BufferEncoding?,
+        ]
+      ) => {
+        if (args[0] === 'aGVsbG8=' && args[1] === 'base64') {
+          throw new Error('decode-fail');
+        }
+
+        return originalBufferFrom(...(args as [any, any]));
+      }) as typeof Buffer.from);
+
+      const result = await storageMethods.upload(repo, {
+        name: 'nginx',
+        version: '1.0.0',
+        content: 'aGVsbG8=',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[HelmPlugin] Failed to decode package content as base64: Error: decode-fail',
+      );
+
+      bufferFromSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('should handle group repo with preferred writer', async () => {
@@ -205,6 +259,23 @@ describe('HelmPlugin Storage', () => {
       expect(result.contentType).toBe('application/x-yaml');
     });
 
+    it('should warn and return not found when index.yaml cannot be read', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      mockContext.storage.get.mockRejectedValue(new Error('index-missing'));
+      mockContext.storage.exists.mockResolvedValue(false);
+
+      const result = await storageMethods.download(repo, 'index.yaml');
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toBe('Not found');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[HelmPlugin] Failed to read index.yaml for r1: Error: index-missing',
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should handle proxy repo download', async () => {
       const proxyRepo = {
         ...repo,
@@ -227,6 +298,38 @@ describe('HelmPlugin Storage', () => {
 
       expect(result.ok).toBe(true);
       expect(mockContext.storage.save).toHaveBeenCalled();
+    });
+
+    it('should return proxied chart when indexing fails', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const proxyRepo = {
+        ...repo,
+        type: 'proxy',
+        config: { url: 'https://charts.helm.sh' },
+      };
+      const chartData = Buffer.from('chart from upstream');
+
+      mockContext.storage.get.mockResolvedValue(null);
+      mockContext.indexArtifact.mockRejectedValue(new Error('index-fail'));
+      mockProxyHelper.mockResolvedValue({
+        ok: true,
+        body: chartData,
+        headers: { 'content-type': 'application/gzip' },
+      });
+
+      const result = await storageMethods.download(
+        proxyRepo,
+        'nginx-1.0.0.tgz',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual(chartData);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[HelmPlugin] Failed to index proxied chart nginx-1.0.0.tgz: Error: index-fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should return cached data for proxy repo', async () => {
@@ -264,6 +367,35 @@ describe('HelmPlugin Storage', () => {
       );
 
       expect(result.ok).toBe(true);
+    });
+
+    it('should continue group download when a member lookup fails', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const groupRepo = {
+        type: 'group',
+        config: { members: ['broken', 'host1'] },
+      };
+
+      mockContext.getRepo.mockImplementation(async (id: string) => {
+        if (id === 'broken') throw new Error('lookup-fail');
+        if (id === 'host1') return { id: 'host1', type: 'hosted' };
+        return null;
+      });
+      mockContext.storage.exists.mockResolvedValue(true);
+      mockContext.storage.get.mockResolvedValue(Buffer.from('data'));
+
+      const result = await storageMethods.download(
+        groupRepo,
+        'nginx-1.0.0.tgz',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[HelmPlugin] Failed to resolve repository broken: Error: lookup-fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should return not found for missing chart', async () => {

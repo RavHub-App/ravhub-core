@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -45,6 +45,7 @@ import { RedisModule } from './modules/redis/redis.module';
       database: process.env.POSTGRES_DB || 'ravhub',
       entities: Object.values(Entities),
       synchronize: process.env.TYPEORM_SYNC === 'true',
+      dropSchema: process.env.TYPEORM_DROP_SCHEMA === 'true',
       logging: false,
     }),
     RedisModule,
@@ -59,7 +60,7 @@ import { RedisModule } from './modules/redis/redis.module';
       try {
         const { BackupModule } = require('./modules/backup/backup.module');
         return [BackupModule];
-      } catch (e) {
+      } catch {
         return [];
       }
     })(),
@@ -71,4 +72,4 @@ import { RedisModule } from './modules/redis/redis.module';
   controllers: [AppController, HealthController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
-export class AppModule { }
+export class AppModule {}

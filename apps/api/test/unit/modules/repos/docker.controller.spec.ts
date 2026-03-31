@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -19,6 +19,7 @@ import { StorageService } from 'src/modules/storage/storage.service';
 import { ReposService } from 'src/modules/repos/repos.service';
 import { PluginManagerService } from 'src/modules/plugins/plugin-manager.service';
 import { RedisService } from 'src/modules/redis/redis.service';
+import { PermissionService } from 'src/modules/rbac/permission.service';
 
 describe('DockerCompatController (unit)', () => {
   let controller: DockerCompatController;
@@ -40,6 +41,10 @@ describe('DockerCompatController (unit)', () => {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
+  };
+
+  const permissionService = {
+    hasPermission: jest.fn(async () => true),
   };
 
   describe('when plugin implements flows', () => {
@@ -84,6 +89,7 @@ describe('DockerCompatController (unit)', () => {
           },
           { provide: StorageService, useValue: { getStream: jest.fn() } },
           { provide: RedisService, useValue: mockRedisService },
+          { provide: PermissionService, useValue: permissionService },
         ],
       }).compile();
 
@@ -218,7 +224,10 @@ describe('DockerCompatController (unit)', () => {
     });
 
     it('mints docker token for valid Basic auth', async () => {
-      (controller as any).auth.validateUser = jest.fn(async () => true);
+      (controller as any).auth.validateUser = jest.fn(async () => ({
+        id: 'user-1',
+        username: 'u',
+      }));
       (controller as any).auth.signToken = jest.fn(() => 'tok123');
 
       const basic = Buffer.from('u:p').toString('base64');
@@ -260,6 +269,7 @@ describe('DockerCompatController (unit)', () => {
           },
           { provide: StorageService, useValue: { getStream: jest.fn() } },
           { provide: RedisService, useValue: mockRedisService },
+          { provide: PermissionService, useValue: permissionService },
         ],
       }).compile();
 

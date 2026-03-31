@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -35,13 +35,26 @@ import { Role } from '../../entities/role.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+type CreateUserBody = {
+  username?: string;
+  password?: string;
+  displayName?: string;
+  roles?: string[];
+};
+
+type UpdateUserBody = {
+  displayName?: string;
+  password?: string;
+  roles?: string[];
+};
+
 @Controller('users')
 @UseGuards(PermissionsGuard)
 export class UsersController {
   constructor(
     private readonly users: UsersService,
     @InjectRepository(Role) private readonly roleRepo: Repository<Role>,
-  ) { }
+  ) {}
 
   @Get()
   @Permissions('user.read')
@@ -49,7 +62,8 @@ export class UsersController {
     const all = await this.users.findAll();
     // sanitize passwordhash
     return all.map((u) => {
-      const { passwordhash, ...rest } = u;
+      const { passwordhash: _passwordhash, ...rest } = u;
+      void _passwordhash;
       return rest;
     });
   }
@@ -59,13 +73,14 @@ export class UsersController {
   async get(@Param('id') id: string) {
     const u = await this.users.findOne(id);
     if (!u) throw new HttpException('not found', HttpStatus.NOT_FOUND);
-    const { passwordhash, ...rest } = u;
+    const { passwordhash: _passwordhash, ...rest } = u;
+    void _passwordhash;
     return rest;
   }
 
   @Post()
   @Permissions('user.manage')
-  async create(@Body() body: any) {
+  async create(@Body() body: CreateUserBody) {
     if (!body.username || !body.password)
       throw new HttpException('missing fields', HttpStatus.BAD_REQUEST);
 
@@ -73,7 +88,12 @@ export class UsersController {
     if (exists) throw new HttpException('username taken', HttpStatus.CONFLICT);
 
     const passwordhash = await bcrypt.hash(body.password, 10);
-    const userData: any = {
+    const userData: {
+      username: string;
+      displayName?: string;
+      passwordhash: string;
+      roles?: Role[];
+    } = {
       username: body.username,
       displayName: body.displayName,
       passwordhash,
@@ -90,17 +110,22 @@ export class UsersController {
     }
 
     const created = await this.users.create(userData);
-    const { passwordhash: _, ...rest } = created;
+    const { passwordhash: _passwordhash, ...rest } = created;
+    void _passwordhash;
     return rest;
   }
 
   @Put(':id')
   @Permissions('user.write')
-  async update(@Param('id') id: string, @Body() body: any) {
+  async update(@Param('id') id: string, @Body() body: UpdateUserBody) {
     const u = await this.users.findOne(id);
     if (!u) throw new HttpException('not found', HttpStatus.NOT_FOUND);
 
-    const updateData: any = {};
+    const updateData: {
+      displayName?: string;
+      passwordhash?: string;
+      roles?: Role[];
+    } = {};
     if (body.displayName) updateData.displayName = body.displayName;
     if (body.password) {
       updateData.passwordhash = await bcrypt.hash(body.password, 10);
@@ -117,7 +142,8 @@ export class UsersController {
     }
 
     const updated = await this.users.update(id, updateData);
-    const { passwordhash: _, ...rest } = updated!;
+    const { passwordhash: _passwordhash, ...rest } = updated!;
+    void _passwordhash;
     return rest;
   }
 

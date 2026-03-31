@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -18,7 +18,7 @@ describe('ArtifactIndexService (Unit)', () => {
   let service: ArtifactIndexService;
 
   beforeEach(() => {
-    service = new ArtifactIndexService();
+    service = new ArtifactIndexService(undefined as any);
   });
 
   describe('indexArtifact', () => {

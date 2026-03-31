@@ -12,8 +12,20 @@
 
 ## 🇬🇧 Contributing to RavHub
 
-First of all, thank you for your interest in contributing to RavHub! 🎉
-We welcome contributions from everyone. Whether you're fixing a bug, improving documentation, or proposing a new feature, your help is appreciated.
+First of all, thank you for your interest in RavHub! 🎉
+
+`ravhub-core` is public and source-available to the community under the AGPL, but its source code is maintained by the project author. For that reason, external source code pull requests are not currently accepted.
+
+What is welcome:
+
+- Bug reports with clear reproduction steps
+- Feature requests and product feedback
+- Architecture discussions
+- Documentation reports and clarifications
+
+If you want something added to core, please open an issue or discussion. The maintainer may implement the change directly.
+
+Copyright for `ravhub-core` should remain attributed to the legal owner of the project. Before running the repository header tooling, set `RAVHUB_COPYRIGHT_HOLDER` to the exact legal name that should appear in source headers.
 
 ### 🛠️ Development Setup
 
@@ -57,7 +69,7 @@ RavHub is a monorepo built with:
 
 ### 🧪 Running Tests
 
-Before submitting a PR, please ensure all tests pass.
+If you are preparing a bug report, reproduction case, or documentation proposal, please verify your environment and include the relevant test output when possible.
 
 #### Unit Tests
 
@@ -76,6 +88,14 @@ pnpm --filter web test
 pnpm --filter api test:e2e
 ```
 
+#### Full Automated Suite
+
+```bash
+pnpm test:full
+```
+
+This command starts the development stack when needed, waits for API and Web readiness, and then runs API unit tests, Web unit tests, API e2e tests, frontend Playwright tests, and all shell E2E scenarios in sequence.
+
 ### 📝 Coding Standards
 
 - **TypeScript**: We use strict TypeScript. Please define types for everything.
@@ -84,13 +104,12 @@ pnpm --filter api test:e2e
   - Good: `Add support for PyPI proxy repositories`
   - Bad: `fix bug`
 
-### 🚀 Submitting a Pull Request
+### 🚀 How to Propose Changes
 
-1. Create a new branch: `git checkout -b feat/my-feature`
-2. Make your changes and commit them.
-3. Push to your fork: `git push origin feat/my-feature`
-4. Open a Pull Request in the main repository.
-5. Describe your changes clearly and link any related issues.
+1. Open an issue with the problem statement, use case, and expected behavior.
+2. Include reproduction steps, logs, screenshots, or sample payloads when relevant.
+3. If the request affects architecture or package flows, explain the operational impact.
+4. The maintainer will decide whether the change belongs in `ravhub-core`.
 
 ### 🐛 Reporting Bugs
 
@@ -107,8 +126,20 @@ If you find a bug, please open an issue with:
 
 ## 🇪🇸 Contribuir a RavHub
 
-¡Gracias por tu interés en contribuir a RavHub! 🎉
-Aceptamos contribuciones de todo el mundo. Ya sea arreglando un bug, mejorando la documentación o proponiendo una nueva característica, tu ayuda es bienvenida.
+¡Gracias por tu interés en RavHub! 🎉
+
+`ravhub-core` es público y visible para la comunidad bajo AGPL, pero el código fuente lo mantiene el autor del proyecto. Por ese motivo, actualmente no se aceptan pull requests externos de código fuente.
+
+Sí son bienvenidos:
+
+- Reportes de bugs con pasos claros de reproducción
+- Propuestas de funcionalidad y feedback de producto
+- Discusiones de arquitectura
+- Reportes y aclaraciones de documentación
+
+Si quieres que algo entre en el core, abre un issue o una discusión y el mantenedor podrá implementarlo directamente.
+
+El copyright de `ravhub-core` debe atribuirse al titular legal real del proyecto. Antes de ejecutar la herramienta de cabeceras del repositorio, configura `RAVHUB_COPYRIGHT_HOLDER` con el nombre legal exacto que deba aparecer en las cabeceras del código fuente.
 
 ### 🛠️ Configuración de Desarrollo
 
@@ -152,7 +183,7 @@ RavHub es un monorepo construido con:
 
 ### 🧪 Ejecutar Tests
 
-Antes de enviar un PR, asegúrate de que todos los tests pasen.
+Si vas a preparar un bug report, un caso de reproducción o una propuesta de documentación, verifica tu entorno e incluye la salida relevante de tests cuando sea posible.
 
 #### Tests Unitarios
 
@@ -171,6 +202,14 @@ pnpm --filter web test
 pnpm --filter api test:e2e
 ```
 
+#### Suite Completa Automatizada
+
+```bash
+pnpm test:full
+```
+
+Este comando arranca el stack de desarrollo si hace falta, espera a que API y Web estén listos y después ejecuta de forma secuencial los tests unitarios de API, los tests unitarios de Web, los e2e de API, los Playwright del frontend y todos los escenarios shell E2E.
+
 ### 📝 Estándares de Código
 
 - **TypeScript**: Usamos TypeScript estricto. Por favor define tipos para todo.
@@ -179,13 +218,12 @@ pnpm --filter api test:e2e
   - Bien: `Añadir soporte para repositorios proxy de PyPI`
   - Mal: `arreglar bug`
 
-### 🚀 Enviar un Pull Request
+### 🚀 Cómo Proponer Cambios
 
-1. Crea una nueva rama: `git checkout -b feat/mi-feature`
-2. Haz tus cambios y haz commit.
-3. Push a tu fork: `git push origin feat/mi-feature`
-4. Abre un Pull Request en el repositorio principal.
-5. Describe tus cambios claramente y enlaza cualquier issue relacionado.
+1. Abre un issue con el problema, caso de uso y comportamiento esperado.
+2. Incluye pasos de reproducción, logs, capturas o payloads de ejemplo cuando aplique.
+3. Si la propuesta afecta arquitectura o flujos de paquetes, explica el impacto operativo.
+4. El mantenedor decidirá si el cambio debe formar parte de `ravhub-core`.
 
 ### 🐛 Reportar Bugs
 

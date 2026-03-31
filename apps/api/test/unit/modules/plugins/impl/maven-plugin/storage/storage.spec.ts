@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -16,6 +16,8 @@ import { initStorage } from 'src/modules/plugins/impl/maven-plugin/storage/stora
 import * as keyUtils from 'src/modules/plugins/impl/maven-plugin/utils/key-utils';
 import * as mavenUtils from 'src/modules/plugins/impl/maven-plugin/utils/maven';
 
+const mockProxyFetch = jest.fn();
+
 jest.mock('src/modules/plugins/impl/maven-plugin/utils/key-utils');
 jest.mock('src/modules/plugins/impl/maven-plugin/utils/maven');
 jest.mock('crypto', () => ({
@@ -27,7 +29,7 @@ jest.mock('crypto', () => ({
 
 jest.mock('src/modules/plugins/impl/maven-plugin/proxy/fetch', () => ({
   initProxy: jest.fn().mockImplementation(() => ({
-    proxyFetch: jest.fn().mockResolvedValue({
+    proxyFetch: mockProxyFetch.mockResolvedValue({
       ok: true,
       body: Buffer.from('proxied'),
       headers: { 'content-type': 'application/java-archive' },
@@ -66,11 +68,19 @@ describe('MavenPlugin Storage', () => {
     );
 
     jest.clearAllMocks();
-    jest.spyOn(console, 'error').mockImplementation(() => { });
+    mockProxyFetch.mockReset();
+    mockProxyFetch.mockResolvedValue({
+      ok: true,
+      body: Buffer.from('proxied'),
+      headers: { 'content-type': 'application/java-archive' },
+    });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     (console.error as jest.Mock).mockRestore();
+    (console.warn as jest.Mock).mockRestore();
   });
 
   describe('upload', () => {
@@ -231,6 +241,37 @@ describe('MavenPlugin Storage', () => {
         expect(result.ok).toBe(false);
         expect(result.message).toContain('read-only');
       });
+
+      it('should warn and continue when first member write fails', async () => {
+        const firstRepo = {
+          ...groupRepo,
+          config: { ...groupRepo.config, writePolicy: 'first' },
+        };
+        const failingMember = {
+          id: 'm1',
+          type: 'hosted',
+          config: { allowRedeploy: false },
+        };
+        const healthyMember = { id: 'm2', type: 'hosted' };
+
+        context.getRepo.mockImplementation((id) =>
+          Promise.resolve(id === 'm1' ? failingMember : healthyMember),
+        );
+        context.storage.exists
+          .mockResolvedValueOnce(true)
+          .mockResolvedValueOnce(false);
+
+        const result = await storageMethods.handlePut(
+          firstRepo,
+          'com/example/lib/1.0.0/lib-1.0.0.jar',
+          { body: Buffer.from('c') },
+        );
+
+        expect(result.ok).toBe(true);
+        expect(console.warn).toHaveBeenCalledWith(
+          '[Maven] Group write failed for member m1: Error: Redeployment of com.example/lib:1.0.0 is not allowed',
+        );
+      });
     });
   });
 
@@ -248,7 +289,8 @@ describe('MavenPlugin Storage', () => {
     it('should compute checksum on the fly if missing', async () => {
       // Mock get base artifact success, but checksum file invalid/missing
       context.storage.get.mockImplementation((key: string) => {
-        if (key.endsWith('.jar')) return Promise.resolve(Buffer.from('base-content'));
+        if (key.endsWith('.jar'))
+          return Promise.resolve(Buffer.from('base-content'));
         return Promise.resolve(null);
       });
 

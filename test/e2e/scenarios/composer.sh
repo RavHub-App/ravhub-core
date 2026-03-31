@@ -1,80 +1,79 @@
 #!/bin/bash
 set -e
 
-# Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
 API_URL="http://localhost:3000"
-REPOS_URL="http://localhost:3000/repository"
+REPOS_URL="$API_URL/repository"
 TEMP_DIR="/tmp/e2e-composer"
-mkdir -p $TEMP_DIR
-
-# Auth variables
+PROJECT_DIR="$TEMP_DIR/project"
+ARTIFACT_DIR="$TEMP_DIR/artifacts"
 ADMIN_USER="e2e-admin-composer"
 ADMIN_PASS="password123"
 AUTH_TOKEN=""
 USER_ID=""
+LIMITED_USER="e2e-limited-composer"
+LIMITED_PASS="password123"
+LIMITED_TOKEN=""
+LIMITED_USER_ID=""
 
-# Detect containers
+mkdir -p "$PROJECT_DIR" "$ARTIFACT_DIR"
+
 API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-app|distributed-chat-api|api' | head -n1 || echo "distributed-chat-api-1")
 POSTGRES_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-postgres|postgres' | head -n1 || echo "distributed-chat-postgres-1")
 
 echo "Starting Composer (PHP) E2E Test..."
 
-# Cleanup function
+run_sql() {
+    docker exec "$POSTGRES_CONTAINER" psql -U postgres -d ravhub -c "$1" > /dev/null
+}
+
+repo_id_by_name() {
+    local repo_name="$1"
+    curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories" | grep -o "\"id\":\"[^\"]*\",\"name\":\"$repo_name\"" | cut -d'"' -f4
+}
+
 cleanup() {
     echo "Cleaning up..."
-    # Use docker to remove files created by docker (root owned)
-    docker run --rm -v "$TEMP_DIR:/app" alpine sh -c "rm -rf /app/*"
-    rm -rf $TEMP_DIR
-    
-    # Delete repositories
-    for repo in composer-proxy drupal-proxy composer-hosted composer-group composer-proxy-auth composer-group-write composer-hosted-2 composer-group-pref composer-group-mirror; do
-        # Get ID
-        if [ ! -z "$AUTH_TOKEN" ]; then
-            ID=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories" | grep -o "\"id\":\"[^\"]*\",\"name\":\"$repo\"" | cut -d'"' -f4)
-            if [ ! -z "$ID" ]; then
-                echo "Deleting repo $repo ($ID)..."
-                curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories/$ID" > /dev/null
+    docker run --rm -v "$TEMP_DIR:/app" alpine sh -c "rm -rf /app/*" > /dev/null 2>&1 || true
+    rm -rf "$TEMP_DIR"
+
+    for repo in composer-proxy drupal-proxy composer-hosted composer-group composer-proxy-auth composer-hosted-2; do
+        if [ -n "$AUTH_TOKEN" ]; then
+            local repo_id
+            repo_id=$(repo_id_by_name "$repo")
+            if [ -n "$repo_id" ]; then
+                curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories/$repo_id" > /dev/null
             fi
         fi
     done
 
-    # Delete user if exists
-    if [ ! -z "$USER_ID" ] && [ ! -z "$AUTH_TOKEN" ]; then
-        echo "Deleting test user $ADMIN_USER..."
+    if [ -n "$USER_ID" ] && [ -n "$AUTH_TOKEN" ]; then
         curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$USER_ID" > /dev/null
+    fi
+
+    if [ -n "$LIMITED_USER_ID" ] && [ -n "$AUTH_TOKEN" ]; then
+        curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$LIMITED_USER_ID" > /dev/null
     fi
 }
 if [ "$SKIP_CLEANUP" != "1" ]; then trap cleanup EXIT; fi
 
-# 0. Setup Auth
-echo "Setting up authentication..."
+setup_auth() {
+    local hashed_pass
+    hashed_pass=$(docker exec -w /workspace/apps/api "$API_CONTAINER" node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));")
 
-# Generate bcrypt hash using node (available in environment)
-# We use a simple node script to hash the password
-# A known bcrypt hash for "password123" is: $2b$10$3euPcmQFCiblsZeEu5s7p.9.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1 (fake)
-# Let's generate one using the api container which has bcryptjs or bcrypt installed.
-
-echo "Generating password hash..."
-HASHED_PASS=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));")
-
-# Insert user into DB if not exists
-echo "Inserting admin user into DB..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
+    run_sql "
 INSERT INTO users (id, username, passwordhash)
-VALUES (gen_random_uuid(), '$ADMIN_USER', '$HASHED_PASS')
+VALUES (gen_random_uuid(), '$ADMIN_USER', '$hashed_pass')
 ON CONFLICT (username) DO NOTHING;
-"
 
-# Ensure permissions exist and are assigned to admin
-echo "Ensuring permissions..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
-INSERT INTO roles (id, name, description) VALUES (gen_random_uuid(), 'admin', 'Administrator') ON CONFLICT (name) DO NOTHING;
+INSERT INTO roles (id, name, description)
+VALUES (gen_random_uuid(), 'admin', 'Administrator')
+ON CONFLICT (name) DO NOTHING;
 
-INSERT INTO permissions (id, key, description) VALUES 
+INSERT INTO permissions (id, key, description) VALUES
 (gen_random_uuid(), 'repo.read', 'Read access'),
 (gen_random_uuid(), 'repo.write', 'Write access'),
 (gen_random_uuid(), 'repo.manage', 'Manage access')
@@ -85,11 +84,7 @@ SELECT r.id, p.id
 FROM roles r, permissions p
 WHERE r.name = 'admin' AND p.key IN ('repo.read', 'repo.write', 'repo.manage')
 ON CONFLICT DO NOTHING;
-"
 
-# Assign admin role
-echo "Assigning admin role..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM users u, roles r
@@ -97,324 +92,238 @@ WHERE u.username = '$ADMIN_USER' AND r.name = 'admin'
 ON CONFLICT DO NOTHING;
 "
 
-# Login to get token
-LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
-
-AUTH_TOKEN=$(echo "$LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-USER_ID=$(echo "$LOGIN_RES" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-if [ -z "$AUTH_TOKEN" ]; then
-    echo -e "${RED}Authentication failed. Could not get token.${NC}"
-    echo "Login response: $LOGIN_RES"
-    exit 1
-fi
-echo "Authenticated as $ADMIN_USER (ID: $USER_ID)"
-
-# Helper to create repo and check success
-create_repo() {
-    local DATA="$1"
-    local NAME=$(echo "$DATA" | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
-    echo "Creating repository $NAME..."
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/repositories" \
+    local login_response
+    login_response=$(curl -s -X POST "$API_URL/auth/login" \
       -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $AUTH_TOKEN" \
-      -d "$DATA")
-    
-    if [ "$HTTP_CODE" -eq 201 ] || [ "$HTTP_CODE" -eq 200 ]; then
-        echo "Repository $NAME created."
-    else
-        echo -e "${RED}Failed to create repository $NAME (HTTP $HTTP_CODE)${NC}"
+      -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
+
+    AUTH_TOKEN=$(echo "$login_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    USER_ID=$(echo "$login_response" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
+
+    if [ -z "$AUTH_TOKEN" ]; then
+        echo -e "${RED}Authentication failed${NC}"
+        echo "$login_response"
+        exit 1
+    fi
+
+    hashed_pass=$(docker exec -w /workspace/apps/api "$API_CONTAINER" node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$LIMITED_PASS', 10));")
+    run_sql "
+INSERT INTO users (id, username, passwordhash)
+VALUES (gen_random_uuid(), '$LIMITED_USER', '$hashed_pass')
+ON CONFLICT (username) DO NOTHING;
+"
+
+    login_response=$(curl -s -X POST "$API_URL/auth/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"username\":\"$LIMITED_USER\",\"password\":\"$LIMITED_PASS\"}")
+
+    LIMITED_TOKEN=$(echo "$login_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    LIMITED_USER_ID=$(echo "$login_response" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
+
+    if [ -z "$LIMITED_TOKEN" ]; then
+        echo -e "${RED}Limited user authentication failed${NC}"
+        echo "$login_response"
         exit 1
     fi
 }
 
-# Helper to run composer via Docker
-# We mount the temp dir to /app
+create_repo() {
+    local data="$1"
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/repositories" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $AUTH_TOKEN" \
+      -d "$data")
+
+    if [ "$http_code" -ne 201 ] && [ "$http_code" -ne 200 ]; then
+        echo -e "${RED}Repository creation failed with HTTP $http_code${NC}"
+        exit 1
+    fi
+}
+
+reset_project_dir() {
+    docker run --rm -v "$PROJECT_DIR:/app" alpine sh -c "rm -rf /app/*" > /dev/null 2>&1 || true
+    mkdir -p "$PROJECT_DIR"
+}
+
 run_composer() {
-    docker run --rm \
-        --network host \
-        -v "$TEMP_DIR:/app" \
-        -w /app \
-        composer:latest \
-        "$@"
+    docker run --rm --network host -v "$PROJECT_DIR:/app" -w /app composer:latest "$@"
 }
 
-# 1. Create Composer Proxy Repository (Packagist)
-# Use repo.packagist.org which is the canonical repo URL
+write_project_json() {
+    local content="$1"
+    printf '%s\n' "$content" > "$PROJECT_DIR/composer.json"
+}
+
+create_real_composer_archive() {
+    local package_name="$1"
+    local version="$2"
+    local output_path="$3"
+
+    python3 - "$package_name" "$version" "$output_path" <<'PY'
+import json
+import re
+import sys
+import zipfile
+
+package_name, version, output_path = sys.argv[1:4]
+_, package = package_name.split('/', 1)
+class_name = ''.join(part.capitalize() for part in re.split(r'[^a-zA-Z0-9]+', package) if part) or 'Package'
+composer_json = {
+    'name': package_name,
+    'version': version,
+    'description': f'Test package {package_name}',
+    'type': 'library',
+    'autoload': {'psr-4': {f'{class_name}\\': 'src/'}},
+}
+php_source = f'''<?php
+namespace {class_name};
+
+final class {class_name}
+{{
+    public static function version(): string
+    {{
+        return '{version}';
+    }}
+}}
+'''
+
+with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as archive:
+    archive.writestr('composer.json', json.dumps(composer_json, indent=2))
+    archive.writestr(f'src/{class_name}.php', php_source)
+PY
+}
+
+verify_real_composer_archive() {
+    local archive_path="$1"
+    local expected_name="$2"
+    local expected_version="$3"
+
+    python3 - "$archive_path" "$expected_name" "$expected_version" <<'PY'
+import json
+import sys
+import zipfile
+
+archive_path, expected_name, expected_version = sys.argv[1:4]
+
+with zipfile.ZipFile(archive_path) as archive:
+    names = archive.namelist()
+    if 'composer.json' not in names or not any(name.startswith('src/') for name in names):
+        raise SystemExit(1)
+    composer_json = json.loads(archive.read('composer.json').decode())
+    if composer_json.get('name') != expected_name or composer_json.get('version') != expected_version:
+        raise SystemExit(1)
+PY
+}
+
+upload_real_composer_package() {
+    local repo_name="$1"
+    local package_name="$2"
+    local version="$3"
+    local archive_name
+    archive_name=$(echo "$package_name-$version" | tr '/' '-')
+    local archive_path="$ARTIFACT_DIR/$archive_name.zip"
+    local encoded_content
+
+    create_real_composer_archive "$package_name" "$version" "$archive_path"
+    encoded_content=$(base64 -w 0 "$archive_path")
+
+    curl -s -X POST "$REPOS_URL/$repo_name/upload" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $AUTH_TOKEN" \
+      -d "{\"name\":\"$package_name\",\"version\":\"$version\",\"content\":\"$encoded_content\",\"encoding\":\"base64\"}" > /dev/null
+}
+
+download_and_verify_composer_archive() {
+    local repo_name="$1"
+    local package_name="$2"
+    local version="$3"
+    local archive_name
+    archive_name=$(echo "$repo_name-$package_name-$version" | tr '/' '-')
+    local output_path="$ARTIFACT_DIR/$archive_name.zip"
+
+    curl -fsS -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/$repo_name/$package_name/$version" -o "$output_path"
+    verify_real_composer_archive "$output_path" "$package_name" "$version"
+}
+
+setup_auth
+
 create_repo '{"name":"composer-proxy","type":"proxy","manager":"composer","config":{"proxyUrl":"https://repo.packagist.org","cacheMaxAgeDays":7}}'
-
-# 2. Test Proxy Packagist
-echo "Testing Proxy Packagist..."
-# Create a composer.json using the proxy
-cd $TEMP_DIR
-cat > composer.json <<JSON
-{
-    "name": "test/app",
-    "repositories": [
-        { "packagist": false },
-        {
-            "type": "composer",
-            "url": "$REPOS_URL/composer-proxy"
-        }
-    ],
-    "require": {
-        "monolog/monolog": "^3.0"
-    },
-    "config": {
-        "secure-http": false
-    }
-}
-JSON
-
-echo "Installing monolog via proxy..."
-echo "Debug: Fetching packages.json from proxy..."
-curl -v "$REPOS_URL/composer-proxy/packages.json" || true
-
+reset_project_dir
+write_project_json "{\"name\":\"test/app\",\"repositories\":[{\"packagist\":false},{\"type\":\"composer\",\"url\":\"$REPOS_URL/composer-proxy\"}],\"require\":{\"monolog/monolog\":\"^3.0\"},\"config\":{\"secure-http\":false}}"
 run_composer install --no-interaction --no-progress --prefer-dist
-
-if [ -d "$TEMP_DIR/vendor/monolog" ]; then
-    echo -e "${GREEN}Composer Proxy (Packagist) Test Passed${NC}"
-else
+if [ ! -d "$PROJECT_DIR/vendor/monolog" ]; then
     echo -e "${RED}Composer Proxy (Packagist) Test Failed${NC}"
-    # We continue to other tests even if this fails, to verify other functionalities
+    exit 1
 fi
+echo -e "${GREEN}Composer Proxy (Packagist) Test Passed${NC}"
 
-# Cleanup for next test
-docker run --rm -v "$TEMP_DIR:/app" alpine sh -c "rm -rf /app/*"
-
-# 3. Create Composer Proxy Repository (Drupal)
 create_repo '{"name":"drupal-proxy","type":"proxy","manager":"composer","config":{"proxyUrl":"https://packages.drupal.org","cacheMaxAgeDays":7}}'
-
-# 4. Test Proxy Drupal
-echo "Testing Proxy Drupal..."
-cat > composer.json <<JSON
-{
-    "name": "test/drupal-app",
-    "repositories": [
-        {
-            "type": "composer",
-            "url": "$REPOS_URL/drupal-proxy/8"
-        }
-    ],
-    "require": {
-        "drupal/token": "*"
-    },
-    "config": {
-        "secure-http": false
-    }
-}
-JSON
-
-echo "Installing drupal/token via proxy..."
-# This might fail if drupal/token has complex dependencies not in the proxy (e.g. drupal/core)
-# But let's try. If it fails on dependencies, we at least verified it tried to fetch metadata.
-# We allow failure here because drupal/core is not in our proxy and we disabled packagist.
+reset_project_dir
+write_project_json "{\"name\":\"test/drupal-app\",\"repositories\":[{\"type\":\"composer\",\"url\":\"$REPOS_URL/drupal-proxy/8\"}],\"require\":{\"drupal/token\":\"*\"},\"config\":{\"secure-http\":false,\"allow-plugins\":{\"drupal/core-composer-scaffold\":true}}}"
 run_composer install --no-interaction --no-progress --prefer-dist --ignore-platform-reqs || true
-
-# Check if composer.lock was created or vendor dir exists
-if [ -f "$TEMP_DIR/composer.lock" ]; then
-    echo -e "${GREEN}Composer Proxy (Drupal) Test Passed${NC}"
-else
-    echo -e "${RED}Composer Proxy (Drupal) Test Failed (Installation failed, but might be due to deps)${NC}"
-    # We'll accept it if we can verify the proxy worked via logs or curl
-    # Note: Drupal packagist uses absolute paths in metadata-url, so we need to check the full path.
-    # The upstream is https://packages.drupal.org, and the file is at /files/packages/8/p2/drupal/token.json
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$REPOS_URL/drupal-proxy/files/packages/8/p2/drupal/token.json")
-    if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 302 ]; then
-         echo -e "${GREEN}Composer Proxy (Drupal) Metadata Check Passed${NC}"
-    else
-         echo -e "${RED}Composer Proxy (Drupal) Metadata Check Failed${NC}"
-    fi
+DRUPAL_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$REPOS_URL/drupal-proxy/files/packages/8/p2/drupal/token.json")
+if [ ! -f "$PROJECT_DIR/composer.lock" ] && [ "$DRUPAL_HTTP_CODE" -ne 200 ] && [ "$DRUPAL_HTTP_CODE" -ne 302 ]; then
+    echo -e "${RED}Composer Proxy (Drupal) Test Failed${NC}"
+    exit 1
 fi
+echo -e "${GREEN}Composer Proxy (Drupal) Test Passed${NC}"
 
-# Cleanup
-docker run --rm -v "$TEMP_DIR:/app" alpine sh -c "rm -rf /app/*"
-
-# 5. Hosted Repository
 create_repo '{"name":"composer-hosted","type":"hosted","manager":"composer"}'
-
-echo "Publishing package to Hosted Repo..."
-# Create a real package
-mkdir -p $TEMP_DIR/my-package
-cat > $TEMP_DIR/my-package/composer.json <<JSON
-{
-    "name": "my/package",
-    "version": "1.0.0",
-    "description": "A test package"
-}
-JSON
-# Zip it
-cd $TEMP_DIR/my-package
-if command -v zip >/dev/null 2>&1; then
-    zip -r ../package.zip . > /dev/null
-else
-    # Fallback to python if zip is missing
-    python3 -c "import shutil; shutil.make_archive('../package', 'zip', '.')"
+upload_real_composer_package "composer-hosted" "my/package" "1.0.0"
+download_and_verify_composer_archive "composer-hosted" "my/package" "1.0.0"
+LIMITED_UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$REPOS_URL/composer-hosted/upload" -H "Content-Type: application/json" -H "Authorization: Bearer $LIMITED_TOKEN" -d '{"name":"blocked/package","version":"1.0.0","content":"Zm9v","encoding":"base64"}')
+ANON_UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$REPOS_URL/composer-hosted/upload" -H "Content-Type: application/json" -d '{"name":"blocked/package","version":"1.0.0","content":"Zm9v","encoding":"base64"}')
+if [ "$LIMITED_UPLOAD_CODE" -lt 400 ] || [ "$ANON_UPLOAD_CODE" -lt 400 ]; then
+    echo -e "${RED}Composer Permission Test Failed (limited=$LIMITED_UPLOAD_CODE anon=$ANON_UPLOAD_CODE)${NC}"
+    exit 1
 fi
-cd $TEMP_DIR
-
-# Base64 encode
-PKG_CONTENT=$(base64 -w 0 package.zip)
-
-# Upload
-curl -s -X POST "$REPOS_URL/composer-hosted/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d "{\"name\":\"my/package\",\"version\":\"1.0.0\",\"content\":\"$PKG_CONTENT\",\"encoding\":\"base64\"}" > /dev/null
-
-echo "Verifying download from Hosted Repo..."
-# We can try to install it
-cat > composer.json <<JSON
-{
-    "name": "test/hosted-app",
-    "repositories": [
-        { "packagist": false },
-        {
-            "type": "composer",
-            "url": "$REPOS_URL/composer-hosted"
-        }
-    ],
-    "require": {
-        "my/package": "1.0.0"
-    },
-    "config": {
-        "secure-http": false
-    }
-}
-JSON
-
+echo -e "${GREEN}Composer Permission Test Passed${NC}"
+reset_project_dir
+write_project_json "{\"name\":\"test/hosted-app\",\"repositories\":[{\"packagist\":false},{\"type\":\"composer\",\"url\":\"$REPOS_URL/composer-hosted\"}],\"require\":{\"my/package\":\"1.0.0\"},\"config\":{\"secure-http\":false}}"
 run_composer install --no-interaction --no-progress --prefer-dist
-
-if [ -d "$TEMP_DIR/vendor/my/package" ]; then
-    echo -e "${GREEN}Hosted Repository Install Passed${NC}"
-else
+if [ ! -d "$PROJECT_DIR/vendor/my/package" ]; then
     echo -e "${RED}Hosted Repository Install Failed${NC}"
-    # Fallback check
-    CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/composer-hosted/my/package/1.0.0")
-    # Check for Zip header (PK..)
-    if [[ "$CONTENT" == *"PK"* ]]; then 
-         echo -e "${GREEN}Hosted Repository Download (Raw) Passed${NC}"
-    fi
+    exit 1
 fi
+echo -e "${GREEN}Hosted Repository Install Passed${NC}"
 
-# 6. Group Repository
-echo "Creating Group Repository..."
-# Get IDs of proxy and hosted
-PROXY_ID=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories" | grep -o '"id":"[^"]*","name":"composer-proxy"' | cut -d'"' -f4)
-HOSTED_ID=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories" | grep -o '"id":"[^"]*","name":"composer-hosted"' | cut -d'"' -f4)
-
+PROXY_ID=$(repo_id_by_name "composer-proxy")
+HOSTED_ID=$(repo_id_by_name "composer-hosted")
 create_repo "{\"name\":\"composer-group\",\"type\":\"group\",\"manager\":\"composer\",\"config\":{\"members\":[\"$PROXY_ID\",\"$HOSTED_ID\"],\"writePolicy\":\"mirror\"}}"
+download_and_verify_composer_archive "composer-group" "my/package" "1.0.0"
+echo -e "${GREEN}Group Repository Download Passed${NC}"
 
-echo "Testing Group Download (from Hosted member)..."
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/composer-group/my/package/1.0.0")
-if [[ "$CONTENT" == *"PK"* ]]; then
-    echo -e "${GREEN}Group Repository Download Passed${NC}"
-else
-    echo -e "${RED}Group Repository Download Failed${NC}"
-fi
+upload_real_composer_package "composer-group" "my/group-package" "1.0.0"
+download_and_verify_composer_archive "composer-hosted" "my/group-package" "1.0.0"
+echo -e "${GREEN}Group Repository Write Passed${NC}"
 
-echo "Testing Group Write (Mirror)..."
-# Upload to group, should land in hosted (since proxy is read-only)
-mkdir -p $TEMP_DIR/my-group-package
-cat > $TEMP_DIR/my-group-package/composer.json <<JSON
-{
-    "name": "my/group-package",
-    "version": "1.0.0"
-}
-JSON
-cd $TEMP_DIR/my-group-package
-if command -v zip >/dev/null 2>&1; then
-    zip -r ../group-package.zip . > /dev/null
-else
-    python3 -c "import shutil; shutil.make_archive('../group-package', 'zip', '.')"
-fi
-cd $TEMP_DIR
-GROUP_PKG_CONTENT=$(base64 -w 0 group-package.zip)
-
-curl -s -X POST "$REPOS_URL/composer-group/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d "{\"name\":\"my/group-package\",\"version\":\"1.0.0\",\"content\":\"$GROUP_PKG_CONTENT\",\"encoding\":\"base64\"}" > /dev/null
-
-# Verify it exists in hosted
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/composer-hosted/my/group-package/1.0.0")
-if [[ "$CONTENT" == *"PK"* ]]; then
-    echo -e "${GREEN}Group Repository Write Passed${NC}"
-else
-    echo -e "${RED}Group Repository Write Failed${NC}"
-fi
-
-GROUP_ID=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories" | grep -o '"id":"[^"]*","name":"composer-group"' | cut -d'"' -f4)
-
-# 6b. Group Write Policies (First, Preferred)
-echo "Testing Group Write Policies..."
-
-# Create another hosted repo
+GROUP_ID=$(repo_id_by_name "composer-group")
 create_repo '{"name":"composer-hosted-2","type":"hosted","manager":"composer"}'
-HOSTED_ID_2=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories" | grep -o '"id":"[^"]*","name":"composer-hosted-2"' | cut -d'"' -f4)
+HOSTED_ID_2=$(repo_id_by_name "composer-hosted-2")
 
-# Update Group to use 'first'
-echo "Testing 'first' policy..."
 curl -s -X PUT "$API_URL/repositories/$GROUP_ID" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -d "{\"name\":\"composer-group\",\"type\":\"group\",\"manager\":\"composer\",\"config\":{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"first\"}}" > /dev/null
+upload_real_composer_package "composer-group" "my/first-pkg" "1.0.0"
+download_and_verify_composer_archive "composer-hosted" "my/first-pkg" "1.0.0"
+echo -e "${GREEN}Group Write 'first' Passed${NC}"
 
-curl -s -X POST "$REPOS_URL/composer-group/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d "{\"name\":\"my/first-pkg\",\"version\":\"1.0.0\",\"content\":\"$PKG_CONTENT\",\"encoding\":\"base64\"}" > /dev/null
-
-# Verify in hosted (first member)
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/composer-hosted/my/first-pkg/1.0.0")
-if [[ "$CONTENT" == *"PK"* ]]; then
-    echo -e "${GREEN}Group Write 'first' Passed${NC}"
-else
-    echo -e "${RED}Group Write 'first' Failed${NC}"
-fi
-
-# Update Group to use 'preferred'
-echo "Testing 'preferred' policy..."
 curl -s -X PUT "$API_URL/repositories/$GROUP_ID" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -d "{\"name\":\"composer-group\",\"type\":\"group\",\"manager\":\"composer\",\"config\":{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"preferred\",\"preferredWriter\":\"$HOSTED_ID_2\"}}" > /dev/null
+upload_real_composer_package "composer-group" "my/pref-pkg" "1.0.0"
+download_and_verify_composer_archive "composer-hosted-2" "my/pref-pkg" "1.0.0"
+echo -e "${GREEN}Group Write 'preferred' Passed${NC}"
 
-curl -s -X POST "$REPOS_URL/composer-group/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d "{\"name\":\"my/pref-pkg\",\"version\":\"1.0.0\",\"content\":\"$PKG_CONTENT\",\"encoding\":\"base64\"}" > /dev/null
+create_repo '{"name":"composer-proxy-auth","type":"proxy","manager":"composer","config":{"proxyUrl":"http://localhost:3000/repository/composer-hosted","auth":{"type":"basic","username":"e2e-admin-composer","password":"password123"}}}'
+download_and_verify_composer_archive "composer-proxy-auth" "my/package" "1.0.0"
+echo -e "${GREEN}Composer Proxy Auth Test Passed${NC}"
+PROXY_AUTH_ID=$(repo_id_by_name "composer-proxy-auth")
+curl -s -X PUT "$API_URL/repositories/$PROXY_AUTH_ID" -H "Content-Type: application/json" -H "Authorization: Bearer $AUTH_TOKEN" -d '{"name":"composer-proxy-auth","type":"proxy","manager":"composer","config":{"proxyUrl":"http://localhost:9/repository/composer-hosted","auth":{"type":"basic","username":"e2e-admin-composer","password":"password123"}}}' > /dev/null
+download_and_verify_composer_archive "composer-proxy-auth" "my/package" "1.0.0"
+echo -e "${GREEN}Composer Proxy Cache Test Passed${NC}"
 
-# Verify in hosted-2
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/composer-hosted-2/my/pref-pkg/1.0.0")
-if [[ "$CONTENT" == *"PK"* ]]; then
-    echo -e "${GREEN}Group Write 'preferred' Passed${NC}"
-else
-    echo -e "${RED}Group Write 'preferred' Failed${NC}"
-fi
-
-# 7. Auth Test (Proxy with Auth)
-echo "Testing Proxy with Auth (against local Hosted)..."
-# Proxy config:
-# We use 172.17.0.1 to reach the frontend from inside the container
-HOSTED_URL="http://localhost:3000/repository/composer-hosted"
-
-create_repo "{\"name\":\"composer-proxy-auth\",\"type\":\"proxy\",\"manager\":\"composer\",\"config\":{\"proxyUrl\":\"$HOSTED_URL\",\"auth\":{\"type\":\"basic\",\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}}}"
-
-echo "Verifying access via Proxy Auth..."
-# We try to fetch the package we uploaded to hosted, via the new proxy.
-# Note: The proxy itself needs to authenticate with the upstream (hosted).
-# The client (us) also needs to authenticate with the proxy if the proxy is private.
-# But here we are testing if the proxy can authenticate with the upstream.
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/composer-proxy-auth/my/package/1.0.0")
-if [[ "$CONTENT" == *"PK"* ]]; then
-    echo -e "${GREEN}Proxy with Auth Test Passed${NC}"
-else
-    echo -e "${RED}Proxy with Auth Test Failed${NC}"
-    # Debug
-    # echo "Response: $CONTENT"
-fi
-
-# Cleanup is handled by trap
+echo -e "${GREEN}All Composer Tests Passed${NC}"

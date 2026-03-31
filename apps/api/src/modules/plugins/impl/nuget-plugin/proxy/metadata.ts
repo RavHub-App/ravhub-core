@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -18,7 +18,7 @@ export function initMetadata(context: PluginContext) {
   const getProxyUrl = (repo: Repository) => {
     const host = process.env.API_HOST || 'localhost:3000';
     const proto = process.env.API_PROTOCOL || 'http';
-    return `${proto}://${host}/repository/${repo.name}`;
+    return `${proto}://${host}/repository/${encodeURIComponent(repo.name)}`;
   };
 
   const processServiceIndex = (repo: Repository, content: any) => {

@@ -7,12 +7,15 @@ TEMP_DIR="/tmp/npm-test"
 ADMIN_USER="e2e-admin-npm"
 ADMIN_PASS="password123"
 AUTH_TOKEN=""
+USER_ID=""
+LIMITED_USER="e2e-limited-npm"
+LIMITED_PASS="password123"
+LIMITED_TOKEN=""
+LIMITED_USER_ID=""
 
-# Detect containers
 API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-app|distributed-chat-api|api' | head -n1 || echo "distributed-chat-api-1")
 POSTGRES_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-postgres|postgres' | head -n1 || echo "distributed-chat-postgres-1")
 
-# Create admin user directly in DB
 echo "Generating password hash..."
 HASHED_PASS=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));")
 
@@ -33,13 +36,13 @@ WHERE u.username = '$ADMIN_USER' AND r.name = 'admin'
 ON CONFLICT DO NOTHING;
 " > /dev/null
 
-# Login
 echo "Logging in..."
 LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
 
 AUTH_TOKEN=$(echo "$LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+USER_ID=$(echo "$LOGIN_RES" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
 
 if [ -z "$AUTH_TOKEN" ]; then
   echo "Failed to authenticate: $LOGIN_RES"
@@ -47,6 +50,16 @@ if [ -z "$AUTH_TOKEN" ]; then
 fi
 
 AUTH_HEADER="Authorization: Bearer $AUTH_TOKEN"
+LIMITED_HASHED_PASS=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$LIMITED_PASS', 10));")
+docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "INSERT INTO users (id, username, passwordhash) VALUES (gen_random_uuid(), '$LIMITED_USER', '$LIMITED_HASHED_PASS') ON CONFLICT (username) DO NOTHING;" > /dev/null
+LIMITED_LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" -H "Content-Type: application/json" -d "{\"username\":\"$LIMITED_USER\",\"password\":\"$LIMITED_PASS\"}")
+LIMITED_TOKEN=$(echo "$LIMITED_LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+LIMITED_USER_ID=$(echo "$LIMITED_LOGIN_RES" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
+[ -n "$LIMITED_TOKEN" ] || { echo "Failed to authenticate limited user: $LIMITED_LOGIN_RES"; exit 1; }
+
+repo_id_by_name() {
+  curl -s -H "$AUTH_HEADER" "$API_URL/repositories" | grep -o "\"id\":\"[^\"]*\",\"name\":\"$1\"" | cut -d'"' -f4
+}
 
 cleanup() {
   echo "Cleaning up repositories..."
@@ -57,16 +70,14 @@ cleanup() {
   curl -s -X DELETE "$API_URL/repositories/npm-hosted-2" -H "$AUTH_HEADER" > /dev/null
   curl -s -X DELETE "$API_URL/repositories/npm-group-pref" -H "$AUTH_HEADER" > /dev/null
   curl -s -X DELETE "$API_URL/repositories/npm-group-mirror" -H "$AUTH_HEADER" > /dev/null
-  
-  kill $MOCK_PID 2>/dev/null || true
+  [ -n "$USER_ID" ] && curl -s -X DELETE "$API_URL/users/$USER_ID" -H "$AUTH_HEADER" > /dev/null || true
+  [ -n "$LIMITED_USER_ID" ] && curl -s -X DELETE "$API_URL/users/$LIMITED_USER_ID" -H "$AUTH_HEADER" > /dev/null || true
+
   rm -rf /tmp/npm-test
 }
 
-if [ "$SKIP_CLEANUP" != "1" ]; then
-  if [ "$SKIP_CLEANUP" != "1" ]; then trap cleanup EXIT; fi
-fi
+if [ "$SKIP_CLEANUP" != "1" ]; then trap cleanup EXIT; fi
 
-# Helper to create repo
 create_repo() {
   local name=$1
   local type=$2
@@ -83,22 +94,38 @@ create_repo() {
     }" > /dev/null
 }
 
-# Helper to publish package
 publish_package() {
   local repo=$1
   local pkg=$2
   local ver=$3
+  local auth_header=${4:-$AUTH_HEADER}
+  local status_only=${5:-0}
+  local auth_args=()
+  local package_dir="/tmp/npm-test/$pkg"
+  local tarball_file
+  local tgz_base64
+  local shasum
   echo "Publishing $pkg@$ver to $repo..."
+
+  rm -rf "$package_dir"
+  mkdir -p "$package_dir"
+  cat <<JSON > "$package_dir/package.json"
+{
+  "name": "$pkg",
+  "version": "$ver",
+  "main": "index.js",
+  "description": "Real NPM package for E2E validation"
+}
+JSON
+  echo "module.exports = '$pkg@$ver';" > "$package_dir/index.js"
+
+  tarball_file=$(cd "$package_dir" && pnpm pack --pack-destination /tmp/npm-test | tail -n1)
+  if [[ "$tarball_file" != /* ]]; then
+    tarball_file="/tmp/npm-test/$tarball_file"
+  fi
+  tgz_base64=$(base64 -w 0 "$tarball_file")
+  shasum=$(sha1sum "$tarball_file" | awk '{print $1}')
   
-  # Create dummy tgz
-  mkdir -p /tmp/npm-test/$pkg
-  echo "content" > /tmp/npm-test/$pkg/index.js
-  echo "{\"name\": \"$pkg\", \"version\": \"$ver\"}" > /tmp/npm-test/$pkg/package.json
-  tar -czf /tmp/npm-test/$pkg-$ver.tgz -C /tmp/npm-test/$pkg .
-  
-  local tgz_base64=$(base64 -w 0 /tmp/npm-test/$pkg-$ver.tgz)
-  
-  # Create metadata JSON
   cat <<JSON > /tmp/npm-test/metadata.json
 {
   "_id": "$pkg",
@@ -111,7 +138,7 @@ publish_package() {
       "version": "$ver",
       "dist": {
         "tarball": "$REPOS_URL/$repo/$pkg/-/$pkg-$ver.tgz",
-        "shasum": "dummy"
+        "shasum": "$shasum"
       }
     }
   },
@@ -124,9 +151,10 @@ publish_package() {
 }
 JSON
 
+  [ -n "$auth_header" ] && auth_args=(-H "$auth_header")
   HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/npm-test/publish_response.txt -X PUT "$REPOS_URL/$repo/$pkg" \
     -H "Content-Type: application/json" \
-    -H "$AUTH_HEADER" \
+    "${auth_args[@]}" \
     -d @/tmp/npm-test/metadata.json)
   
   echo "Publish response code: $HTTP_CODE"
@@ -134,17 +162,28 @@ JSON
   echo ""
 
   if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+    if [ "$status_only" = "1" ]; then
+      echo "$HTTP_CODE"
+      return 0
+    fi
     echo "Publish failed"
     exit 1
   fi
+
+  if [ "$status_only" = "1" ]; then echo "$HTTP_CODE"; fi
 }
 
-# 1. Hosted Test
+verify_tarball_contains_package() {
+  local tarball_path=$1
+  local expected_name=$2
+
+  tar -xzf "$tarball_path" -O package/package.json | grep -q "\"name\": \"$expected_name\""
+}
+
 echo "--- NPM Hosted Test ---"
 create_repo "npm-hosted" "hosted" "{}"
 publish_package "npm-hosted" "test-pkg" "1.0.0"
 
-# Verify metadata
 echo "Verifying metadata..."
 HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/npm-test/meta.json "$REPOS_URL/npm-hosted/test-pkg" -H "$AUTH_HEADER")
 echo "Get metadata response code: $HTTP_CODE"
@@ -155,51 +194,19 @@ if [ "$HTTP_CODE" != "200" ]; then
 fi
 grep -q "test-pkg" /tmp/npm-test/meta.json || { echo "Metadata check failed"; exit 1; }
 
-# Verify tarball
 echo "Verifying tarball..."
 curl -s -f "$REPOS_URL/npm-hosted/test-pkg/-/test-pkg-1.0.0.tgz" -H "$AUTH_HEADER" -o /tmp/npm-test/downloaded.tgz
 [ -s /tmp/npm-test/downloaded.tgz ] || { echo "Tarball download failed"; exit 1; }
+verify_tarball_contains_package /tmp/npm-test/downloaded.tgz test-pkg || { echo "Tarball content validation failed"; exit 1; }
 
 echo "NPM Hosted Test Passed"
+LIMITED_PUBLISH_CODE=$(publish_package "npm-hosted" "limited-pkg" "1.0.0" "Authorization: Bearer $LIMITED_TOKEN" "1" | tail -n1)
+ANON_PUBLISH_CODE=$(curl -s -w "%{http_code}" -o /tmp/npm-test/anon_publish_response.txt -X PUT "$REPOS_URL/npm-hosted/limited-pkg" -H "Content-Type: application/json" -d @/tmp/npm-test/metadata.json)
+[ "$LIMITED_PUBLISH_CODE" = "403" ] && [ "$ANON_PUBLISH_CODE" = "401" ] || { echo "NPM Permission Test Failed (limited=$LIMITED_PUBLISH_CODE anon=$ANON_PUBLISH_CODE)"; exit 1; }
+echo "NPM Permission Test Passed"
 
-# 2. Proxy Test (Mocking upstream)
 echo "--- NPM Proxy Test ---"
-# Start a simple mock server using node
-cat <<JS > /tmp/npm-test/mock-server.js
-const http = require('http');
-const server = http.createServer((req, res) => {
-  console.log(req.method, req.url);
-  if (req.url === '/upstream-pkg') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      name: 'upstream-pkg',
-      versions: {
-        '1.0.0': {
-          name: 'upstream-pkg',
-          version: '1.0.0',
-          dist: { tarball: 'http://localhost:9999/upstream-pkg/-/upstream-pkg-1.0.0.tgz' }
-        }
-      }
-    }));
-  } else if (req.url === '/upstream-pkg/-/upstream-pkg-1.0.0.tgz') {
-    res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
-    res.end('tarball-content');
-  } else {
-    res.writeHead(404);
-    res.end();
-  }
-});
-server.listen(9999);
-JS
-
-# Run mock server in background
-node /tmp/npm-test/mock-server.js > /tmp/npm-test/mock.log 2>&1 &
-MOCK_PID=$!
-sleep 2
-
 echo "--- NPM Proxy Auth Test (against Hosted) ---"
-# Create proxy repo pointing to npm-hosted
-# URL: http://localhost:3000/repository/npm-hosted (assuming API can reach itself via localhost)
 
 create_repo "npm-proxy" "proxy" "{
   \"url\": \"http://localhost:3000/repository/npm-hosted\",
@@ -210,18 +217,24 @@ create_repo "npm-proxy" "proxy" "{
   \"cacheMaxAgeDays\": 7
 }"
 
-# Verify proxy read
 echo "Verifying proxy read..."
 curl -s "$REPOS_URL/npm-proxy/test-pkg" -H "$AUTH_HEADER" > /tmp/npm-test/proxy-meta.json
 cat /tmp/npm-test/proxy-meta.json
 grep -q "test-pkg" /tmp/npm-test/proxy-meta.json || { echo "Proxy metadata check failed"; exit 1; }
 
-# Verify proxy tarball
 echo "Verifying proxy tarball..."
 curl -s -f "$REPOS_URL/npm-proxy/test-pkg/-/test-pkg-1.0.0.tgz" -H "$AUTH_HEADER" -o /tmp/npm-test/proxy-downloaded.tgz
 [ -s /tmp/npm-test/proxy-downloaded.tgz ] || { echo "Proxy tarball download failed"; exit 1; }
+verify_tarball_contains_package /tmp/npm-test/proxy-downloaded.tgz test-pkg || { echo "Proxy tarball content validation failed"; exit 1; }
 
 echo "NPM Proxy Auth Test Passed"
+NPM_PROXY_ID=$(repo_id_by_name "npm-proxy")
+curl -s -X PUT "$API_URL/repositories/$NPM_PROXY_ID" -H "Content-Type: application/json" -H "$AUTH_HEADER" -d "{\"config\":{\"url\":\"http://localhost:9/unavailable\",\"auth\":{\"type\":\"bearer\",\"token\":\"$AUTH_TOKEN\"},\"cacheMaxAgeDays\":7}}" > /dev/null
+curl -s -f "$REPOS_URL/npm-proxy/test-pkg" -H "$AUTH_HEADER" > /tmp/npm-test/proxy-meta-cached.json
+grep -q "test-pkg" /tmp/npm-test/proxy-meta-cached.json || { echo "Proxy cache metadata check failed"; exit 1; }
+curl -s -f "$REPOS_URL/npm-proxy/test-pkg/-/test-pkg-1.0.0.tgz" -H "$AUTH_HEADER" -o /tmp/npm-test/proxy-downloaded-cached.tgz
+verify_tarball_contains_package /tmp/npm-test/proxy-downloaded-cached.tgz test-pkg || { echo "Proxy cache tarball validation failed"; exit 1; }
+echo "NPM Proxy Cache Test Passed"
 
 # 3. Group Test
 echo "--- NPM Group Test ---"

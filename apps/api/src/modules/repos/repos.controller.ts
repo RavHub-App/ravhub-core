@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -110,9 +110,13 @@ export class ReposController {
 
     try {
       if ((saved.manager || '').toLowerCase() === 'docker') {
-        const out = await this.repos.manageDockerRegistry(saved, 'start');
+        await this.repos.manageDockerRegistry(saved, 'start');
       }
-    } catch (err) { }
+    } catch (error) {
+      console.warn(
+        `[ReposController] Failed to start Docker registry for ${saved.id || saved.name}: ${String(error)}`,
+      );
+    }
 
     return saved;
   }
@@ -249,7 +253,10 @@ export class ReposController {
         requestedPort === existingRepo.config?.docker?.port;
       const dockerConfigTouched =
         payload.config !== undefined &&
-        (Object.prototype.hasOwnProperty.call(payload.config as any, 'members') ||
+        (Object.prototype.hasOwnProperty.call(
+          payload.config as any,
+          'members',
+        ) ||
           Object.prototype.hasOwnProperty.call(
             payload.config as any,
             'writePolicy',
@@ -439,7 +446,7 @@ export class ReposController {
     return { ok: true, packages };
   }
 
-  @Get(':id/packages/:name/versions')
+  @Get(':id/packages/*name/versions')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.read')
   @RepositoryPermission('read')
@@ -447,10 +454,10 @@ export class ReposController {
     const r = await this.repos.findOne(id);
     if (!r) return { ok: false, versions: [] };
 
-    return this.pluginManager.listVersions(r, name);
+    return this.pluginManager.listVersions(r, decodeURIComponent(name));
   }
 
-  @Get(':id/packages/:name')
+  @Get(':id/packages/*name')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.read')
   @RepositoryPermission('read')
@@ -460,7 +467,7 @@ export class ReposController {
     return this.repos.getPackageDetails(id, decodeURIComponent(name));
   }
 
-  @Delete(':id/packages/:name/:version')
+  @Delete(':id/packages/*name/:version')
   @UseGuards(UnifiedPermissionGuard)
   @Permissions('repo.manage')
   @RepositoryPermission('admin')
@@ -738,7 +745,9 @@ export class ReposController {
     try {
       const result = await this.pluginManager.handlePut(r, path, req, userId);
       if (result && typeof result === 'object' && result.ok === false) {
-        throw new BadRequestException(result.message || 'Artifact upload failed');
+        throw new BadRequestException(
+          result.message || 'Artifact upload failed',
+        );
       }
       return result;
     } catch (err: any) {
@@ -797,7 +806,12 @@ export class ReposController {
       return;
     }
 
-    if (r.manager === 'raw' || r.type === 'hosted' || r.type === 'group' || (r.manager === 'docker' && r.type === 'proxy')) {
+    if (
+      r.manager === 'raw' ||
+      r.type === 'hosted' ||
+      r.type === 'group' ||
+      (r.manager === 'docker' && r.type === 'proxy')
+    ) {
       const plugin = this.pluginManager.getPluginForRepo(r);
       if (plugin) {
         if (typeof plugin.download === 'function') {
@@ -814,7 +828,8 @@ export class ReposController {
               res.setHeader('Content-Type', result.contentType);
             else if (r.manager === 'raw') {
               const mime = require('mime-types');
-              const contentType = mime.lookup(path) || 'application/octet-stream';
+              const contentType =
+                mime.lookup(path) || 'application/octet-stream';
               res.setHeader('Content-Type', contentType);
             }
             return res.send(result.data);

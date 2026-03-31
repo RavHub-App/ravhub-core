@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -17,20 +17,22 @@ export function sanitizeSegment(segment) {
   return encodeURIComponent(String(segment));
 }
 
+function warnDecodeFailure(operation: string, value: string, error: unknown) {
+  console.warn(
+    `[HelmPlugin KeyUtils] Failed to decode ${operation} "${value}": ${String(error)}`,
+  );
+}
+
 export function buildKey(...segments) {
   const parts: string[] = [];
   for (const segRaw of segments) {
     if (segRaw === undefined || segRaw === null || segRaw === '') continue;
     let seg = String(segRaw);
-
-    // Decode URI components to ensure we split by actual slashes, not encoded ones.
-    // This creates a deep directory structure which avoids filename length limits.
     try {
       seg = decodeURIComponent(seg);
     } catch (e) {
-      /* ignore */
+      warnDecodeFailure('buildKey segment', seg, e);
     }
-
     const sub = seg.split(/\/|,/).filter(Boolean);
     for (const s of sub) {
       parts.push(sanitizeSegment(s));
@@ -46,7 +48,9 @@ export function tryNormalizeRepoNames(candidate) {
   variants.add(raw);
   try {
     variants.add(decodeURIComponent(raw));
-  } catch (e) {}
+  } catch (e) {
+    warnDecodeFailure('repository name', raw, e);
+  }
   if (raw.includes(',')) variants.add(raw.replace(/,/g, '/'));
   if (raw.includes('/')) variants.add(raw.replace(/[ / ]/g, ','));
   return Array.from(variants);
@@ -64,7 +68,9 @@ export function normalizeStorageKey(key) {
       let dec = String(cp);
       try {
         dec = decodeURIComponent(dec);
-      } catch (e) {}
+      } catch (e) {
+        warnDecodeFailure('storage key segment', dec, e);
+      }
       const finalParts = dec.split('/').filter(Boolean);
       for (const f of finalParts) outParts.push(sanitizeSegment(f));
     }

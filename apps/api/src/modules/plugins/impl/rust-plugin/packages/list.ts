@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -13,58 +13,39 @@
  */
 
 import { PluginContext, Repository } from '../utils/types';
-import { buildKey } from '../utils/key-utils';
+import {
+  buildRustInstallMetadata,
+  collectRustPackageVersions,
+} from './list-support';
 
 export function initPackages(context: PluginContext) {
   const { storage } = context;
 
   const listVersions = async (repo: Repository, name: string) => {
-    const versions = new Set<string>();
-
-    const tryLoad = async (repoIdOrName: string) => {
-      const prefix = buildKey('rust', repoIdOrName, name);
-      try {
-        const keys = await storage.list(prefix);
-        for (const key of keys) {
-          // rust/<repo>/<name>/<version>
-          const parts = key.split('/');
-          if (parts.length >= 4) {
-            versions.add(decodeURIComponent(parts[3]));
-          }
-        }
-      } catch (e) {
-        /* ignore */
-      }
-    };
-
-    await tryLoad(repo.id);
-    await tryLoad(repo.name);
-
-    return { ok: true, versions: Array.from(versions) };
+    const versions = await collectRustPackageVersions(storage, repo, name);
+    return { ok: true, versions };
   };
 
   const getInstallCommand = async (repo: Repository, pkg: any) => {
-    const host = process.env.API_HOST || 'localhost:3000';
-    const proto = process.env.API_PROTOCOL || 'http';
-    const indexUrl = `${proto}://${host}/repository/${repo.name}/index`;
     const name = pkg?.name || 'crate';
     const version = pkg?.version || '0.1.0';
+    const { indexUrl, registryName } = buildRustInstallMetadata(repo);
 
     return [
       {
         label: 'Cargo.toml',
         language: 'toml',
-        command: `${name} = { version = "${version}", registry = "${repo.name}" }`,
+        command: `${name} = { version = "${version}", registry = "${registryName}" }`,
       },
       {
         label: 'cargo add',
         language: 'bash',
-        command: `cargo add ${name}@${version} --registry ${repo.name}`,
+        command: `cargo add ${name}@${version} --registry "${registryName}"`,
       },
       {
         label: '.cargo/config.toml',
         language: 'toml',
-        command: `[registries.${repo.name}]
+        command: `[registries."${registryName}"]
 index = "sparse+${indexUrl}"`,
       },
     ];

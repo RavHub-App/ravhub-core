@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -89,6 +89,10 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
+    if (process.env.DISABLE_STARTUP_TASKS === 'true') {
+      return;
+    }
+
     try {
       const dockerRepos = await this.repo.find({
         where: { manager: 'docker' },
@@ -740,12 +744,8 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
     const toDelete = artifacts.filter((a) => {
       const name = a.packageName;
       if (!name) return false;
-      if (name === pathPrefix) return true;
-      if (name.startsWith(pathPrefix + '/')) return true;
-      if (name.startsWith(pathPrefix + ':')) return true;
-      if (name.startsWith(pathPrefix + '@')) return true;
-      if (name.startsWith(pathPrefix + '.')) return true; // Maven style?
-      return false;
+
+      return this.matchesPackageTreePath(name, pathPrefix);
     });
 
     for (const art of toDelete) {
@@ -755,6 +755,31 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
     }
 
     return { ok: true, count: toDelete.length };
+  }
+
+  private matchesPackageTreePath(packageName: string, pathPrefix: string) {
+    if (packageName === pathPrefix) return true;
+    if (packageName.startsWith(pathPrefix + '/')) return true;
+    if (packageName.startsWith(pathPrefix + ':')) return true;
+    if (packageName.startsWith(pathPrefix + '@')) return true;
+    if (packageName.startsWith(pathPrefix + '.')) return true;
+
+    const normalizedPrefix = this.normalizePackageTreePath(pathPrefix);
+    if (!normalizedPrefix) return false;
+
+    const normalizedPackageName = this.normalizePackageTreePath(packageName);
+
+    return (
+      normalizedPackageName === normalizedPrefix ||
+      normalizedPackageName.startsWith(normalizedPrefix + '/')
+    );
+  }
+
+  private normalizePackageTreePath(value: string) {
+    return value
+      .split(/[/:@]/)
+      .filter(Boolean)
+      .join('/');
   }
 
   async verify(repoId: string, artifactPath: string) {

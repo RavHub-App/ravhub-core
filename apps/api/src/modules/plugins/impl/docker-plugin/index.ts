@@ -1,3 +1,17 @@
+/*
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ */
+
 /**
  * Docker Plugin - Modular Entry Point
  *
@@ -59,138 +73,30 @@ import {
   stopRegistryForRepo,
   getRegistryServers,
 } from './registry/server';
+import {
+  createArtifactIndexer,
+  createDownloadTracker,
+  createRegistryStarter,
+  createRepoResolver,
+  createTokenRequestHandler,
+} from './plugin-support';
 
 /**
  * Initialize the plugin with context
  */
 export function createDockerPlugin(context: PluginContext) {
   const { storage, redis } = context;
-
-  // Helper to get repository by ID (needed for group operations)
-  // Prefer host-provided resolver (DB-backed). Fallback to storage only if provided.
-  const fallbackGetRepo = async (
-    repoId: string,
-  ): Promise<Repository | null> => {
-    try {
-      if (!storage?.get) return null;
-      const key = buildKey('repository', repoId, 'metadata');
-      const data = await storage.get(key);
-      if (!data) return null;
-      return JSON.parse(data.toString('utf8'));
-    } catch (err) {
-      console.error('[GET REPO ERROR]', err);
-      return null;
-    }
-  };
-
-  const getRepo: (repoId: string) => Promise<Repository | null> = async (
-    repoId: string,
-  ) => {
-    const r = context.getRepo
-      ? await context.getRepo(repoId)
-      : await fallbackGetRepo(repoId);
-    return (r as any) ?? null;
-  };
-
-  // Helper to index artifacts for search
-  const indexArtifact = async (
-    repo: Repository,
-    nameOrResult: string | any,
-    tagOrUserId?: string,
-    metadata?: any,
-    userId?: string,
-  ) => {
-    try {
-      let name: string;
-      let tag: string;
-      let finalMetadata: any;
-      let finalUserId: string | undefined;
-
-      if (typeof nameOrResult === 'object' && nameOrResult !== null) {
-        // Object signature: (repo, result, userId)
-        const result = nameOrResult;
-        finalUserId = tagOrUserId;
-        finalMetadata = result.metadata || {};
-        name = finalMetadata.name || result.id?.split(':')[0] || 'unknown';
-        tag = finalMetadata.version || result.id?.split(':')[1] || 'latest';
-      } else {
-        // Positional signature: (repo, name, tag, metadata, userId)
-        name = nameOrResult;
-        tag = tagOrUserId || 'latest';
-        finalMetadata = metadata || {};
-        finalUserId = userId;
-      }
-
-      const key = buildKey('artifact', repo.id, 'index', name, tag);
-      await storage.save(
-        key,
-        Buffer.from(
-          JSON.stringify({
-            name,
-            tag,
-            repository: repo.name,
-            repositoryId: repo.id,
-            indexed: new Date().toISOString(),
-            ...finalMetadata,
-          }),
-        ),
-      );
-
-      // Also index in main DB if context provides the helper
-      if (context.indexArtifact) {
-        await context.indexArtifact(
-          repo,
-          {
-            ok: true,
-            id: `${name}:${tag}`,
-            metadata: {
-              name,
-              storageKey: key,
-              ...finalMetadata,
-            },
-          },
-          finalUserId,
-        );
-      }
-    } catch (err) {
-      console.error('[INDEX ARTIFACT ERROR]', err);
-    }
-  };
-
-  // Helper to track downloads for analytics
-  const trackDownload = async (repo: Repository, name: string, tag: string) => {
-    try {
-      const key = buildKey(
-        'stats',
-        repo.id,
-        'downloads',
-        name,
-        tag,
-        Date.now().toString(),
-      );
-      await storage.save(
-        key,
-        Buffer.from(
-          JSON.stringify({
-            name,
-            tag,
-            repository: repo.name,
-            repositoryId: repo.id,
-            timestamp: new Date().toISOString(),
-          }),
-        ),
-      );
-    } catch (err) {
-      console.error('[TRACK DOWNLOAD ERROR]', err);
-    }
-  };
+  const getRepo = createRepoResolver(context);
+  const indexArtifact = createArtifactIndexer(context);
+  const trackDownload = createDownloadTracker(context);
+  const handleTokenRequest = createTokenRequestHandler();
 
   // Initialize all modules with their dependencies
   initProxyFetch({ ...context, indexArtifact });
   initUpload({ storage, getRepo, redis });
   initDownload({ storage, proxyFetch, getRepo });
   initManifest({ storage, getRepo, getBlob, proxyFetch, indexArtifact });
-  initPackages({ storage, getRepo });
+  initPackages({ storage, getRepo, proxyFetch });
 
   // Build the plugin object
   const plugin = {
@@ -228,82 +134,12 @@ export function createDockerPlugin(context: PluginContext) {
     getInstallCommand,
 
     // Registry server
-    startRegistryForRepo: async (repo: Repository, opts?: any) => {
-      // Build reposById map for group resolution if not provided
-      if (!opts?.reposById && repo.type === 'group') {
-        const reposById = new Map<string, Repository>();
-        const members: string[] = repo.config?.members ?? [];
-        for (const memberId of members) {
-          const memberRepo = await getRepo(memberId);
-          if (memberRepo) {
-            reposById.set(memberId, memberRepo);
-          }
-        }
-        opts = { ...opts, reposById };
-      }
-
-      return startRegistryForRepo(repo, opts, { plugin });
-    },
+    startRegistryForRepo: async (repo: Repository, opts?: any) =>
+      createRegistryStarter(getRepo, startRegistryForRepo)(repo, plugin, opts),
     stopRegistryForRepo,
 
     // Handle HTTP requests proxied from the registry server
-    request: async (context: PluginContext, request: any) => {
-      const { path, query } = request;
-
-      // Handle /v2/token
-      if (path === '/v2/token') {
-        try {
-          const jwt = require('jsonwebtoken');
-          const secret = process.env.JWT_SECRET;
-
-          if (!secret) {
-            console.error('[DOCKER PLUGIN] JWT_SECRET not configured');
-            return { status: 500, body: { error: 'server misconfigured' } };
-          }
-
-          const scope = query.scope as string;
-          const service = query.service as string;
-
-          const access: any[] = [];
-          if (scope) {
-            // scope format: repository:name:action
-            const parts = scope.split(':');
-            if (parts.length === 3 && parts[0] === 'repository') {
-              access.push({
-                type: 'repository',
-                name: parts[1],
-                actions: parts[2].split(','),
-              });
-            }
-          }
-
-          const token = jwt.sign(
-            {
-              iss: 'distributed-package-registry',
-              sub: 'admin', // In a real scenario, use context.user.username
-              aud: service,
-              exp: Math.floor(Date.now() / 1000) + 3600,
-              nbf: Math.floor(Date.now() / 1000) - 60,
-              iat: Math.floor(Date.now() / 1000),
-              jti: Math.random().toString(36).substring(2),
-              access: access,
-            },
-            secret,
-          );
-
-          return {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-            body: { token },
-          };
-        } catch (err: any) {
-          console.error('[DOCKER PLUGIN] Token generation failed:', err);
-          return { status: 500, body: { error: err.message } };
-        }
-      }
-
-      return { status: 404, body: { error: 'Not found' } };
-    },
+    request: handleTokenRequest,
 
     // Internal state
     _registryServers: getRegistryServers(),

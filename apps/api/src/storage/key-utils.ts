@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -32,8 +32,8 @@ export function buildKey(
     // attempt to decode any percent-encoded fragments inside the segment
     try {
       seg = decodeURIComponent(seg);
-    } catch (e) {
-      /* ignore */
+    } catch (_error) {
+      void _error;
     }
     // break segment into atomic parts by either slash or comma (legacy)
     const sub = seg.split(/\/|,/).filter(Boolean);
@@ -54,8 +54,8 @@ export function tryNormalizeRepoNames(
   try {
     // decoded variant (if value was encoded)
     variants.add(decodeURIComponent(raw));
-  } catch (e) {
-    // ignore decode errors
+  } catch (_error) {
+    void _error;
   }
   // comma → slash legacy mapping (some older code used commas instead of '/')
   if (raw.includes(',')) variants.add(raw.replace(/,/g, '/'));
@@ -68,8 +68,8 @@ export function tryNormalizeRepoNames(
       variants.add(decoded);
       if (decoded.includes(',')) variants.add(decoded.replace(/,/g, '/'));
     }
-  } catch (e) {
-    // ignore
+  } catch (_error) {
+    void _error;
   }
   return Array.from(variants);
 }
@@ -92,8 +92,8 @@ export function normalizeStorageKey(key: string | undefined | null): string {
       let dec = String(cp);
       try {
         dec = decodeURIComponent(dec);
-      } catch (e) {
-        /* ignore */
+      } catch (_error) {
+        void _error;
       }
       const finalParts = dec.split('/').filter(Boolean);
       for (const f of finalParts) outParts.push(sanitizeSegment(f));

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { renderWithProviders, screen, fireEvent, waitFor, within } from '../test-utils';
+import { renderWithProviders, screen, fireEvent, waitFor } from '../test-utils';
 import BackupSettings from '../components/Settings/BackupSettings';
 import axios from 'axios';
 import { vi, describe, it, expect, beforeEach } from 'vitest';

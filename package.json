@@ -1,15 +1,21 @@
 {
-  "name": "ravhub-monorepo",
+  "name": "ravhub-core",
   "version": "0.1.0",
   "private": true,
-  "description": "Monorepo: gestor de repositorios de paquetes (frontend + backend) — React+Vite + NestJS",
-  "license": "MIT",
+  "description": "Core module of RavHub: shared utilities and services for the platform",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "concurrently \"pnpm --filter api dev\" \"pnpm --filter web dev\"",
     "dev:docker": "docker compose -f docker-compose.dev.yml up --build",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "test:e2e": "pnpm --filter api test:e2e",
+    "test:api:unit": "cd apps/api && pnpm exec jest --runInBand",
+    "test:api:e2e:ci": "cd apps/api && pnpm exec jest --config ./test/jest-e2e.json --runInBand",
+    "test:web": "cd apps/web && pnpm exec vitest run",
+    "test:frontend:e2e": "cd apps/web && pnpm exec playwright install chromium && pnpm exec playwright test --config playwright.config.ts",
+    "test:shell:e2e": "bash ./scripts/run-shell-e2e-suite.sh",
+    "test:full": "bash ./scripts/run-full-test-suite.sh",
     "lint": "pnpm -r run lint"
   },
   "devDependencies": {

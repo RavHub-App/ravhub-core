@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -26,7 +26,6 @@ import {
     Divider,
 } from '@mui/joy';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import WarningIcon from '@mui/icons-material/Warning';
 import InfoIcon from '@mui/icons-material/Info';
@@ -51,19 +50,9 @@ interface LicenseStatus {
     expiresAt?: string;
 }
 
-interface LicenseMetrics {
-    hasLicense: boolean;
-    usage?: {
-        currentRooms: number;
-        currentUsers: number;
-        storageUsedGB: number;
-    };
-}
-
 export const LicenseDashboard: React.FC = () => {
     const { notify } = useNotification();
     const [status, setStatus] = useState<LicenseStatus | null>(null);
-    const [metrics, setMetrics] = useState<LicenseMetrics | null>(null);
     const [loading, setLoading] = useState(true);
     const [revalidating, setRevalidating] = useState(false);
 
@@ -73,13 +62,8 @@ export const LicenseDashboard: React.FC = () => {
 
     const loadLicenseData = async () => {
         try {
-            const [statusRes, metricsRes] = await Promise.all([
-                axios.get('/api/licenses/status'),
-                axios.get('/api/licenses/metrics'),
-            ]);
-
+            const statusRes = await axios.get('/api/licenses/status');
             setStatus(statusRes.data);
-            setMetrics(metricsRes.data);
         } catch (error) {
             console.error('Error loading license data:', error);
         } finally {
@@ -117,14 +101,6 @@ export const LicenseDashboard: React.FC = () => {
         if (!status.isActive) return 'Inactive';
         if (!status.validationStatus?.valid) return 'Invalid';
         return 'Active';
-    };
-
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
     };
 
     const formatDate = (dateString?: string) => {

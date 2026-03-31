@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -25,14 +25,20 @@ export function buildKey(...segments) {
     try {
       seg = decodeURIComponent(seg);
     } catch (e) {
-      /* ignore */
+      warnDecodeFailure('buildKey segment', seg, e);
     }
-    const sub = seg.split(/\/|,/).filter(Boolean);
+    const sub = seg.split('/').filter(Boolean);
     for (const s of sub) {
       parts.push(sanitizeSegment(s));
     }
   }
   return parts.join('/');
+}
+
+function warnDecodeFailure(operation: string, value: string, error: unknown) {
+  console.warn(
+    `[RawPlugin KeyUtils] Failed to decode ${operation} "${value}": ${String(error)}`,
+  );
 }
 
 export function tryNormalizeRepoNames(candidate) {
@@ -42,7 +48,9 @@ export function tryNormalizeRepoNames(candidate) {
   variants.add(raw);
   try {
     variants.add(decodeURIComponent(raw));
-  } catch (e) {}
+  } catch (e) {
+    warnDecodeFailure('repository name', raw, e);
+  }
   if (raw.includes(',')) variants.add(raw.replace(/,/g, '/'));
   if (raw.includes('/')) variants.add(raw.replace(/[ / ]/g, ','));
   return Array.from(variants);
@@ -55,15 +63,14 @@ export function normalizeStorageKey(key) {
   const top = raw.split('/');
   for (const t of top) {
     if (!t) continue;
-    const commaParts = t.split(',').filter(Boolean);
-    for (const cp of commaParts) {
-      let dec = String(cp);
-      try {
-        dec = decodeURIComponent(dec);
-      } catch (e) {}
-      const finalParts = dec.split('/').filter(Boolean);
-      for (const f of finalParts) outParts.push(sanitizeSegment(f));
+    let dec = String(t);
+    try {
+      dec = decodeURIComponent(dec);
+    } catch (e) {
+      warnDecodeFailure('storage key segment', dec, e);
     }
+    const finalParts = dec.split('/').filter(Boolean);
+    for (const f of finalParts) outParts.push(sanitizeSegment(f));
   }
   return outParts.join('/');
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -166,7 +166,7 @@ export class MonitorService {
           durationTotal: proxyFetchDurationTotal,
         },
       };
-    } catch (err: any) {
+    } catch {
       return {
         totalUploads: 0,
         totalDownloads: 0,
@@ -196,7 +196,6 @@ export class MonitorService {
       }
 
       const artifactRepo = AppDataSource.getRepository(Artifact);
-      const repoRepo = AppDataSource.getRepository(RepositoryEntity);
 
       const artifacts = await artifactRepo.find({
         take: limit,
@@ -218,7 +217,7 @@ export class MonitorService {
         createdAt: a.createdAt,
         lastAccessedAt: a.lastAccessedAt,
       }));
-    } catch (err: any) {
+    } catch {
       return [];
     }
   }

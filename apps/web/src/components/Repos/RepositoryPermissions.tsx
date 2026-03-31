@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -12,7 +12,7 @@
  * GNU Affero General Public License for more details.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Typography, Box, Card, CardContent, List, ListItem, ListItemContent, IconButton, Chip, Divider, Button, Modal, ModalDialog, DialogTitle, DialogContent, Stack, FormControl, FormLabel, Select, Option } from '@mui/joy';
 import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -53,29 +53,29 @@ export default function RepositoryPermissions({ repositoryId, repositoryName }: 
         color: 'primary',
     });
 
-    const fetchPermissions = () => {
+    const fetchPermissions = useCallback(() => {
         axios.get(`/api/repositories/${repositoryId}/permissions`)
             .then((res) => setPermissions(res.data))
             .catch(() => notify('Failed to load permissions'));
-    };
+    }, [notify, repositoryId]);
 
-    const fetchUsers = () => {
+    const fetchUsers = useCallback(() => {
         axios.get('/api/users')
             .then((res) => setUsers(res.data))
             .catch(() => { });
-    };
+    }, []);
 
-    const fetchRoles = () => {
+    const fetchRoles = useCallback(() => {
         axios.get('/api/rbac/roles')
             .then((res) => setRoles(res.data))
             .catch(() => { });
-    };
+    }, []);
 
     useEffect(() => {
         fetchPermissions();
         fetchUsers();
         fetchRoles();
-    }, [repositoryId]);
+    }, [fetchPermissions, fetchRoles, fetchUsers]);
 
     const handleGrant = async () => {
         setLoading(true);
@@ -122,7 +122,7 @@ export default function RepositoryPermissions({ repositoryId, repositoryName }: 
                     await axios.delete(`/api/repositories/${repositoryId}/permissions/${permissionId}`);
                     notify('Permission revoked successfully');
                     fetchPermissions();
-                } catch (err) {
+                } catch (_error) {
                     notify('Failed to revoke permission');
                 }
                 setConfirmAction(prev => ({ ...prev, open: false }));

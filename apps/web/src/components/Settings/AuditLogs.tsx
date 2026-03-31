@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -12,7 +12,7 @@
  * GNU Affero General Public License for more details.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Typography,
     Card,
@@ -65,7 +65,7 @@ export default function AuditLogs() {
     const [limit] = useState(50);
     const [offset, setOffset] = useState(0);
 
-    const fetchLogs = async () => {
+    const fetchLogs = useCallback(async () => {
         setLoading(true);
         try {
             const params = new URLSearchParams();
@@ -80,23 +80,22 @@ export default function AuditLogs() {
             const res = await axios.get(`/api/audit?${params.toString()}`);
             setLogs(res.data.logs || []);
             setTotal(res.data.total || 0);
-        } catch (err) {
+        } catch (_error) {
             notify('Failed to fetch audit logs');
         } finally {
             setLoading(false);
         }
-    };
+    }, [action, endDate, limit, notify, offset, startDate, status, userId]);
 
     useEffect(() => {
-        fetchLogs();
+        void fetchLogs();
 
-        // Polling every 5 seconds
         const interval = setInterval(() => {
-            fetchLogs();
+            void fetchLogs();
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [limit, offset]);
+    }, [fetchLogs]);
 
     const handleSearch = () => {
         setOffset(0);
@@ -110,7 +109,9 @@ export default function AuditLogs() {
         setStartDate('');
         setEndDate('');
         setOffset(0);
-        setTimeout(() => fetchLogs(), 100);
+        setTimeout(() => {
+            void fetchLogs();
+        }, 100);
     };
 
     const getStatusColor = (status: string) => {

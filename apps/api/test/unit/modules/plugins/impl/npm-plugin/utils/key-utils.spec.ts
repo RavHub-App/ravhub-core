@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -47,6 +47,21 @@ describe('NpmPlugin Key Utils', () => {
       const key = buildKey('npm', '', 'package', null, '1.0.0');
       expect(key).toBe('npm/package/1.0.0');
     });
+
+    it('should warn and preserve malformed encoded segments', () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      const key = buildKey('npm', 'repo%ZZ', 'package');
+
+      expect(key).toBe('npm/repo%25ZZ/package');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to decode buildKey segment'),
+      );
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('normalizeStorageKey', () => {
@@ -61,6 +76,21 @@ describe('NpmPlugin Key Utils', () => {
       const variants = tryNormalizeRepoNames('test/repo');
       expect(variants).toContain('test/repo');
       expect(variants).toContain('test,repo');
+    });
+
+    it('should warn and keep malformed repository names', () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      const variants = tryNormalizeRepoNames('repo%ZZ');
+
+      expect(variants).toContain('repo%ZZ');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to decode repository name'),
+      );
+
+      warnSpy.mockRestore();
     });
   });
 });

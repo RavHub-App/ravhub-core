@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -58,6 +58,31 @@ describe('HelmPlugin Packages', () => {
       expect(result.ok).toBe(true);
       expect(result.versions).toEqual([]);
     });
+
+    it('should list versions from cached proxy index.yaml', async () => {
+      const indexYaml = yaml.dump({
+        entries: {
+          'my-chart': [{ version: '3.1.4' }],
+        },
+      });
+
+      mockStorage.get.mockImplementation(async (key: string) => {
+        if (key === 'helm/r1/proxy/file/index.yaml') {
+          return Buffer.from(indexYaml);
+        }
+        return null;
+      });
+
+      const repo: Repository = {
+        id: 'r1',
+        name: 'helm-proxy',
+        type: 'proxy',
+      } as any;
+      const result = await packageMethods.listVersions(repo, 'my-chart');
+
+      expect(result.ok).toBe(true);
+      expect(result.versions).toEqual(['3.1.4']);
+    });
   });
 
   describe('getInstallCommand', () => {
@@ -71,6 +96,34 @@ describe('HelmPlugin Packages', () => {
       expect(commands[0].label).toBe('helm install');
       expect(commands[0].command).toContain('helm repo add helm-repo');
       expect(commands[1].label).toBe('helm dependency');
+    });
+
+    it('should encode repository URL in install commands', async () => {
+      const repo: Repository = { name: 'helm repo#beta' } as any;
+      const pkg = { name: 'my-chart', version: '1.0.0' };
+
+      const commands = await packageMethods.getInstallCommand(repo, pkg);
+
+      expect(commands[0].command).toContain(
+        'http://localhost:3000/repository/helm%20repo%23beta',
+      );
+      expect(commands[1].command).toContain(
+        'repository: http://localhost:3000/repository/helm%20repo%23beta',
+      );
+    });
+
+    it('should generate a safe helm alias for repository names with spaces', async () => {
+      const repo: Repository = { name: 'helm repo#beta' } as any;
+      const pkg = { name: 'my-chart', version: '1.0.0' };
+
+      const commands = await packageMethods.getInstallCommand(repo, pkg);
+
+      expect(commands[0].command).toContain(
+        'helm repo add helm-repo-beta http://localhost:3000/repository/helm%20repo%23beta',
+      );
+      expect(commands[0].command).toContain(
+        'helm install my-release helm-repo-beta/my-chart --version 1.0.0',
+      );
     });
   });
 });

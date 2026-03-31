@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -11,12 +11,18 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU Affero General Public License for more details.
  */
+
 export function normalizeImageName(
   imageName: string,
   proxyUrl: string,
   repo?: any,
 ): string {
-  const cfg = repo?.config?.docker ?? repo?.config ?? {};
+  const rootCfg = repo?.config ?? {};
+  const dockerCfg = rootCfg.docker ?? {};
+  const cfg = {
+    ...rootCfg,
+    ...dockerCfg,
+  };
   // Legacy or advanced setting: libraryPrefix (string) kept for compatibility
   if (typeof cfg?.libraryPrefix === 'string') {
     const behavior = cfg.libraryPrefix || 'auto';

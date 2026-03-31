@@ -17,6 +17,7 @@ coding_standards:
   - "Strict adherence to SOLID principles."
   - "Small, focused classes (Single Responsibility)."
   - "Package Management: Use pnpm instead of npm for all commands"
+  - "Prefer guard clauses and flat control flow; avoid nested ifs that increase cognitive complexity"
 ---
 
 # 📂 RavHub Core Context
@@ -69,14 +70,14 @@ Use `jest.mock`. Do NOT rely on real DB/Storage in Unit Tests.
 
 ## 🚀 Production Environment
 
-- **Production Server**: `213.165.74.82`
-- **Project Path**: `/root/projects/ravhub`
+- **Sensitive Infra Context**: kept in local-only agent context under `.agent-local/production-context.md` and must never be committed.
 
 ## 🧑‍💻 Coding Standards (Local)
 
 1. **SOLID & Small Classes**: Keep Services focused. Break `ReposService` if it grows too large.
 2. **No Comments**: Variable names must explain intent.
-3. **License Protocol (AGPL-3.0)**: Ensure every file starts with the AGPL-3.0 header. Use `scripts/add-headers.js` to enforce.
+3. **Low Cognitive Complexity**: Prefer guard clauses, early returns, strategy maps, and focused helpers instead of nested `if` chains.
+4. **License Protocol (AGPL-3.0)**: Ensure every file starts with the AGPL-3.0 header. Use `scripts/add-headers.js` to enforce.
 
 ---
 

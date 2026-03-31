@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -26,7 +26,7 @@ export class ProxyCacheJobService implements OnModuleDestroy {
   constructor(
     private readonly proxyCacheService: ProxyCacheService,
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
   onModuleDestroy() {
     if (this.jobProcessorInterval) {
@@ -115,7 +115,7 @@ export class ProxyCacheJobService implements OnModuleDestroy {
                 byRepository: result.byRepo,
               },
             })
-            .catch(() => { });
+            .catch(() => {});
 
           this.logger.log(
             `Completed proxy cache cleanup job ${job.id}: ${result.total} files deleted`,

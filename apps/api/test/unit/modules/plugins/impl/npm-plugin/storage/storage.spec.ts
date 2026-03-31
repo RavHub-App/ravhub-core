@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -238,6 +238,9 @@ describe('NpmPlugin Storage', () => {
     });
 
     it('should handle indexing error gracefully', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
       mockContext.indexArtifact = jest
         .fn()
         .mockRejectedValue(new Error('fail'));
@@ -246,6 +249,12 @@ describe('NpmPlugin Storage', () => {
         body: metadata,
       } as any);
       expect(result.ok).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '[NPM] Failed to index artifact pkg/package.json: Error: fail',
+        ),
+      );
+      warnSpy.mockRestore();
     });
   });
 
@@ -320,6 +329,68 @@ describe('NpmPlugin Storage', () => {
         'test-pkg',
       );
       expect(result.ok).toBe(true);
+    });
+
+    it('should continue group download when one member lookup fails', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const groupRepo = {
+        type: 'group',
+        config: {
+          members: ['broken', 'm2'],
+        },
+      };
+
+      mockContext.getRepo.mockImplementation(async (id: string) => {
+        if (id === 'broken') {
+          throw new Error('member-fail');
+        }
+        if (id === 'm2') {
+          return { id: 'm2', type: 'hosted', name: 'hosted' };
+        }
+        return null;
+      });
+      mockStorage.get.mockResolvedValue(Buffer.from('data'));
+
+      const result = await storageMethods.download(
+        groupRepo as any,
+        'test-pkg',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NPM] Failed to resolve repository broken: Error: member-fail',
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('should return upstream data when proxy cache save fails', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const proxyRepo = { ...repo, type: 'proxy' };
+      const mockProxyFetch = jest.fn().mockResolvedValue({
+        status: 200,
+        body: Buffer.from('data'),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      mockStorage.get.mockResolvedValue(null);
+      mockStorage.save.mockRejectedValue(new Error('cache-fail'));
+
+      const storageWithProxy = initStorage(mockContext, mockProxyFetch);
+      const result = await storageWithProxy.download(
+        proxyRepo as any,
+        'test-pkg',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual(Buffer.from('data'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NPM] Failed to cache proxied payload test-pkg: Error: cache-fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should handle proxy not found', async () => {

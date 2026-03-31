@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -30,6 +30,7 @@ describe('ReposController (unit)', () => {
     findOne: jest.fn(),
     update: jest.fn(),
     create: jest.fn(),
+    manageDockerRegistry: jest.fn(),
     validateProxyConfig: jest.fn(() => true),
     validateDockerPortAvailability: jest.fn(() => true),
     getPackageDetails: jest.fn(),
@@ -138,6 +139,34 @@ describe('ReposController (unit)', () => {
     const saved = await controller.create(body);
     expect(reposService.create).toHaveBeenCalledWith(body);
     expect(saved).toEqual({ id: 'new', ...body });
+  });
+
+  it('warns and still returns the repository when docker registry startup fails', async () => {
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const body = {
+      name: 'docker-repo',
+      manager: 'docker',
+      type: 'hosted',
+      config: { docker: { port: 5010 } },
+    } as any;
+
+    reposService.manageDockerRegistry.mockRejectedValueOnce(
+      new Error('docker-start-fail'),
+    );
+
+    const saved = await controller.create(body);
+
+    expect(saved).toEqual({ id: 'new', ...body });
+    expect(reposService.manageDockerRegistry).toHaveBeenCalledWith(
+      { id: 'new', ...body },
+      'start',
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[ReposController] Failed to start Docker registry for new: Error: docker-start-fail',
+    );
+    warnSpy.mockRestore();
   });
 
   it('delegates listPackages to service', async () => {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -204,6 +204,30 @@ describe('ComposerPlugin Storage', () => {
       expect(result.ok).toBe(true);
     });
 
+    it('should warn and fallback to path metadata when body is not valid JSON', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const req = { body: Buffer.from('{not valid json') };
+
+      const result = await storageMethods.handlePut(
+        repo,
+        'vendor/package/2.0.0.zip',
+        req,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata!.name).toBe('vendor/package');
+      expect(result.metadata!.version).toBe('2.0.0');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '[Composer] Failed to parse package body as JSON:',
+        ),
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should parse package info from path', async () => {
       const req = { body: Buffer.from('data') };
       const result = await storageMethods.handlePut(
@@ -213,8 +237,9 @@ describe('ComposerPlugin Storage', () => {
       );
 
       expect(result.ok).toBe(true);
-      expect(result.metadata.name).toBe('vendor/package');
-      expect(result.metadata.version).toBe('2.0.0');
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata!.name).toBe('vendor/package');
+      expect(result.metadata!.version).toBe('2.0.0');
     });
 
     it('should use saveStream when available and no body', async () => {
@@ -222,7 +247,7 @@ describe('ComposerPlugin Storage', () => {
       const mockReq = {
         [Symbol.asyncIterator]: async function* () {
           for (const chunk of chunks) yield chunk;
-        }
+        },
       };
 
       const result = await storageMethods.handlePut(
@@ -236,11 +261,13 @@ describe('ComposerPlugin Storage', () => {
     });
 
     it('should handle saveStream indexing failure gracefully', async () => {
-      (mockContext.indexArtifact as jest.Mock).mockRejectedValue(new Error('index fail'));
+      (mockContext.indexArtifact as jest.Mock).mockRejectedValue(
+        new Error('index fail'),
+      );
       const mockReq = {
         [Symbol.asyncIterator]: async function* () {
           yield Buffer.from('data');
-        }
+        },
       };
 
       const result = await storageMethods.handlePut(
@@ -258,7 +285,7 @@ describe('ComposerPlugin Storage', () => {
       const mockReq = {
         [Symbol.asyncIterator]: async function* () {
           for (const chunk of chunks) yield chunk;
-        }
+        },
       };
 
       const result = await storageMethods.handlePut(
@@ -276,7 +303,7 @@ describe('ComposerPlugin Storage', () => {
       const mockReq = {
         [Symbol.asyncIterator]: async function* () {
           yield Buffer.from('data');
-        }
+        },
       };
 
       const result = await storageMethods.handlePut(
@@ -361,6 +388,9 @@ describe('ComposerPlugin Storage', () => {
     });
 
     it('should serve cache on HEAD request failure', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
       const cachedData = Buffer.from('cached');
       mockStorage.get.mockResolvedValue(cachedData);
       mockProxyHelper.mockRejectedValue(new Error('Network error'));
@@ -374,6 +404,39 @@ describe('ComposerPlugin Storage', () => {
 
       expect(result.ok).toBe(true);
       expect(result.data).toEqual(cachedData);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[Composer] HEAD revalidation failed for vendor/pkg:1.0.0. Serving cache. Error: Network error',
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('should return upstream package when proxy indexing fails', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      mockStorage.get.mockResolvedValue(null);
+      mockContext.indexArtifact = jest
+        .fn()
+        .mockRejectedValue(new Error('index fail')) as any;
+      storageMethods = initStorage(mockContext);
+      mockProxyHelper.mockResolvedValue({
+        ok: true,
+        body: Buffer.from('upstream zip'),
+      });
+
+      const result = await storageMethods.proxyDownload(
+        repo,
+        'https://packagist.org/p2/vendor/pkg.json',
+        'vendor/pkg',
+        '1.0.0',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.body).toEqual(Buffer.from('upstream zip'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[Composer] Failed to persist proxy package vendor/pkg:1.0.0: Error: index fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should respect cache disabled config', async () => {
@@ -416,27 +479,52 @@ describe('ComposerPlugin Storage', () => {
       mockStorage.list.mockResolvedValue([
         'composer/r1/vendor/pkg/1.0.0.zip',
         'composer/r1/vendor/pkg/2.0.0.zip',
-        'composer/r1/other/lib/1.5.0.zip'
+        'composer/r1/other/lib/1.5.0.zip',
       ]);
 
       const result = await storageMethods.download(repo, 'packages.json');
 
       expect(result.ok).toBe(true);
       expect(result.contentType).toBe('application/json');
-      const packages = JSON.parse(result.data.toString());
+      expect(result.data).toBeDefined();
+      const packages = JSON.parse(result.data!.toString());
       expect(packages.packages).toBeDefined();
       expect(packages.packages['vendor/pkg']).toBeDefined();
       expect(packages.packages['vendor/pkg']['1.0.0']).toBeDefined();
     });
 
+    it('should encode repository names in hosted packages.json dist urls', async () => {
+      mockStorage.list.mockResolvedValue(['composer/r1/vendor/pkg/1.0.0.zip']);
+
+      const result = await storageMethods.download(
+        { ...repo, name: 'composer repo#beta' } as any,
+        'packages.json',
+      );
+
+      expect(result.data).toBeDefined();
+      const packages = JSON.parse(result.data!.toString());
+
+      expect(packages.packages['vendor/pkg']['1.0.0'].dist.url).toBe(
+        'http://localhost:3000/repository/composer%20repo%23beta/vendor/pkg/1.0.0.zip',
+      );
+    });
+
     it('should handle packages.json generation errors gracefully', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
       mockStorage.list.mockRejectedValue(new Error('list failed'));
 
       const result = await storageMethods.download(repo, 'packages.json');
 
       expect(result.ok).toBe(true);
-      const packages = JSON.parse(result.data.toString());
+      expect(result.data).toBeDefined();
+      const packages = JSON.parse(result.data!.toString());
       expect(packages.packages).toEqual({});
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[Composer] Failed to generate packages.json for my-repo: Error: list failed',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should handle group repo download', async () => {
@@ -455,6 +543,37 @@ describe('ComposerPlugin Storage', () => {
       );
 
       expect(result.ok).toBe(true);
+    });
+
+    it('should continue group repo download when one member throws', async () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const groupRepo = {
+        type: 'group',
+        config: { members: ['broken', 'host1'] },
+      };
+      (mockContext.getRepo as jest.Mock).mockImplementation(
+        async (id: string) => {
+          if (id === 'broken') throw new Error('member-fail');
+          if (id === 'host1')
+            return { id: 'host1', type: 'hosted', name: 'hosted' };
+          return null;
+        },
+      );
+      mockStorage.get.mockResolvedValue(Buffer.from('data'));
+
+      const result = await storageMethods.download(
+        groupRepo as any,
+        'vendor/pkg',
+        '1.0.0',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[Composer] Group download failed for member broken: Error: member-fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should handle proxy repo download', async () => {
@@ -489,7 +608,7 @@ describe('ComposerPlugin Storage', () => {
       );
 
       expect(result.ok).toBe(false);
-      expect(result.message.toLowerCase()).toContain('not found');
+      expect(result.message?.toLowerCase()).toContain('not found');
     });
   });
 });

@@ -14,6 +14,11 @@ mkdir -p $TEMP_DIR
 ADMIN_USER="e2e-admin-nuget"
 ADMIN_PASS="password123"
 AUTH_TOKEN=""
+USER_ID=""
+LIMITED_USER="e2e-limited-nuget"
+LIMITED_PASS="password123"
+LIMITED_TOKEN=""
+LIMITED_USER_ID=""
 
 # Detect containers
 API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-app|distributed-chat-api|api' | head -n1 || echo "distributed-chat-api-1")
@@ -24,6 +29,94 @@ UP_PASS="up-pass"
 UPSTREAM_PORT="18091"
 
 echo "Starting NuGet E2E Test..."
+
+create_real_nuget_package() {
+    local package_id="$1"
+    local package_version="$2"
+    local project_name
+    local package_dir
+    local output_dir
+    local package_file
+    local published_at
+
+    project_name=$(echo "$package_id" | tr '.-' '_')
+    package_dir="$TEMP_DIR/src/$project_name"
+    output_dir="$TEMP_DIR/nupkgs"
+    package_file="$output_dir/$package_id.$package_version.nupkg"
+    published_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    rm -rf "$package_dir"
+    mkdir -p \
+      "$package_dir/_rels" \
+      "$package_dir/package/services/metadata/core-properties" \
+      "$package_dir/lib/net8.0" \
+      "$output_dir"
+
+    cat <<EOF > "$package_dir/$package_id.nuspec"
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>$package_id</id>
+    <version>$package_version</version>
+    <authors>RavHub</authors>
+    <description>Real NuGet package for E2E validation</description>
+    <packageTypes>
+      <packageType name="Dependency" />
+    </packageTypes>
+  </metadata>
+</package>
+EOF
+
+    cat <<EOF > "$package_dir/[Content_Types].xml"
+<?xml version="1.0" encoding="utf-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />
+  <Default Extension="psmdcp" ContentType="application/vnd.openxmlformats-package.core-properties+xml" />
+  <Default Extension="nuspec" ContentType="application/octet" />
+  <Default Extension="_" ContentType="application/octet-stream" />
+</Types>
+EOF
+
+    cat <<EOF > "$package_dir/_rels/.rels"
+<?xml version="1.0" encoding="utf-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="/package/services/metadata/core-properties/$package_id.$package_version.psmdcp" Id="R0001" />
+</Relationships>
+EOF
+
+    cat <<EOF > "$package_dir/package/services/metadata/core-properties/$package_id.$package_version.psmdcp"
+<?xml version="1.0" encoding="utf-8"?>
+<coreProperties xmlns="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:creator>RavHub</dc:creator>
+  <dc:description>Real NuGet package for E2E validation</dc:description>
+  <dc:identifier>$package_id</dc:identifier>
+  <version>$package_version</version>
+  <lastModifiedBy>RavHub</lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">$published_at</dcterms:created>
+</coreProperties>
+EOF
+
+    : > "$package_dir/lib/net8.0/_._"
+
+    rm -f "$package_file"
+    (
+      cd "$package_dir"
+      zip -qr "$package_file" .
+    )
+
+    echo "$package_file"
+}
+
+verify_real_nuget_package() {
+    local package_file="$1"
+    local package_id="$2"
+    local package_version="$3"
+  local nuspec_file="$package_id.nuspec"
+
+    unzip -tq "$package_file" > /dev/null
+  unzip -p "$package_file" "$nuspec_file" | grep -q "<id>$package_id</id>"
+  unzip -p "$package_file" "$nuspec_file" | grep -q "<version>$package_version</version>"
+}
 
 # Create admin user directly in DB
 echo "Generating password hash..."
@@ -53,9 +146,29 @@ LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
 
 AUTH_TOKEN=$(echo "$LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+USER_ID=$(echo "$LOGIN_RES" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
 
 if [ -z "$AUTH_TOKEN" ]; then
   echo "Failed to authenticate: $LOGIN_RES"
+  exit 1
+fi
+
+LIMITED_HASHED_PASS=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$LIMITED_PASS', 10));")
+docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
+INSERT INTO users (id, username, passwordhash)
+VALUES (gen_random_uuid(), '$LIMITED_USER', '$LIMITED_HASHED_PASS')
+ON CONFLICT (username) DO NOTHING;
+" > /dev/null
+
+LIMITED_LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"$LIMITED_USER\",\"password\":\"$LIMITED_PASS\"}")
+
+LIMITED_TOKEN=$(echo "$LIMITED_LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+LIMITED_USER_ID=$(echo "$LIMITED_LOGIN_RES" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+
+if [ -z "$LIMITED_TOKEN" ]; then
+  echo "Failed to authenticate limited user: $LIMITED_LOGIN_RES"
   exit 1
 fi
 
@@ -102,11 +215,9 @@ if [ "$HTTP_CODE" -ne 201 ] && [ "$HTTP_CODE" -ne 200 ]; then
   exit 1
 fi
 
-# 2. Upload a fake package to Hosted
-echo "Uploading fake package to Hosted..."
-# Create a dummy nupkg (just a zip file)
-echo "dummy content" > $TEMP_DIR/dummy.txt
-zip -j $TEMP_DIR/test-pkg.1.0.0.nupkg $TEMP_DIR/dummy.txt > /dev/null
+# 2. Upload a real package to Hosted
+echo "Building real package for Hosted..."
+TEST_PKG_FILE=$(create_real_nuget_package "test-pkg" "1.0.0")
 
 # Use generic PUT upload supported by our plugin implementation
 # Path format: /<id>/<version>/<filename>
@@ -115,7 +226,7 @@ HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
   -H "$AUTH_HEADER" \
   -H "Content-Type: application/octet-stream" \
   -H "Expect:" \
-  --data-binary @$TEMP_DIR/test-pkg.1.0.0.nupkg \
+  --data-binary @"$TEST_PKG_FILE" \
   "$REPOS_URL/nuget-hosted/test-pkg/1.0.0/test-pkg.1.0.0.nupkg")
 
 if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
@@ -125,10 +236,21 @@ else
     # Try to get the error body
     curl -s -X PUT \
       -H "$AUTH_HEADER" \
-      --data-binary @$TEMP_DIR/test-pkg.1.0.0.nupkg \
+      --data-binary @"$TEST_PKG_FILE" \
       "$REPOS_URL/nuget-hosted/test-pkg/1.0.0/test-pkg.1.0.0.nupkg"
     exit 1
 fi
+
+echo "Verifying hosted package integrity..."
+curl -s -f "$REPOS_URL/nuget-hosted/test-pkg/1.0.0/test-pkg.1.0.0.nupkg" -o "$TEMP_DIR/hosted-test-pkg.1.0.0.nupkg"
+verify_real_nuget_package "$TEMP_DIR/hosted-test-pkg.1.0.0.nupkg" "test-pkg" "1.0.0"
+LIMITED_UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "Authorization: Bearer $LIMITED_TOKEN" -H "Content-Type: application/octet-stream" --data-binary @"$TEST_PKG_FILE" "$REPOS_URL/nuget-hosted/blocked/1.0.0/blocked.1.0.0.nupkg")
+ANON_UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "Content-Type: application/octet-stream" --data-binary @"$TEST_PKG_FILE" "$REPOS_URL/nuget-hosted/blocked/1.0.0/blocked.1.0.0.nupkg")
+if [ "$LIMITED_UPLOAD_CODE" -lt 400 ] || [ "$ANON_UPLOAD_CODE" -lt 400 ]; then
+  echo -e "${RED}NuGet Permission Test Failed (limited=$LIMITED_UPLOAD_CODE anon=$ANON_UPLOAD_CODE)${NC}"
+  exit 1
+fi
+echo -e "${GREEN}NuGet Permission Test Passed${NC}"
 
 # 3. Create NuGet Proxy Repository
 echo "Creating NuGet Proxy repository..."
@@ -163,10 +285,9 @@ echo "Verifying Group Read (Proxy Member)..."
 # Let's try to download a real package from proxy via group.
 # Package: newtonsoft.json/13.0.3
 echo "Downloading package via Group (from Proxy)..."
-# URL: /repository/nuget-group/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg
-# This maps to download(repo, 'newtonsoft.json', '13.0.3')
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$REPOS_URL/nuget-group/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg")
+HTTP_CODE=$(curl -s -f -o "$TEMP_DIR/newtonsoft.json.13.0.3.nupkg" -w "%{http_code}" "$REPOS_URL/nuget-group/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg")
 if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 302 ]; then
+  unzip -tq "$TEMP_DIR/newtonsoft.json.13.0.3.nupkg" > /dev/null
     echo -e "${GREEN}NuGet Group Download Test Passed${NC}"
 else
     echo -e "${RED}NuGet Group Download Test Failed (HTTP $HTTP_CODE)${NC}"
@@ -194,12 +315,12 @@ curl -s -X PUT "$API_URL/repositories/nuget-group" \
 
 # Test 'first' policy (should go to nuget-hosted)
 echo "Testing 'first' write policy..."
-zip -j $TEMP_DIR/pkg-first.1.0.0.nupkg $TEMP_DIR/dummy.txt > /dev/null
+PKG_FIRST_FILE=$(create_real_nuget_package "pkg-first" "1.0.0")
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
   -H "$AUTH_HEADER" \
   -H "Content-Type: application/octet-stream" \
   -H "Expect:" \
-  --data-binary @$TEMP_DIR/pkg-first.1.0.0.nupkg \
+  --data-binary @"$PKG_FIRST_FILE" \
   "$REPOS_URL/nuget-group/pkg-first/1.0.0/pkg-first.1.0.0.nupkg")
 
 if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
@@ -223,12 +344,12 @@ curl -s -X PUT "$API_URL/repositories/nuget-group" \
   -H "$AUTH_HEADER" \
   -d '{"name":"nuget-group","type":"group","manager":"nuget","config":{"members":["nuget-hosted","nuget-hosted-2","nuget-proxy"],"writePolicy":"preferred","preferredWriter":"nuget-hosted-2"}}' > /dev/null
 
-zip -j $TEMP_DIR/pkg-pref.1.0.0.nupkg $TEMP_DIR/dummy.txt > /dev/null
+PKG_PREF_FILE=$(create_real_nuget_package "pkg-pref" "1.0.0")
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
   -H "$AUTH_HEADER" \
   -H "Content-Type: application/octet-stream" \
   -H "Expect:" \
-  --data-binary @$TEMP_DIR/pkg-pref.1.0.0.nupkg \
+  --data-binary @"$PKG_PREF_FILE" \
   "$REPOS_URL/nuget-group/pkg-pref/1.0.0/pkg-pref.1.0.0.nupkg")
 
 if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
@@ -252,12 +373,12 @@ curl -s -X PUT "$API_URL/repositories/nuget-group" \
   -H "$AUTH_HEADER" \
   -d '{"name":"nuget-group","type":"group","manager":"nuget","config":{"members":["nuget-hosted","nuget-hosted-2","nuget-proxy"],"writePolicy":"mirror"}}' > /dev/null
 
-zip -j $TEMP_DIR/pkg-mirror.1.0.0.nupkg $TEMP_DIR/dummy.txt > /dev/null
+PKG_MIRROR_FILE=$(create_real_nuget_package "pkg-mirror" "1.0.0")
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
   -H "$AUTH_HEADER" \
   -H "Content-Type: application/octet-stream" \
   -H "Expect:" \
-  --data-binary @$TEMP_DIR/pkg-mirror.1.0.0.nupkg \
+  --data-binary @"$PKG_MIRROR_FILE" \
   "$REPOS_URL/nuget-group/pkg-mirror/1.0.0/pkg-mirror.1.0.0.nupkg")
 
 if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
@@ -319,6 +440,16 @@ else
     echo -e "${RED}NuGet Proxy Auth Test Failed (HTTP $HTTP_CODE)${NC}"
     exit 1
 fi
+
+curl -s -f "$REPOS_URL/nuget-proxy-auth/test-pkg/1.0.0/test-pkg.1.0.0.nupkg" -o "$TEMP_DIR/proxy-auth-test-pkg.1.0.0.nupkg"
+verify_real_nuget_package "$TEMP_DIR/proxy-auth-test-pkg.1.0.0.nupkg" "test-pkg" "1.0.0"
+curl -s -X PUT "$API_URL/repositories/nuget-proxy-auth" \
+  -H "Content-Type: application/json" \
+  -H "$AUTH_HEADER" \
+  -d '{"name":"nuget-proxy-auth","type":"proxy","manager":"nuget","config":{"proxyUrl":"http://localhost:9/index.json","auth":{"username":"e2e-nuget-upstream-user","password":"upstream-pass-123"},"cacheMaxAgeDays":7}}' > /dev/null
+curl -s -f "$REPOS_URL/nuget-proxy-auth/test-pkg/1.0.0/test-pkg.1.0.0.nupkg" -o "$TEMP_DIR/proxy-auth-cached-test-pkg.1.0.0.nupkg"
+verify_real_nuget_package "$TEMP_DIR/proxy-auth-cached-test-pkg.1.0.0.nupkg" "test-pkg" "1.0.0"
+echo -e "${GREEN}NuGet Proxy Cache Test Passed${NC}"
 
 echo -e "${GREEN}All NuGet Tests Passed${NC}"
 

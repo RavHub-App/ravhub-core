@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -28,43 +28,63 @@ describe('RawPlugin Storage', () => {
         save: jest.fn().mockResolvedValue({ size: 100, contentHash: 'abc' }),
         get: jest.fn(),
         exists: jest.fn(),
-        saveStream: jest.fn().mockResolvedValue({ size: 100, contentHash: 'abc' }),
-        list: jest.fn()
+        saveStream: jest
+          .fn()
+          .mockResolvedValue({ size: 100, contentHash: 'abc' }),
+        list: jest.fn(),
       },
       indexArtifact: jest.fn(),
-      getRepo: jest.fn()
+      getRepo: jest.fn(),
     };
     storageMethods = initStorage(context);
 
-    (keyUtils.buildKey as jest.Mock).mockImplementation((...args) => args.join('/'));
+    (keyUtils.buildKey as jest.Mock).mockImplementation((...args) =>
+      args.join('/'),
+    );
     jest.clearAllMocks();
   });
 
   describe('upload', () => {
     it('should save raw content', async () => {
-      const result = await storageMethods.upload(repo, { name: 'file.txt', content: 'hello' });
+      const result = await storageMethods.upload(repo, {
+        name: 'file.txt',
+        content: 'hello',
+      });
       expect(result.ok).toBe(true);
       expect(context.storage.save).toHaveBeenCalled();
     });
 
     it('should handle group write policies', async () => {
-      const groupRepo = { id: 'g1', type: 'group', config: { members: ['m1'], writePolicy: 'first' } };
+      const groupRepo = {
+        id: 'g1',
+        type: 'group',
+        config: { members: ['m1'], writePolicy: 'first' },
+      };
       context.getRepo.mockResolvedValue({ id: 'm1', type: 'hosted' });
-      const result = await storageMethods.upload(groupRepo as any, { name: 'file.txt' });
+      const result = await storageMethods.upload(groupRepo as any, {
+        name: 'file.txt',
+      });
       expect(result.ok).toBe(true);
     });
 
     it('should fail if group is read-only', async () => {
       const groupRepo = { type: 'group', config: { writePolicy: 'none' } };
-      const result = await storageMethods.upload(groupRepo as any, { name: 'f' });
+      const result = await storageMethods.upload(groupRepo as any, {
+        name: 'f',
+      });
       expect(result.ok).toBe(false);
     });
 
     it('should handle mirror write failure', async () => {
-      const groupRepo = { type: 'group', config: { members: ['m1'], writePolicy: 'mirror' } };
+      const groupRepo = {
+        type: 'group',
+        config: { members: ['m1'], writePolicy: 'mirror' },
+      };
       context.getRepo.mockResolvedValue({ id: 'm1', type: 'hosted' });
       context.storage.save.mockRejectedValue(new Error('fail'));
-      const result = await storageMethods.upload(groupRepo as any, { name: 'f' });
+      const result = await storageMethods.upload(groupRepo as any, {
+        name: 'f',
+      });
       expect(result.ok).toBe(false);
     });
 
@@ -78,6 +98,21 @@ describe('RawPlugin Storage', () => {
       const repoNoRedeploy = { ...repo, config: { allowRedeploy: false } };
       context.storage.get.mockResolvedValue('exists');
       const result = await storageMethods.upload(repoNoRedeploy, { name: 'f' });
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain('Redeployment');
+    });
+
+    it('should block redeployment if legacy repo-name key exists', async () => {
+      const repoNoRedeploy = { ...repo, config: { allowRedeploy: false } };
+      context.storage.get.mockImplementation((key: string) => {
+        if (key === 'raw/raw-repo/f') {
+          return Promise.resolve('exists');
+        }
+        return Promise.resolve(null);
+      });
+
+      const result = await storageMethods.upload(repoNoRedeploy, { name: 'f' });
+
       expect(result.ok).toBe(false);
       expect(result.message).toContain('Redeployment');
     });
@@ -96,34 +131,94 @@ describe('RawPlugin Storage', () => {
       const mockReq = {
         [Symbol.asyncIterator]: async function* () {
           for (const chunk of chunks) yield chunk;
-        }
+        },
       };
-      const result = await storageMethods.handlePut(repo, 'path/file.txt', mockReq);
+      const result = await storageMethods.handlePut(
+        repo,
+        'path/file.txt',
+        mockReq,
+      );
       expect(result.ok).toBe(true);
-      expect(context.storage.save).toHaveBeenCalledWith(expect.any(String), Buffer.from('ab'));
+      expect(context.storage.save).toHaveBeenCalledWith(
+        expect.any(String),
+        Buffer.from('ab'),
+      );
     });
 
     it('should handle mirror write policy with stream buffering', async () => {
-      const groupRepo = { id: 'g1', type: 'group', config: { members: ['m1'], writePolicy: 'mirror' } };
-      context.getRepo.mockResolvedValue({ id: 'm1', type: 'hosted', config: {} });
+      const groupRepo = {
+        id: 'g1',
+        type: 'group',
+        config: { members: ['m1'], writePolicy: 'mirror' },
+      };
+      context.getRepo.mockResolvedValue({
+        id: 'm1',
+        type: 'hosted',
+        config: {},
+      });
 
       const chunks = [Buffer.from('data')];
       const mockReq = {
         [Symbol.asyncIterator]: async function* () {
           for (const chunk of chunks) yield chunk;
-        }
+        },
       };
 
-      const result = await storageMethods.handlePut(groupRepo as any, 'f.txt', mockReq);
+      const result = await storageMethods.handlePut(
+        groupRepo as any,
+        'f.txt',
+        mockReq,
+      );
       expect(result.ok).toBe(true);
     });
 
     it('should handle buffer/object body', async () => {
-      const r1 = await storageMethods.handlePut(repo, 'f1', { body: Buffer.from('b') });
-      const r2 = await storageMethods.handlePut(repo, 'f2', { body: { json: true } });
+      const r1 = await storageMethods.handlePut(repo, 'f1', {
+        body: Buffer.from('b'),
+      });
+      const r2 = await storageMethods.handlePut(repo, 'f2', {
+        body: { json: true },
+      });
       expect(r1.ok).toBe(true);
       expect(r2.ok).toBe(true);
       expect(context.storage.save).toHaveBeenCalledTimes(2);
+    });
+
+    it('should keep comma and slash paths isolated', async () => {
+      const actualKeyUtils = jest.requireActual(
+        'src/modules/plugins/impl/raw-plugin/utils/key-utils',
+      );
+      const storageMap = new Map<string, Buffer>();
+
+      (keyUtils.buildKey as jest.Mock).mockImplementation(
+        actualKeyUtils.buildKey,
+      );
+      context.storage.save.mockImplementation(
+        async (key: string, value: Buffer) => {
+          storageMap.set(key, value);
+          return { size: value.length, contentHash: 'hash' };
+        },
+      );
+      context.storage.get.mockImplementation(
+        async (key: string) => storageMap.get(key) ?? null,
+      );
+
+      await storageMethods.handlePut(repo, 'dir,file.txt', {
+        body: Buffer.from('comma'),
+      });
+      await storageMethods.handlePut(repo, 'dir/file.txt', {
+        body: Buffer.from('slash'),
+      });
+
+      const commaResult = await storageMethods.download(repo, 'dir,file.txt');
+      const slashResult = await storageMethods.download(repo, 'dir/file.txt');
+
+      expect(commaResult.ok).toBe(true);
+      expect(slashResult.ok).toBe(true);
+      expect(commaResult.data.toString()).toBe('comma');
+      expect(slashResult.data.toString()).toBe('slash');
+      expect(storageMap.has('raw/r1/dir%2Cfile.txt')).toBe(true);
+      expect(storageMap.has('raw/r1/dir/file.txt')).toBe(true);
     });
   });
 
@@ -148,27 +243,43 @@ describe('RawPlugin Storage', () => {
     const groupRepo = { id: 'g1', type: 'group', config: { members: ['m1'] } };
 
     it('should reject if writePolicy is none', async () => {
-      const result = await storageMethods.handlePut({ ...groupRepo, config: { writePolicy: 'none' } } as any, 'f', {});
+      const result = await storageMethods.handlePut(
+        { ...groupRepo, config: { writePolicy: 'none' } } as any,
+        'f',
+        {},
+      );
       expect(result.ok).toBe(false);
     });
 
     it('should handle preferred writer', async () => {
-      const prefRepo = { ...groupRepo, config: { writePolicy: 'preferred', preferredWriter: 'm1' } };
+      const prefRepo = {
+        ...groupRepo,
+        config: { writePolicy: 'preferred', preferredWriter: 'm1' },
+      };
       context.getRepo.mockResolvedValue({ id: 'm1', type: 'hosted' });
-      const result = await storageMethods.handlePut(prefRepo as any, 'f', { body: 'd' });
+      const result = await storageMethods.handlePut(prefRepo as any, 'f', {
+        body: 'd',
+      });
       expect(result.ok).toBe(true);
     });
 
     it('should handle missing preferred writer', async () => {
       const prefRepo = { ...groupRepo, config: { writePolicy: 'preferred' } };
-      const result = await storageMethods.handlePut(prefRepo as any, 'f', { body: 'd' });
+      const result = await storageMethods.handlePut(prefRepo as any, 'f', {
+        body: 'd',
+      });
       expect(result.ok).toBe(false);
     });
 
     it('should handle unavailable preferred writer', async () => {
-      const prefRepo = { ...groupRepo, config: { writePolicy: 'preferred', preferredWriter: 'm1' } };
+      const prefRepo = {
+        ...groupRepo,
+        config: { writePolicy: 'preferred', preferredWriter: 'm1' },
+      };
       context.getRepo.mockResolvedValue(null);
-      const result = await storageMethods.handlePut(prefRepo as any, 'f', { body: 'd' });
+      const result = await storageMethods.handlePut(prefRepo as any, 'f', {
+        body: 'd',
+      });
       expect(result.ok).toBe(false);
     });
 
@@ -176,7 +287,9 @@ describe('RawPlugin Storage', () => {
       const firstRepo = { ...groupRepo, config: { writePolicy: 'first' } };
       context.getRepo.mockResolvedValue({ id: 'm1', type: 'hosted' });
       context.storage.saveStream.mockRejectedValue(new Error('fail'));
-      const result = await storageMethods.handlePut(firstRepo as any, 'f', { body: 'd' });
+      const result = await storageMethods.handlePut(firstRepo as any, 'f', {
+        body: 'd',
+      });
       expect(result.ok).toBe(false);
     });
 
@@ -186,7 +299,9 @@ describe('RawPlugin Storage', () => {
         if (key.includes('/raw-repo/')) return Promise.resolve('exists');
         return Promise.resolve(null);
       });
-      const result = await storageMethods.handlePut(repoNoRedeploy, 'f', { body: 'd' });
+      const result = await storageMethods.handlePut(repoNoRedeploy, 'f', {
+        body: 'd',
+      });
       expect(result.ok).toBe(false);
     });
 

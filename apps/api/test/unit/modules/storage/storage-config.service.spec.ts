@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -25,241 +25,247 @@ import { StorageService } from 'src/modules/storage/storage.service';
 import { ForbiddenException } from '@nestjs/common';
 
 describe('StorageConfigService', () => {
-    let service: StorageConfigService;
-    let repo: any;
-    let repositoryRepo: any;
-    let artifactRepo: any;
-    let backupRepo: any;
-    let auditService: any;
-    let licenseService: any;
+  let service: StorageConfigService;
+  let repo: any;
+  let repositoryRepo: any;
+  let artifactRepo: any;
+  let backupRepo: any;
+  let auditService: any;
+  let licenseService: any;
 
-    beforeEach(async () => {
-        repo = {
-            find: jest.fn(),
-            findOneBy: jest.fn(),
-            create: jest.fn(),
-            save: jest.fn(),
-            delete: jest.fn(),
-        };
+  beforeEach(async () => {
+    repo = {
+      find: jest.fn(),
+      findOneBy: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      delete: jest.fn(),
+    };
 
-        repositoryRepo = {
-            find: jest.fn().mockResolvedValue([]),
-        };
+    repositoryRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
 
-        artifactRepo = {
-            find: jest.fn().mockResolvedValue([]),
-            createQueryBuilder: jest.fn().mockReturnValue({
-                where: jest.fn().mockReturnThis(),
-                getMany: jest.fn().mockResolvedValue([]),
-            }),
-        };
+    artifactRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      }),
+    };
 
-        backupRepo = {
-            find: jest.fn().mockResolvedValue([]),
-        };
+    backupRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
 
-        auditService = {
-            logSuccess: jest.fn().mockResolvedValue(undefined),
-        };
+    auditService = {
+      logSuccess: jest.fn().mockResolvedValue(undefined),
+    };
 
-        licenseService = {
-            hasActiveLicense: jest.fn(),
-        };
+    licenseService = {
+      hasActiveLicense: jest.fn(),
+    };
 
-        const mockStorageService = {};
+    const mockStorageService = {};
 
-        const module: TestingModule = await Test.createTestingModule({
-            providers: [
-                StorageConfigService,
-                {
-                    provide: getRepositoryToken(StorageConfig),
-                    useValue: repo,
-                },
-                {
-                    provide: getRepositoryToken(RepositoryEntity),
-                    useValue: repositoryRepo,
-                },
-                {
-                    provide: getRepositoryToken(Artifact),
-                    useValue: artifactRepo,
-                },
-                {
-                    provide: getRepositoryToken(Backup),
-                    useValue: backupRepo,
-                },
-                {
-                    provide: AuditService,
-                    useValue: auditService,
-                },
-                {
-                    provide: LicenseService,
-                    useValue: licenseService,
-                },
-                {
-                    provide: StorageService,
-                    useValue: mockStorageService,
-                },
-            ],
-        }).compile();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        StorageConfigService,
+        {
+          provide: getRepositoryToken(StorageConfig),
+          useValue: repo,
+        },
+        {
+          provide: getRepositoryToken(RepositoryEntity),
+          useValue: repositoryRepo,
+        },
+        {
+          provide: getRepositoryToken(Artifact),
+          useValue: artifactRepo,
+        },
+        {
+          provide: getRepositoryToken(Backup),
+          useValue: backupRepo,
+        },
+        {
+          provide: AuditService,
+          useValue: auditService,
+        },
+        {
+          provide: LicenseService,
+          useValue: licenseService,
+        },
+        {
+          provide: StorageService,
+          useValue: mockStorageService,
+        },
+      ],
+    }).compile();
 
-        service = module.get<StorageConfigService>(StorageConfigService);
-        jest.clearAllMocks();
+    service = module.get<StorageConfigService>(StorageConfigService);
+    jest.clearAllMocks();
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('list', () => {
+    it('should return all storage configs', async () => {
+      const configs = [
+        { id: '1', key: 'local', type: 'filesystem' },
+        { id: '2', key: 's3', type: 's3' },
+      ];
+      repo.find.mockResolvedValue(configs);
+
+      const result = await service.list();
+
+      expect(result).toEqual(configs);
+      expect(repo.find).toHaveBeenCalled();
+    });
+  });
+
+  describe('get', () => {
+    it('should return a specific storage config', async () => {
+      const config = { id: '1', key: 'local', type: 'filesystem' };
+      repo.findOneBy.mockResolvedValue(config);
+
+      const result = await service.get('1');
+
+      expect(result).toEqual(config);
+      expect(repo.findOneBy).toHaveBeenCalledWith({ id: '1' });
+    });
+  });
+
+  describe('create', () => {
+    it('should create a filesystem storage config', async () => {
+      const configData = { key: 'local', type: 'filesystem', config: {} };
+      const createdConfig = { id: '1', ...configData };
+
+      repo.create.mockReturnValue(createdConfig);
+      repo.save.mockResolvedValue(createdConfig);
+
+      const result = await service.create(configData);
+
+      expect(result).toEqual(createdConfig);
+      expect(repo.create).toHaveBeenCalledWith(configData);
+      expect(auditService.logSuccess).toHaveBeenCalledWith({
+        action: 'storage-config.create',
+        entityType: 'storage-config',
+        entityId: '1',
+        details: { key: 'local', type: 'filesystem' },
+      });
     });
 
-    it('should be defined', () => {
-        expect(service).toBeDefined();
+    it('should create S3 storage config with valid license', async () => {
+      const configData = { key: 's3-prod', type: 's3', config: {} };
+      const createdConfig = { id: '2', ...configData };
+
+      licenseService.hasActiveLicense.mockResolvedValue(true);
+      repo.create.mockReturnValue(createdConfig);
+      repo.save.mockResolvedValue(createdConfig);
+
+      const result = await service.create(configData);
+
+      expect(result).toEqual(createdConfig);
+      expect(licenseService.hasActiveLicense).toHaveBeenCalled();
     });
 
-    describe('list', () => {
-        it('should return all storage configs', async () => {
-            const configs = [
-                { id: '1', key: 'local', type: 'filesystem' },
-                { id: '2', key: 's3', type: 's3' },
-            ];
-            repo.find.mockResolvedValue(configs);
+    it('should reject S3 storage without license', async () => {
+      const configData = { key: 's3-prod', type: 's3', config: {} };
+      licenseService.hasActiveLicense.mockResolvedValue(false);
 
-            const result = await service.list();
-
-            expect(result).toEqual(configs);
-            expect(repo.find).toHaveBeenCalled();
-        });
+      await expect(service.create(configData)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
-    describe('get', () => {
-        it('should return a specific storage config', async () => {
-            const config = { id: '1', key: 'local', type: 'filesystem' };
-            repo.findOneBy.mockResolvedValue(config);
+    it('should reject GCS storage without license', async () => {
+      const configData = { key: 'gcs-prod', type: 'gcs', config: {} };
+      licenseService.hasActiveLicense.mockResolvedValue(false);
 
-            const result = await service.get('1');
-
-            expect(result).toEqual(config);
-            expect(repo.findOneBy).toHaveBeenCalledWith({ id: '1' });
-        });
+      await expect(service.create(configData)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
-    describe('create', () => {
-        it('should create a filesystem storage config', async () => {
-            const configData = { key: 'local', type: 'filesystem', config: {} };
-            const createdConfig = { id: '1', ...configData };
+    it('should reject Azure storage without license', async () => {
+      const configData = { key: 'azure-prod', type: 'azure', config: {} };
+      licenseService.hasActiveLicense.mockResolvedValue(false);
 
-            repo.create.mockReturnValue(createdConfig);
-            repo.save.mockResolvedValue(createdConfig);
-
-            const result = await service.create(configData);
-
-            expect(result).toEqual(createdConfig);
-            expect(repo.create).toHaveBeenCalledWith(configData);
-            expect(auditService.logSuccess).toHaveBeenCalledWith({
-                action: 'storage-config.create',
-                entityType: 'storage-config',
-                entityId: '1',
-                details: { key: 'local', type: 'filesystem' },
-            });
-        });
-
-        it('should create S3 storage config with valid license', async () => {
-            const configData = { key: 's3-prod', type: 's3', config: {} };
-            const createdConfig = { id: '2', ...configData };
-
-            licenseService.hasActiveLicense.mockResolvedValue(true);
-            repo.create.mockReturnValue(createdConfig);
-            repo.save.mockResolvedValue(createdConfig);
-
-            const result = await service.create(configData);
-
-            expect(result).toEqual(createdConfig);
-            expect(licenseService.hasActiveLicense).toHaveBeenCalled();
-        });
-
-        it('should reject S3 storage without license', async () => {
-            const configData = { key: 's3-prod', type: 's3', config: {} };
-            licenseService.hasActiveLicense.mockResolvedValue(false);
-
-            await expect(service.create(configData)).rejects.toThrow(ForbiddenException);
-        });
-
-        it('should reject GCS storage without license', async () => {
-            const configData = { key: 'gcs-prod', type: 'gcs', config: {} };
-            licenseService.hasActiveLicense.mockResolvedValue(false);
-
-            await expect(service.create(configData)).rejects.toThrow(ForbiddenException);
-        });
-
-        it('should reject Azure storage without license', async () => {
-            const configData = { key: 'azure-prod', type: 'azure', config: {} };
-            licenseService.hasActiveLicense.mockResolvedValue(false);
-
-            await expect(service.create(configData)).rejects.toThrow(ForbiddenException);
-        });
-
-        it('should handle audit logging failure gracefully', async () => {
-            const configData = { key: 'test', type: 'filesystem' };
-            const createdConfig = { id: '3', ...configData };
-
-            repo.create.mockReturnValue(createdConfig);
-            repo.save.mockResolvedValue(createdConfig);
-            auditService.logSuccess.mockRejectedValue(new Error('Audit failed'));
-
-            const result = await service.create(configData);
-
-            expect(result).toEqual(createdConfig);
-        });
+      await expect(service.create(configData)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
-    describe('update', () => {
-        it('should update a storage config', async () => {
-            const existingConfig = { id: '1', key: 'local', type: 'filesystem' };
-            const updateData = { key: 'local-updated' };
-            const updatedConfig = { ...existingConfig, ...updateData };
+    it('should handle audit logging failure gracefully', async () => {
+      const configData = { key: 'test', type: 'filesystem' };
+      const createdConfig = { id: '3', ...configData };
 
-            repo.findOneBy.mockResolvedValue(existingConfig);
-            repo.save.mockResolvedValue(updatedConfig);
+      repo.create.mockReturnValue(createdConfig);
+      repo.save.mockResolvedValue(createdConfig);
+      auditService.logSuccess.mockRejectedValue(new Error('Audit failed'));
 
-            const result = await service.update('1', updateData);
+      const result = await service.create(configData);
 
-            expect(result).toEqual(updatedConfig);
-            expect(auditService.logSuccess).toHaveBeenCalledWith({
-                action: 'storage-config.update',
-                entityType: 'storage-config',
-                entityId: '1',
-                details: { key: 'local-updated', changedFields: ['key'] },
-            });
-        });
+      expect(result).toEqual(createdConfig);
+    });
+  });
 
-        it('should return null if config not found', async () => {
-            repo.findOneBy.mockResolvedValue(null);
+  describe('update', () => {
+    it('should update a storage config', async () => {
+      const existingConfig = { id: '1', key: 'local', type: 'filesystem' };
+      const updateData = { key: 'local-updated' };
+      const updatedConfig = { ...existingConfig, ...updateData };
 
-            const result = await service.update('999', { key: 'test' });
+      repo.findOneBy.mockResolvedValue(existingConfig);
+      repo.save.mockResolvedValue(updatedConfig);
 
-            expect(result).toBeNull();
-        });
+      const result = await service.update('1', updateData);
+
+      expect(result).toEqual(updatedConfig);
+      expect(auditService.logSuccess).toHaveBeenCalledWith({
+        action: 'storage-config.update',
+        entityType: 'storage-config',
+        entityId: '1',
+        details: { key: 'local-updated', changedFields: ['key'] },
+      });
     });
 
-    describe('delete', () => {
-        it('should delete a storage config', async () => {
-            const config = { id: '1', key: 'local' };
-            repo.findOneBy.mockResolvedValue(config);
-            repo.delete.mockResolvedValue({ affected: 1 });
+    it('should return null if config not found', async () => {
+      repo.findOneBy.mockResolvedValue(null);
 
-            const result = await service.delete('1');
+      const result = await service.update('999', { key: 'test' });
 
-            expect(result).toEqual({ ok: true });
-            expect(repo.delete).toHaveBeenCalledWith({ id: '1' });
-            expect(auditService.logSuccess).toHaveBeenCalledWith({
-                action: 'storage-config.delete',
-                entityType: 'storage-config',
-                entityId: '1',
-                details: { key: 'local' },
-            });
-        });
-
-        it('should handle deletion when config not found', async () => {
-            repo.findOneBy.mockResolvedValue(null);
-            repo.delete.mockResolvedValue({ affected: 0 });
-
-            const result = await service.delete('999');
-
-            expect(result).toEqual({ ok: true });
-        });
+      expect(result).toBeNull();
     });
+  });
+
+  describe('delete', () => {
+    it('should delete a storage config', async () => {
+      const config = { id: '1', key: 'local' };
+      repo.findOneBy.mockResolvedValue(config);
+      repo.delete.mockResolvedValue({ affected: 1 });
+
+      const result = await service.delete('1');
+
+      expect(result).toEqual({ ok: true });
+      expect(repo.delete).toHaveBeenCalledWith({ id: '1' });
+      expect(auditService.logSuccess).toHaveBeenCalledWith({
+        action: 'storage-config.delete',
+        entityType: 'storage-config',
+        entityId: '1',
+        details: { key: 'local' },
+      });
+    });
+
+    it('should handle deletion when config not found', async () => {
+      repo.findOneBy.mockResolvedValue(null);
+      repo.delete.mockResolvedValue({ affected: 0 });
+
+      const result = await service.delete('999');
+
+      expect(result).toEqual({ ok: true });
+    });
+  });
 });

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -93,7 +93,7 @@ export default function BackupSettings() {
             const active = response.data.isActive === true
             setHasLicense(active)
             return active
-        } catch (err) {
+        } catch (_error) {
             setHasLicense(false)
             return false
         }
@@ -122,11 +122,9 @@ export default function BackupSettings() {
         // (the backend will block unauthorized requests appropriately). This
         // avoids hiding the whole UI when /api/licenses might require admin
         // scope and would incorrectly signal no license to regular users.
-        let interval: ReturnType<typeof setInterval>
-
         checkLicense()
         loadData()
-        interval = setInterval(loadData, 5000) // Refresh every 5s for progress updates
+        const interval = setInterval(loadData, 5000)
 
         return () => clearInterval(interval)
     }, [])

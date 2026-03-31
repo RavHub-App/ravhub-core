@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -58,7 +58,7 @@ export class AuthController {
 
         const perms = new Set<string>();
         (u.roles || []).forEach((r: any) => {
-          (r.permissions || []).forEach((p: any) => perms.add(p.key));
+          (r.permissions || []).forEach((p: any) => perms.add(String(p.key)));
           if (r.name === 'admin' || r.name === 'superadmin') perms.add('*');
         });
 
@@ -72,8 +72,8 @@ export class AuthController {
           },
         };
       }
-    } catch (err) {
-      // fallthrough
+    } catch (_error) {
+      void _error;
     }
 
     return { ok: false, message: 'db unavailable' };
@@ -88,7 +88,7 @@ export class AuthController {
         ok: true,
         bootstrapRequired: total === 0,
       };
-    } catch (err) {
+    } catch {
       return { ok: false, message: 'db unavailable' };
     }
   }
@@ -248,8 +248,8 @@ export class AuthController {
       activeRoleRepo = this.roleRepo;
     } else if (AppDataSource.isInitialized) {
       try {
-        activeRoleRepo = AppDataSource.getRepository(Role) as any;
-      } catch (e) {
+        activeRoleRepo = AppDataSource.getRepository(Role);
+      } catch {
         activeRoleRepo = null;
       }
     }
@@ -267,8 +267,8 @@ export class AuthController {
             relations: ['permissions'],
           });
         }
-      } catch (e) {
-        // ignore and fall through to create
+      } catch (_error) {
+        void _error;
       }
 
       if (!adminRole) {
@@ -278,22 +278,20 @@ export class AuthController {
         } as Partial<Role>);
         // attempt to attach all permissions if permission repository is available
         try {
-          const permRepo = activeRoleRepo.manager.getRepository(
-            Permission as any,
-          );
+          const permRepo = activeRoleRepo.manager.getRepository(Permission);
           const all = await permRepo.find();
           (adminRole as any).permissions = all;
-        } catch (e) {
-          // ignore; we'll still create the role without permissions
+        } catch (_error) {
+          void _error;
         }
-        await activeRoleRepo.save(adminRole as any);
+        await activeRoleRepo.save(adminRole);
       }
     }
 
     // create user with hashed password and assign admin role if available
     const userData: Partial<User> = { username, passwordhash };
     if (adminRole) userData.roles = [adminRole];
-    const saved = await this.users.create(userData as any);
+    const saved = await this.users.create(userData);
 
     const token = this.auth.signToken({
       sub: saved.id,

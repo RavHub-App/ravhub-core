@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -164,11 +164,6 @@ describe('CreateRepository', () => {
         if (inputElement) {
             fireEvent.change(inputElement, { target: { value: 'https://registry.npmjs.org' } });
         } else {
-            // Fallback if structure is different
-            const label = await screen.findByText(/target/i);
-            // ... confusing to find input from label
-
-            // Let's rely on label text which is standard
             const inp = await screen.findByLabelText(/target/i);
             fireEvent.change(inp, { target: { value: 'https://registry.npmjs.org' } });
         }

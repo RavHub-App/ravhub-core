@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -22,8 +22,8 @@ export function initPackages(context: PluginContext) {
     const versions = new Set<string>();
     const metaPath = `${name}/package.json`;
 
-    const tryLoad = async (repoIdOrName: string) => {
-      const key = buildKey('npm', repoIdOrName, metaPath);
+    const tryLoad = async (...keyParts: string[]) => {
+      const key = buildKey('npm', ...keyParts);
       try {
         const data = await storage.get(key);
         if (data) {
@@ -37,8 +37,13 @@ export function initPackages(context: PluginContext) {
       }
     };
 
-    await tryLoad(repo.id);
-    await tryLoad(repo.name);
+    await tryLoad(repo.id, metaPath);
+    await tryLoad(repo.name, metaPath);
+
+    if (repo.type === 'proxy') {
+      await tryLoad(repo.id, 'proxy', metaPath);
+      await tryLoad(repo.name, 'proxy', metaPath);
+    }
 
     return {
       ok: true,
@@ -49,7 +54,7 @@ export function initPackages(context: PluginContext) {
   const getInstallCommand = async (repo: Repository, pkg: any) => {
     const host = process.env.API_HOST || 'localhost:3000';
     const proto = process.env.API_PROTOCOL || 'http';
-    const registryUrl = `${proto}://${host}/repository/${repo.name}`;
+    const registryUrl = `${proto}://${host}/repository/${encodeURIComponent(repo.name)}`;
     const name = pkg?.name || 'package';
     const version = pkg?.version || 'latest';
 

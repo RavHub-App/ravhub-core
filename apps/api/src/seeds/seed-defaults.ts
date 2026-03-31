@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -15,7 +15,6 @@
 import AppDataSource from '../data-source';
 import { Role } from '../entities/role.entity';
 import { Permission } from '../entities/permission.entity';
-import { RepositoryEntity } from '../entities/repository.entity';
 import { User } from '../entities/user.entity';
 import * as bcrypt from 'bcryptjs';
 import { StorageConfig } from '../entities/storage-config.entity';
@@ -27,7 +26,6 @@ export async function seedDefaults() {
 
   const roleRepo = AppDataSource.getRepository(Role);
   const permRepo = AppDataSource.getRepository(Permission);
-  const repoRepo = AppDataSource.getRepository(RepositoryEntity);
 
   const rolesToEnsure = [
     {
@@ -152,8 +150,8 @@ export async function seedDefaults() {
     } else {
       console.log('seed: default storage config already exists');
     }
-  } catch (err) {
-    // ignore if StorageConfig table not present yet
+  } catch (_error) {
+    void _error;
   }
 
   try {
@@ -181,7 +179,8 @@ export async function seedDefaults() {
         console.log('seed: admin user already exists');
       }
     }
-  } catch (err) {
+  } catch (_error) {
+    void _error;
     console.log('seed: skipping admin creation due to error or missing schema');
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -38,21 +38,14 @@ describe('ComposerPlugin Packages List', () => {
   });
 
   describe('listVersions', () => {
-    it('should list versions from storage', async () => {
+    it('should list clean versions from hosted storage layout', async () => {
       const repo = { id: 'repo1', name: 'my-repo' };
-      // Simulate keys: composer/repo1/vendor/pkg/1.0.0
-      // name = vendor/pkg
-      // nameParts = [vendor, pkg] (len=2)
-      // versionIndex = 2 + 2 = 4?
-      // "composer/repo1/vendor/pkg/v1/meta"
-      // Split: 0:composer, 1:repo1, 2:vendor, 3:pkg, 4:v1, 5:meta
-      // Logic: parts[4] is version?
 
       mockStorage.list.mockImplementation((prefix: string) => {
         if (prefix.includes('repo1/vendor/pkg')) {
           return Promise.resolve([
-            'composer/repo1/vendor/pkg/1.0.0',
-            'composer/repo1/vendor/pkg/1.0.1/something',
+            'composer/repo1/vendor/pkg/1.0.0.zip',
+            'composer/repo1/vendor/pkg/1.0.1.zip',
           ]);
         }
         return Promise.resolve([]);
@@ -65,16 +58,12 @@ describe('ComposerPlugin Packages List', () => {
       expect(result.versions).toContain('1.0.1');
     });
 
-    it('should list proxy versions', async () => {
+    it('should list clean versions from proxy storage layout', async () => {
       const repo = { id: 'repo1', name: 'my-repo' };
-      // Proxy keys: composer/repo1/proxy/vendor/pkg/2.0.0
-      // versionIndex + 1 = 5?
-      // "composer/repo1/proxy/vendor/pkg/2.0.0"
-      // 0:composer, 1:repo1, 2:proxy, 3:vendor, 4:pkg, 5:2.0.0
 
       mockStorage.list.mockImplementation((prefix: string) => {
         if (prefix.includes('proxy')) {
-          return Promise.resolve(['composer/repo1/proxy/vendor/pkg/2.0.0']);
+          return Promise.resolve(['composer/repo1/proxy/vendor/pkg/2.0.0.zip']);
         }
         return Promise.resolve([]);
       });
@@ -109,10 +98,26 @@ describe('ComposerPlugin Packages List', () => {
       expect(commands).toHaveLength(3);
       expect(commands[0].label).toBe('composer cli');
       expect(commands[0].command).toContain(
-        'composer config repositories.my-repo',
+        'composer config repositories."my-repo"',
       );
       expect(commands[0].command).toContain(
         'composer require vendor/package:1.2.3',
+      );
+    });
+
+    it('should encode repository URL and quote repository key in cli command', async () => {
+      const repo = { id: 'r1', name: 'my repo#1' };
+      const pkg = { name: 'vendor/package', version: '1.2.3' };
+
+      process.env.API_HOST = 'test.com';
+
+      const commands = await packages.getInstallCommand(repo as any, pkg);
+
+      expect(commands[0].command).toContain(
+        'composer config repositories."my repo#1" composer http://test.com/repository/my%20repo%231',
+      );
+      expect(commands[1].command).toContain(
+        '"url": "http://test.com/repository/my%20repo%231"',
       );
     });
   });

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -12,14 +12,13 @@
  * GNU Affero General Public License for more details.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Typography, Box, Tabs, TabList, Tab, TabPanel, CircularProgress, Chip, IconButton, Tooltip, Breadcrumbs, Link as JoyLink, Checkbox } from '@mui/joy'
 import { FormControl, FormLabel, Input, Button, Select, Option } from '@mui/joy'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteIcon from '@mui/icons-material/Delete'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
-import StorageIcon from '@mui/icons-material/Storage'
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
 import HomeIcon from '@mui/icons-material/Home'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
@@ -29,6 +28,7 @@ import RepoBrowse from '../components/Repos/RepoBrowse'
 import RepoUpload from '../components/Repos/RepoUpload'
 import RepositoryPermissions from '../components/Repos/RepositoryPermissions'
 import { useAuth } from '../contexts/AuthContext'
+import { copyTextToClipboard } from '../utils/clipboard'
 import { getRepoAccessUrl } from '../utils/repo'
 import { canPerformOnRepo, hasGlobalPermission } from '../components/Repos/repo-permissions'
 import ConfirmationModal from '../components/ConfirmationModal'
@@ -51,6 +51,7 @@ export default function RepoDetails() {
     const [liveStatus, setLiveStatus] = useState<any | null>(null);
     const [checking, setChecking] = useState(false);
     const { notify } = useNotification();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const [confirmAction, setConfirmAction] = useState<{
         open: boolean;
@@ -93,7 +94,7 @@ export default function RepoDetails() {
 
         // always consult backend so details reflect canonical/current state
         // keep any existing repo in the UI immediately, show a spinner only if we don't have any data yet
-        if (!repo) setLoading(true);
+        if (!location.state?.repo) setLoading(true);
 
         axios
             .get(`/api/repository/${encodeURIComponent(name)}`)
@@ -117,13 +118,16 @@ export default function RepoDetails() {
                 console.error(err);
             })
             .finally(() => setLoading(false));
-    }, [name]);
+    }, [location.state, name]);
 
     // Trigger a live ping when the details view mounts and there's no upstreamStatus yet for proxy repos
+    const repoIdentifier = repo?.id || repo?.name;
+    const repoUpstreamStatus = repo?.upstreamStatus;
+
     useEffect(() => {
-        if (!repo) return;
-        if (repo.type !== 'proxy') return;
-        if ((repo as any)?.upstreamStatus) return;
+        if (!repoIdentifier) return;
+        if (repo?.type !== 'proxy') return;
+        if (repoUpstreamStatus) return;
         if (typeof window === 'undefined') return;
         if (process.env.NODE_ENV === 'test') return;
 
@@ -131,7 +135,7 @@ export default function RepoDetails() {
         (async () => {
             setChecking(true);
             try {
-                const res = await axios.get(`/api/repository/${encodeURIComponent(repo.id || repo.name)}/ping`);
+                const res = await axios.get(`/api/repository/${encodeURIComponent(repoIdentifier)}/ping`);
                 const s = res?.data?.status ?? (res?.data?.ok === false ? { ok: false, message: res?.data?.message ?? 'no status' } : res?.data ?? null);
                 if (mounted) setLiveStatus(s);
             } catch (err) {
@@ -142,13 +146,13 @@ export default function RepoDetails() {
         })();
 
         return () => { mounted = false };
-    }, [repo?.id, repo?.type]);
+    }, [repo?.type, repoIdentifier, repoUpstreamStatus]);
 
-    const handleCopyUrl = () => {
-        if (accessUrl) {
-            navigator.clipboard.writeText(accessUrl);
-            notify('URL copied to clipboard');
-        }
+    const handleCopyUrl = async () => {
+        if (!accessUrl) return;
+
+        const copied = await copyTextToClipboard(accessUrl);
+        notify(copied ? 'URL copied to clipboard' : 'Failed to copy URL');
     };
 
     if (loading) return <CircularProgress />
@@ -158,7 +162,6 @@ export default function RepoDetails() {
     const accessUrl = getRepoAccessUrl(repo, window.location.origin);
 
     // permission checks
-    const { user } = useAuth();
     const canUpload = canPerformOnRepo(repo, 'repo.write') || hasGlobalPermission(user, 'repo.write');
     // Upload should only be available when the repo is hosted and NOT managed by docker
     const showUpload = canUpload && String(repo?.type || '').toLowerCase() === 'hosted' && String(repo?.manager || '').toLowerCase() !== 'docker';
@@ -324,7 +327,7 @@ export default function RepoDetails() {
                     <TabPanel value={showUpload ? 3 : 2} sx={{ p: 0, pt: 2 }}>
                         {(() => {
 
-                            return <RepoSettings repo={repo} setRepo={setRepo} confirmAction={confirmAction} setConfirmAction={setConfirmAction} />;
+                            return <RepoSettings repo={repo} setRepo={setRepo} setConfirmAction={setConfirmAction} />;
                         })()}
                     </TabPanel>
                 ) : null}
@@ -341,16 +344,9 @@ export default function RepoDetails() {
     )
 }
 
-function RepoSettings({ repo, setRepo, confirmAction, setConfirmAction }: {
+function RepoSettings({ repo, setRepo, setConfirmAction }: {
     repo: any;
     setRepo: (r: any) => void;
-    confirmAction: {
-        open: boolean;
-        title: string;
-        message: string;
-        onConfirm: () => void;
-        color: 'primary' | 'danger' | 'warning';
-    };
     setConfirmAction: React.Dispatch<React.SetStateAction<{
         open: boolean;
         title: string;
@@ -421,17 +417,17 @@ function RepoSettings({ repo, setRepo, confirmAction, setConfirmAction }: {
             }
         })();
         return () => { mounted = false };
-    }, [repo.manager, repo.type, repo.id, repo.name]);
+    }, [manager, repo.id, repo.name, repoType]);
 
-    const getNested = (obj: any, path: string[]): any => {
+    const getNested = useCallback((obj: any, path: string[]): any => {
         return path.reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), obj);
-    };
+    }, []);
 
-    const setNested = (obj: any, path: string[], value: any): any => {
+    const setNested = useCallback((obj: any, path: string[], value: any): any => {
         if (path.length === 0) return value;
         const [head, ...rest] = path;
         return { ...obj, [head]: setNested(obj?.[head] || {}, rest, value) };
-    };
+    }, []);
 
     const updateConfigAtPath = (path: string[], value: any) => {
         setConfigValues((prev: any) => setNested(prev || {}, path, value));
@@ -723,7 +719,7 @@ function RepoSettings({ repo, setRepo, confirmAction, setConfirmAction }: {
         try {
             const id = repo?.id || repo?.name;
             // Remove 'type' from config before saving (it's not part of config, it's a repo property)
-            const { type, ...configToSave } = configValues;
+            const { type: _type, ...configToSave } = configValues;
             const res = await axios.put(`/api/repository/${encodeURIComponent(id)}`, {
                 config: {
                     ...configToSave,

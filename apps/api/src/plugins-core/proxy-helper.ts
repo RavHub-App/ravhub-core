@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -236,7 +236,11 @@ export async function proxyFetchWithAuth(
 
             try {
               await res.arrayBuffer();
-            } catch (e) {}
+            } catch (e) {
+              logger.warn(
+                `Failed to drain registry auth challenge body: ${String(e)}`,
+              );
+            }
 
             const tokenRes = await fetch(tokenUrl.toString(), {
               headers: tokenHeaders,

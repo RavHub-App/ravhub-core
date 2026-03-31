@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -66,6 +66,33 @@ describe('NuGetPlugin Storage', () => {
       expectSuccess(result);
       expect(context.storage.save).toHaveBeenCalled();
       expect(context.indexArtifact).toHaveBeenCalled();
+    });
+
+    it('should return success when uploaded package indexing fails', async () => {
+      const context = createMockContext();
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      context.indexArtifact.mockRejectedValue(new Error('index-fail'));
+      const methods = initStorage(context as any);
+      const repo: any = {
+        id: 'r1',
+        name: 'nuget-repo',
+        type: 'hosted',
+        manager: 'nuget',
+      };
+
+      const result = await methods.upload(repo, {
+        name: 'pkg',
+        version: '1.0.0',
+        content: Buffer.from('content'),
+      });
+
+      expectSuccess(result);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NuGetPlugin] Failed to index uploaded package pkg:1.0.0: Error: index-fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should handle Group write policy "first"', async () => {
@@ -360,42 +387,71 @@ describe('NuGetPlugin Storage', () => {
       expect(context.storage.save).toHaveBeenCalled();
     });
 
-    it('should handle Group write policy "preferred" for handlePut', async () => {
+    it('should warn and continue handlePut when first group member fails', async () => {
       const context = createMockContext();
-      const preferredRepo = {
-        id: 'p1',
-        name: 'pref',
-        type: 'hosted',
-        manager: 'nuget',
-      };
-      context.getRepo.mockResolvedValue(preferredRepo);
-
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
       const groupRepo: any = {
         id: 'g1',
         type: 'group',
-        config: {
-          writePolicy: 'preferred',
-          preferredWriter: 'p1',
-          members: ['p1'],
-        },
+        name: 'g1',
+        manager: 'nuget',
+        config: { writePolicy: 'first', members: ['r1', 'r2'] },
       };
-      const methods = initStorage(context as any);
-      const result = await methods.handlePut(groupRepo, 'pkg/1.0.0/pkg.nupkg', {
-        body: Buffer.from('data'),
+      const failingRepo = {
+        id: 'r1',
+        name: 'broken',
+        type: 'hosted',
+        manager: 'nuget',
+        config: { allowRedeploy: false },
+      };
+      const healthyRepo = {
+        id: 'r2',
+        name: 'healthy',
+        type: 'hosted',
+        manager: 'nuget',
+      };
+
+      context.getRepo.mockImplementation(async (id) =>
+        id === 'r1' ? failingRepo : healthyRepo,
+      );
+      context.storage.exists.mockResolvedValue(false);
+      context.storage.save.mockImplementation(async (key: string) => {
+        if (key.includes('/r1/')) {
+          throw new Error('save-fail');
+        }
+
+        return { size: 100, contentHash: 'abc' };
       });
+
+      const methods = initStorage(context as any);
+      const result = await methods.handlePut(
+        groupRepo,
+        'pkg/1.0.0/pkg.1.0.0.nupkg',
+        { body: Buffer.from('content') },
+      );
+
       expectSuccess(result);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NuGetPlugin] Group handlePut failed for member r1: Error: save-fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should handle Group write policy "mirror" for handlePut', async () => {
       const context = createMockContext();
-      const r1 = { id: 'r1', name: 'h1', type: 'hosted', manager: 'nuget' };
-      context.getRepo.mockResolvedValue(r1);
-
       const groupRepo: any = {
         id: 'g1',
         type: 'group',
         config: { writePolicy: 'mirror', members: ['r1'] },
       };
+      context.getRepo.mockResolvedValue({
+        id: 'r1',
+        name: 'h1',
+        type: 'hosted',
+        manager: 'nuget',
+      });
       const methods = initStorage(context as any);
       const result = await methods.handlePut(groupRepo, 'pkg/1.0.0/pkg.nupkg', {
         body: Buffer.from('data'),
@@ -503,6 +559,29 @@ describe('NuGetPlugin Storage', () => {
       expect(body.version).toBe('3.0.0');
     });
 
+    it('should encode repository names in hosted V3 service index urls', async () => {
+      const context = createMockContext();
+      const methods = initStorage(context as any);
+      const repo: any = {
+        id: 'r1',
+        name: 'nuget repo#beta',
+        type: 'hosted',
+        manager: 'nuget',
+        config: { nuget: { version: 'v3' } },
+      };
+
+      const result = await methods.download(repo, 'index.json');
+      expectSuccess(result);
+      const body = JSON.parse(result.data?.toString() || '{}');
+
+      expect(body.resources[0]['@id']).toBe(
+        'http://localhost:3000/repository/nuget%20repo%23beta/v3/query',
+      );
+      expect(body.resources[5]['@id']).toBe(
+        'http://localhost:3000/repository/nuget%20repo%23beta/v3/flatcontainer/',
+      );
+    });
+
     it('should return V2 Service Document for hosted V2 repo', async () => {
       const context = createMockContext();
       const methods = initStorage(context as any);
@@ -547,6 +626,42 @@ describe('NuGetPlugin Storage', () => {
       expect(xml).toContain("Version='2.0.0'");
     });
 
+    it('should continue V2 Atom feed generation when one prefix listing fails', async () => {
+      const context = createMockContext();
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      context.storage.list.mockImplementation(async (prefix: string) => {
+        if (prefix === 'nuget/r1/test-pkg') {
+          throw new Error('list-fail');
+        }
+        if (prefix === 'nuget/nuget-repo/test-pkg') {
+          return ['nuget/nuget-repo/test-pkg/2.0.0'];
+        }
+        return [];
+      });
+      const methods = initStorage(context as any);
+      const repo: any = {
+        id: 'r1',
+        name: 'nuget-repo',
+        type: 'hosted',
+        manager: 'nuget',
+        config: { nuget: { version: 'v2' } },
+      };
+
+      const result = await methods.download(
+        repo,
+        "FindPackagesById()?id='test-pkg'",
+      );
+
+      expectSuccess(result);
+      expect(result.data?.toString()).toContain("Version='2.0.0'");
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NuGetPlugin] Failed to list versions under nuget/r1/test-pkg: Error: list-fail',
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should rewrite URLs for V2 Proxy Repo', async () => {
       const context = createMockContext();
       const mockFetch = jest.fn();
@@ -577,6 +692,39 @@ describe('NuGetPlugin Storage', () => {
       const xml = result.data?.toString();
       expect(xml).toContain(
         'src="http://localhost:3000/repository/proxy/package/pkg/1.0.0"',
+      );
+    });
+
+    it('should encode repository names when rewriting URLs for V2 Proxy Repo', async () => {
+      const context = createMockContext();
+      const mockFetch = jest.fn();
+      const repo: any = {
+        id: 'p1',
+        name: 'proxy repo#beta',
+        type: 'proxy',
+        manager: 'nuget',
+        config: {
+          nuget: { version: 'v2' },
+          proxyUrl: 'https://upstream.org/api/v2/',
+        },
+      };
+      const methods = initStorage(context as any, mockFetch);
+
+      mockFetch.mockResolvedValue({
+        status: 200,
+        body: Buffer.from(
+          '<entry><content src="https://upstream.org/api/v2/package/pkg/1.0.0" /></entry>',
+        ),
+      });
+
+      const result = await methods.download(
+        repo,
+        "FindPackagesById()?id='pkg'",
+      );
+      expectSuccess(result);
+      const xml = result.data?.toString();
+      expect(xml).toContain(
+        'src="http://localhost:3000/repository/proxy%20repo%23beta/package/pkg/1.0.0"',
       );
     });
 
@@ -615,6 +763,43 @@ describe('NuGetPlugin Storage', () => {
       expect(result.data).toEqual(Buffer.from('cached-content'));
     });
 
+    it('should fallback to relative proxy package path when service index resolution fails', async () => {
+      const context = createMockContext();
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const mockFetch = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('index-json-fail'))
+        .mockResolvedValueOnce({
+          status: 200,
+          body: Buffer.from('upstream-content'),
+        });
+      const repo: any = {
+        id: 'p1',
+        name: 'proxy',
+        type: 'proxy',
+        manager: 'nuget',
+        config: { nuget: { version: 'v3' } },
+      };
+
+      const methods = initStorage(context as any, mockFetch);
+      const result = await methods.download(repo, 'pkg', '1.0.0');
+
+      expectSuccess(result);
+      expect(result.data).toEqual(Buffer.from('upstream-content'));
+      expect(mockFetch).toHaveBeenNthCalledWith(1, repo, 'index.json');
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        repo,
+        'pkg/1.0.0/pkg.1.0.0.nupkg',
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NuGetPlugin] Failed to resolve PackageBaseAddress for proxy: Error: index-json-fail',
+      );
+      warnSpy.mockRestore();
+    });
+
     it('should handle proxy member in group download', async () => {
       const context = createMockContext();
       const mockFetch = jest
@@ -634,6 +819,73 @@ describe('NuGetPlugin Storage', () => {
 
       expectSuccess(result);
       expect(result.data).toEqual(Buffer.from('proxy-content'));
+    });
+
+    it('should continue group download when one member throws', async () => {
+      const context = createMockContext();
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const groupRepo: any = {
+        id: 'g1',
+        type: 'group',
+        manager: 'nuget',
+        config: { members: ['broken', 'r1'] },
+      };
+
+      context.getRepo.mockImplementation(async (id) => {
+        if (id === 'broken') throw new Error('member-fail');
+        if (id === 'r1') {
+          return {
+            id: 'r1',
+            name: 'hosted1',
+            type: 'hosted',
+            manager: 'nuget',
+          };
+        }
+        return null;
+      });
+      context.storage.get.mockResolvedValue(Buffer.from('hosted-content'));
+
+      const methods = initStorage(context as any);
+      const result = await methods.download(groupRepo, 'pkg', '1.0.0');
+
+      expectSuccess(result);
+      expect(result.data).toEqual(Buffer.from('hosted-content'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NuGetPlugin] Group download failed for member broken: Error: member-fail',
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('should return upstream package when proxy cache save fails', async () => {
+      const context = createMockContext();
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      const mockFetch = jest.fn().mockResolvedValue({
+        status: 200,
+        body: Buffer.from('upstream-content'),
+      });
+      const repo: any = {
+        id: 'p1',
+        name: 'proxy',
+        type: 'proxy',
+        manager: 'nuget',
+      };
+
+      context.storage.get.mockResolvedValue(null);
+      context.storage.save.mockRejectedValue(new Error('cache-save-fail'));
+
+      const methods = initStorage(context as any, mockFetch);
+      const result = await methods.download(repo, 'pkg', '1.0.0');
+
+      expectSuccess(result);
+      expect(result.data).toEqual(Buffer.from('upstream-content'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[NuGetPlugin] Failed to persist proxy cache for pkg@1.0.0: Error: cache-save-fail',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should parse version from name in download if missing', async () => {

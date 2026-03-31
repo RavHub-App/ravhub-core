@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -12,7 +12,12 @@
  * GNU Affero General Public License for more details.
  */
 
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { UpstreamPingService } from './upstream-ping.service';
 import { PluginDelegatorService } from './plugin-delegator.service';
 import { ProxyCacheJobService } from './proxy-cache-job.service';
@@ -31,7 +36,7 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
     private readonly pluginDelegatorService: PluginDelegatorService,
     private readonly proxyCacheJobService: ProxyCacheJobService,
     private readonly proxyCacheService: ProxyCacheService,
-  ) { }
+  ) {}
 
   onModuleDestroy() {
     if (this.jobTimeout) clearTimeout(this.jobTimeout);
@@ -41,13 +46,19 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     await this.onModuleInitSchedulerStarter();
-    this.jobTimeout = setTimeout(() => this.startJobProcessor().catch(() => { }), 3000);
+    this.jobTimeout = setTimeout(
+      () => this.startJobProcessor().catch(() => {}),
+      3000,
+    );
   }
 
   async onModuleInitSchedulerStarter() {
-    this.pingTimeout = setTimeout(() => this.startUpstreamPingScheduler().catch(() => { }), 1000);
+    this.pingTimeout = setTimeout(
+      () => this.startUpstreamPingScheduler().catch(() => {}),
+      1000,
+    );
     this.cleanupTimeout = setTimeout(
-      () => this.startProxyCacheCleanupScheduler().catch(() => { }),
+      () => this.startProxyCacheCleanupScheduler().catch(() => {}),
       2000,
     );
   }
@@ -69,8 +80,9 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
   // Delegates
 
   async triggerUpstreamPingForRepo(repo: RepositoryEntity) {
-    return this.upstreamPingService.triggerUpstreamPingForRepo(repo,
-      this.pluginDelegatorService.getPluginForRepo(repo)
+    return this.upstreamPingService.triggerUpstreamPingForRepo(
+      repo,
+      this.pluginDelegatorService.getPluginForRepo(repo),
     );
   }
 
@@ -82,7 +94,12 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
     return this.pluginDelegatorService.getPluginForRepo(repo);
   }
 
-  async handlePut(repo: RepositoryEntity, path: string, req: any, userId?: string) {
+  async handlePut(
+    repo: RepositoryEntity,
+    path: string,
+    req: any,
+    userId?: string,
+  ) {
     return this.pluginDelegatorService.handlePut(repo, path, req, userId);
   }
 
@@ -90,11 +107,27 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
     return this.pluginDelegatorService.upload(repo, pkg, userId);
   }
 
-  async download(repo: RepositoryEntity, name: string, version?: string, visited?: Set<string>, userId?: string) {
-    return this.pluginDelegatorService.download(repo, name, version, visited, userId);
+  async download(
+    repo: RepositoryEntity,
+    name: string,
+    version?: string,
+    visited?: Set<string>,
+    userId?: string,
+  ) {
+    return this.pluginDelegatorService.download(
+      repo,
+      name,
+      version,
+      visited,
+      userId,
+    );
   }
 
-  async listVersions(repo: RepositoryEntity, name: string, visited?: Set<string>) {
+  async listVersions(
+    repo: RepositoryEntity,
+    name: string,
+    visited?: Set<string>,
+  ) {
     return this.pluginDelegatorService.listVersions(repo, name, visited);
   }
 
@@ -102,7 +135,11 @@ export class PluginManagerService implements OnModuleInit, OnModuleDestroy {
     return this.pluginDelegatorService.proxyFetch(repo, url);
   }
 
-  async authenticate(repo: RepositoryEntity, credentials: any, visited?: Set<string>) {
+  async authenticate(
+    repo: RepositoryEntity,
+    credentials: any,
+    visited?: Set<string>,
+  ) {
     return this.pluginDelegatorService.authenticate(repo, credentials, visited);
   }
 

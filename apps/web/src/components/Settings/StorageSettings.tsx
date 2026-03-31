@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -20,7 +20,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import FolderIcon from '@mui/icons-material/Folder';
 import StorageIcon from '@mui/icons-material/Storage';
 import InfoIcon from '@mui/icons-material/Info';
-import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { hasGlobalPermission } from '../Repos/repo-permissions';
@@ -86,7 +85,7 @@ export default function StorageSettings() {
         try {
             const response = await axios.get('/api/licenses');
             setHasLicense(response.data.isActive === true);
-        } catch (err) {
+        } catch (_error) {
             setHasLicense(false);
         }
     };
@@ -193,26 +192,6 @@ export default function StorageSettings() {
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleMigrate = async (id: string) => {
-        setConfirmAction({
-            open: true,
-            title: 'Migrate Assets',
-            message: 'Migrate all repository assets to this storage? This may take a while.',
-            color: 'warning',
-            onConfirm: async () => {
-                try {
-                    await axios.post('/api/storage/configs/migrate-system', { newStorageId: id });
-                    notify('Migration started');
-                    fetchConfigs();
-                } catch (err: any) {
-                    console.error(err);
-                    notify('Failed to start migration');
-                }
-                setConfirmAction(prev => ({ ...prev, open: false }));
-            }
-        });
     };
 
     const handleDelete = async (id: string) => {

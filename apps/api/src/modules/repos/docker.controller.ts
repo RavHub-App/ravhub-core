@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -33,6 +33,7 @@ import { StorageService } from '../storage/storage.service';
 import { AuthService } from '../auth/auth.service';
 import { RedisService } from '../redis/redis.service';
 import { RepositoryEntity } from '../../entities/repository.entity';
+import { PermissionService } from '../rbac/permission.service';
 
 @Controller('repository')
 export class DockerCompatController {
@@ -44,7 +45,103 @@ export class DockerCompatController {
     private auth: AuthService,
     private storage: StorageService,
     private redis: RedisService,
+    private permissionService: PermissionService,
   ) { }
+
+  private parseRequestedAccess(rawScopes: string[]) {
+    const requestedAccess: Array<{
+      type: string;
+      name: string;
+      actions: string[];
+    }> = [];
+
+    for (const rawScope of rawScopes) {
+      const parts = String(rawScope).split(':');
+      if (parts.length < 3) {
+        continue;
+      }
+
+      requestedAccess.push({
+        type: parts[0],
+        name: parts.slice(1, parts.length - 1).join(':'),
+        actions: parts[parts.length - 1]
+          .split(',')
+          .map((action) => action.trim())
+          .filter(Boolean),
+      });
+    }
+
+    return requestedAccess;
+  }
+
+  private async filterRequestedAccess(
+    userId: string | undefined,
+    repoId: string,
+    requestedAccess: Array<{
+      type: string;
+      name: string;
+      actions: string[];
+    }>,
+  ) {
+    if (!userId) {
+      return [];
+    }
+
+    const permissionCache = new Map<string, boolean>();
+    const resolvePermission = async (permission: string) => {
+      const cacheKey = `${repoId}:${permission}`;
+      if (permissionCache.has(cacheKey)) {
+        return permissionCache.get(cacheKey) === true;
+      }
+
+      const granted = await this.permissionService.hasPermission(
+        userId,
+        permission,
+        repoId,
+      );
+      permissionCache.set(cacheKey, granted);
+      return granted;
+    };
+
+    const filteredAccess: Array<{
+      type: string;
+      name: string;
+      actions: string[];
+    }> = [];
+
+    for (const accessEntry of requestedAccess) {
+      if (accessEntry.type !== 'repository') {
+        continue;
+      }
+
+      const actions: string[] = [];
+      for (const action of accessEntry.actions) {
+        const normalizedAction = action.trim().toLowerCase();
+        if (normalizedAction === 'pull') {
+          if (await resolvePermission('repo.read')) {
+            actions.push('pull');
+          }
+          continue;
+        }
+
+        if (normalizedAction === 'push') {
+          if (await resolvePermission('repo.write')) {
+            actions.push('push');
+          }
+        }
+      }
+
+      if (actions.length > 0) {
+        filteredAccess.push({
+          type: accessEntry.type,
+          name: accessEntry.name,
+          actions,
+        });
+      }
+    }
+
+    return filteredAccess;
+  }
 
   private getUserIdFromRequest(req: any): string | undefined {
     try {
@@ -74,23 +171,34 @@ export class DockerCompatController {
       const ah = req?.headers?.authorization || req?.headers?.Authorization;
 
       // 1. Check for x-user-roles (Test/Mock fallback)
-      const rolesHeader = req?.headers?.['x-user-roles'] || req?.headers?.['x-user-role'];
+      const rolesHeader =
+        req?.headers?.['x-user-roles'] || req?.headers?.['x-user-role'];
       if (rolesHeader) {
-        const roles = String(rolesHeader).split(',').map((r: string) => r.trim().toLowerCase());
-        const allowed = action === 'pull'
-          ? roles.includes('reader') || roles.includes('admin') || roles.includes('user')
-          : roles.includes('admin') || roles.includes('writer') || roles.includes('manager');
+        const roles = String(rolesHeader)
+          .split(',')
+          .map((r: string) => r.trim().toLowerCase());
+        const allowed =
+          action === 'pull'
+            ? roles.includes('reader') ||
+            roles.includes('admin') ||
+            roles.includes('user')
+            : roles.includes('admin') ||
+            roles.includes('writer') ||
+            roles.includes('manager');
         if (allowed) return { allowed: true } as any;
       }
 
-      if (!ah) return { allowed: false, reason: 'missing authorization' } as any;
+      if (!ah)
+        return { allowed: false, reason: 'missing authorization' } as any;
 
       // 2. Check RavHub Admin roles from req.user (populated by guards)
       const user = (req as any).user;
       if (
         user?.username === 'admin' ||
         user?.username === 'superadmin' ||
-        user?.roles?.some((r: any) => ['admin', 'superadmin'].includes(String(r.name || r).toLowerCase()))
+        user?.roles?.some((r: any) =>
+          ['admin', 'superadmin'].includes(String(r.name || r).toLowerCase()),
+        )
       ) {
         return { allowed: true } as any;
       }
@@ -105,22 +213,35 @@ export class DockerCompatController {
         const jwt = require('jsonwebtoken');
         payload = jwt.verify(token, process.env.JWT_SECRET || 'changeme');
       } catch (err: any) {
-        return { allowed: false, reason: `token Verification failed: ${err.message}` } as any;
+        return {
+          allowed: false,
+          reason: `token Verification failed: ${err.message}`,
+        } as any;
       }
 
       if (!payload) {
-        return { allowed: false, reason: 'invalid token (null payload)' } as any;
+        return {
+          allowed: false,
+          reason: 'invalid token (null payload)',
+        } as any;
       }
 
       // 3. Check roles in payload (RavHub token fallback)
-      if (payload.roles?.some((r: any) => ['admin', 'superadmin'].includes(String(r).toLowerCase()))) {
+      if (
+        payload.roles?.some((r: any) =>
+          ['admin', 'superadmin'].includes(String(r).toLowerCase()),
+        )
+      ) {
         return { allowed: true } as any;
       }
 
       // 4. Check Docker-specific scopes
       const access = payload.access || payload.scopes || payload.scope;
       if (!access) {
-        return { allowed: false, reason: `no scopes in token: ${JSON.stringify(payload)}` } as any;
+        return {
+          allowed: false,
+          reason: `no scopes in token: ${JSON.stringify(payload)}`,
+        } as any;
       }
 
       const cleanName = String(name).trim();
@@ -129,7 +250,9 @@ export class DockerCompatController {
       for (const a of access) {
         const aType = String(a.type).trim().toLowerCase();
         const aName = String(a.name).trim();
-        const aActions = Array.isArray(a.actions) ? a.actions.map((act: any) => String(act).trim().toLowerCase()) : [];
+        const aActions = Array.isArray(a.actions)
+          ? a.actions.map((act: any) => String(act).trim().toLowerCase())
+          : [];
 
         if (aType === 'repository' && aName === cleanName) {
           if (aActions.includes(cleanAction)) {
@@ -140,10 +263,13 @@ export class DockerCompatController {
 
       return {
         allowed: false,
-        reason: `insufficient scope: required={repository, ${cleanName}, ${cleanAction}}, got=${JSON.stringify(access)}`
+        reason: `insufficient scope: required={repository, ${cleanName}, ${cleanAction}}, got=${JSON.stringify(access)}`,
       } as any;
     } catch (err: any) {
-      return { allowed: false, reason: `internal error: ${err.message}` } as any;
+      return {
+        allowed: false,
+        reason: `internal error: ${err.message}`,
+      } as any;
     }
   }
 
@@ -306,28 +432,21 @@ export class DockerCompatController {
       try {
         const payload: any = this.auth.verifyToken(token);
         if (payload) {
-          const username = payload.username || payload.sub || 'test-user';
-          const requestedAccess: Array<{
-            type: string;
-            name: string;
-            actions: string[];
-          }> = [];
-          for (const rs of rawScopes) {
-            const parts = String(rs).split(':');
-            if (parts.length >= 3) {
-              const type = parts[0];
-              const name = parts.slice(1, parts.length - 1).join(':');
-              const actions = parts[parts.length - 1]
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean);
-              requestedAccess.push({ type, name, actions });
-            }
+          const userId = payload.sub || payload.userId || payload.id;
+          const username = payload.username || userId || 'test-user';
+          const requestedAccess = this.parseRequestedAccess(rawScopes);
+          const filteredAccess = await this.filterRequestedAccess(
+            userId,
+            r.id,
+            requestedAccess,
+          );
+          if (requestedAccess.length > 0 && filteredAccess.length === 0) {
+            throw new UnauthorizedException('insufficient permissions');
           }
           const token = this.auth.signToken({
-            sub: username,
+            sub: userId || username,
             username,
-            access: requestedAccess,
+            access: filteredAccess,
           });
           return {
             token,
@@ -407,28 +526,20 @@ export class DockerCompatController {
     const validated = await this.auth.validateUser(username, password);
     if (!validated) throw new UnauthorizedException('invalid credentials');
 
-    const requestedAccess: Array<{
-      type: string;
-      name: string;
-      actions: string[];
-    }> = [];
-    for (const rs of rawScopes) {
-      const parts = String(rs).split(':');
-      if (parts.length >= 3) {
-        const type = parts[0];
-        const name = parts.slice(1, parts.length - 1).join(':');
-        const actions = parts[parts.length - 1]
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        requestedAccess.push({ type, name, actions });
-      }
+    const requestedAccess = this.parseRequestedAccess(rawScopes);
+    const filteredAccess = await this.filterRequestedAccess(
+      validated.id,
+      r.id,
+      requestedAccess,
+    );
+    if (requestedAccess.length > 0 && filteredAccess.length === 0) {
+      throw new UnauthorizedException('insufficient permissions');
     }
 
     const tokenPayload = {
-      sub: username,
-      username,
-      access: requestedAccess,
+      sub: validated.id,
+      username: validated.username,
+      access: filteredAccess,
     };
 
     const token = this.auth.signToken(tokenPayload);
@@ -456,8 +567,13 @@ export class DockerCompatController {
       if (!t.allowed) {
         const ah = req?.headers?.authorization || req?.headers?.Authorization;
         if (!ah) {
-          res.setHeader('WWW-Authenticate', this.buildAuthChallenge(req, id, name, 'pull'));
-          return res.status(401).json({ ok: false, message: 'authentication required' });
+          res.setHeader(
+            'WWW-Authenticate',
+            this.buildAuthChallenge(req, id, name, 'pull'),
+          );
+          return res
+            .status(401)
+            .json({ ok: false, message: 'authentication required' });
         }
         return res.status(403).json({ ok: false, message: t.reason });
       }
@@ -486,8 +602,13 @@ export class DockerCompatController {
       if (!t.allowed) {
         const ah = req?.headers?.authorization || req?.headers?.Authorization;
         if (!ah) {
-          res.setHeader('WWW-Authenticate', this.buildAuthChallenge(req, id, name, 'pull'));
-          return res.status(401).json({ ok: false, message: 'authentication required' });
+          res.setHeader(
+            'WWW-Authenticate',
+            this.buildAuthChallenge(req, id, name, 'pull'),
+          );
+          return res
+            .status(401)
+            .json({ ok: false, message: 'authentication required' });
         }
         return res.status(403).json({ ok: false, message: t.reason });
       }
@@ -543,7 +664,10 @@ export class DockerCompatController {
         try {
           const json = JSON.parse(body.toString());
           // Set Docker manifest content type
-          res.setHeader('Content-Type', 'application/vnd.docker.distribution.manifest.v2+json');
+          res.setHeader(
+            'Content-Type',
+            'application/vnd.docker.distribution.manifest.v2+json',
+          );
           return res.status(200).json(json);
         } catch (e) {
           return res.status(200).send(body);
@@ -663,7 +787,10 @@ export class DockerCompatController {
         try {
           const json = JSON.parse(body.toString());
           // Set Docker manifest content type
-          res.setHeader('Content-Type', 'application/vnd.docker.distribution.manifest.v2+json');
+          res.setHeader(
+            'Content-Type',
+            'application/vnd.docker.distribution.manifest.v2+json',
+          );
           return res.status(200).json(json);
         } catch (e) {
           console.debug('[MANIFEST DEBUG] JSON parse failed', e);
@@ -674,13 +801,22 @@ export class DockerCompatController {
       if (out.storageKey) {
         console.debug('[MANIFEST DEBUG] Using storageKey', out.storageKey);
         try {
-          const streamRes = await this.storage.getStream(out.storageKey) as any;
-          if (!streamRes) return res.status(404).json({ ok: false, message: 'Stream not available' });
+          const streamRes = (await this.storage.getStream(
+            out.storageKey,
+          )) as any;
+          if (!streamRes)
+            return res
+              .status(404)
+              .json({ ok: false, message: 'Stream not available' });
 
           const { stream, size, contentType } = streamRes;
           console.debug('[MANIFEST DEBUG] Stream info', { size, contentType });
 
-          res.setHeader('Content-Type', contentType || 'application/vnd.docker.distribution.manifest.v2+json');
+          res.setHeader(
+            'Content-Type',
+            contentType ||
+            'application/vnd.docker.distribution.manifest.v2+json',
+          );
           if (size) res.setHeader('Content-Length', String(size));
           if (res) return stream.pipe(res);
           return { ok: true, stream };
@@ -798,7 +934,10 @@ export class DockerCompatController {
       const body = result.data || result.body;
       try {
         const json = JSON.parse(body.toString());
-        res.setHeader('Content-Type', 'application/vnd.docker.distribution.manifest.v2+json');
+        res.setHeader(
+          'Content-Type',
+          'application/vnd.docker.distribution.manifest.v2+json',
+        );
         return res.status(200).json(json);
       } catch (e) {
         return res.status(200).send(body);
@@ -807,11 +946,19 @@ export class DockerCompatController {
 
     if (result.storageKey) {
       try {
-        const streamRes = await this.storage.getStream(result.storageKey) as any;
-        if (!streamRes) return res.status(404).json({ ok: false, message: 'Stream not available' });
+        const streamRes = (await this.storage.getStream(
+          result.storageKey,
+        )) as any;
+        if (!streamRes)
+          return res
+            .status(404)
+            .json({ ok: false, message: 'Stream not available' });
         // Use 'any' cast to access stream/size/contentType
         const { stream, size, contentType } = streamRes;
-        res.setHeader('Content-Type', contentType || 'application/vnd.docker.distribution.manifest.v2+json');
+        res.setHeader(
+          'Content-Type',
+          contentType || 'application/vnd.docker.distribution.manifest.v2+json',
+        );
         if (size) res.setHeader('Content-Length', String(size));
         if (res) return stream.pipe(res);
         return { ok: true, stream };
@@ -1214,8 +1361,13 @@ export class DockerCompatController {
       if (!t.allowed) {
         const ah = req?.headers?.authorization || req?.headers?.Authorization;
         if (!ah) {
-          res.setHeader('WWW-Authenticate', this.buildAuthChallenge(req, id, name, 'pull'));
-          return res.status(401).json({ ok: false, message: 'authentication required' });
+          res.setHeader(
+            'WWW-Authenticate',
+            this.buildAuthChallenge(req, id, name, 'pull'),
+          );
+          return res
+            .status(401)
+            .json({ ok: false, message: 'authentication required' });
         }
         return res.status(403).json({ ok: false, message: t.reason });
       }
@@ -1300,7 +1452,10 @@ export class DockerCompatController {
       const body = result.data || result.body;
       try {
         const json = JSON.parse(body.toString());
-        res.setHeader('Content-Type', 'application/vnd.docker.distribution.manifest.v2+json');
+        res.setHeader(
+          'Content-Type',
+          'application/vnd.docker.distribution.manifest.v2+json',
+        );
         return res.status(200).json(json);
       } catch (e) {
         return res.status(200).send(body);
@@ -1309,11 +1464,19 @@ export class DockerCompatController {
 
     if (result.storageKey) {
       try {
-        const streamRes = await this.storage.getStream(result.storageKey) as any;
-        if (!streamRes) return res.status(404).json({ ok: false, message: 'Stream not available' });
+        const streamRes = (await this.storage.getStream(
+          result.storageKey,
+        )) as any;
+        if (!streamRes)
+          return res
+            .status(404)
+            .json({ ok: false, message: 'Stream not available' });
         // Use 'any' cast to access stream/size/contentType
         const { stream, size, contentType } = streamRes;
-        res.setHeader('Content-Type', contentType || 'application/vnd.docker.distribution.manifest.v2+json');
+        res.setHeader(
+          'Content-Type',
+          contentType || 'application/vnd.docker.distribution.manifest.v2+json',
+        );
         if (size) res.setHeader('Content-Length', String(size));
         if (res) return stream.pipe(res);
         return { ok: true, stream };

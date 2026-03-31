@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -35,7 +35,9 @@ async function runMigrations() {
     const srcDir = path.join(__dirname, 'src', 'migrations');
 
     if (fs.existsSync(srcDir)) {
-      const defaultCount = fs.existsSync(migrationsDir) ? fs.readdirSync(migrationsDir).length : 0;
+      const defaultCount = fs.existsSync(migrationsDir)
+        ? fs.readdirSync(migrationsDir).length
+        : 0;
       const srcCount = fs.readdirSync(srcDir).length;
 
       if (srcCount > defaultCount) {

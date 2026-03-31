@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -158,6 +158,33 @@ describe('NpmPlugin Metadata', () => {
       const tarball = result.versions['1.0.0'].dist.tarball;
       expect(tarball).not.toContain(
         'repository/npm-proxy/repository/npm-proxy',
+      );
+    });
+
+    it('should encode repository names in rewritten tarball URLs', () => {
+      const encodedRepo: Repository = {
+        name: 'npm proxy#beta',
+        type: 'proxy',
+        config: {
+          proxyUrl: 'https://registry.npmjs.org',
+          rewriteTarballs: true,
+        },
+      } as any;
+      const metadata = {
+        versions: {
+          '1.0.0': {
+            dist: {
+              tarball:
+                'https://other.com/repository/npm%20proxy%23beta/test-pkg/-/test-pkg-1.0.0.tgz',
+            },
+          },
+        },
+      };
+
+      const result = metadataMethods.processMetadata(encodedRepo, metadata);
+
+      expect(result.versions['1.0.0'].dist.tarball).toBe(
+        'https://my-registry.com/repository/npm%20proxy%23beta/test-pkg/-/test-pkg-1.0.0.tgz',
       );
     });
   });

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -44,7 +44,11 @@ export function initPackages(context: PluginContext) {
   const getInstallCommand = async (repo: Repository, pkg: any) => {
     const host = process.env.API_HOST || 'localhost:3000';
     const proto = process.env.API_PROTOCOL || 'http';
-    const url = `${proto}://${host}/repository/${repo.name}/${pkg.name}`;
+    const encodedPath = String(pkg.name)
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    const url = `${proto}://${host}/repository/${encodeURIComponent(repo.name)}/${encodedPath}`;
 
     return [
       {

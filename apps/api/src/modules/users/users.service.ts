@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -25,7 +25,7 @@ export class UsersService {
     @InjectRepository(User) private repo: Repository<User>,
     private readonly auditService: AuditService,
     private readonly licenseService: LicenseService,
-  ) { }
+  ) {}
 
   async findAll() {
     return await this.repo.find({ relations: ['roles', 'roles.permissions'] });
@@ -56,7 +56,7 @@ export class UsersService {
         entityId: saved.id,
         details: { username: saved.username },
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return this.findOne(saved.id) as Promise<User>;
   }
@@ -87,7 +87,7 @@ export class UsersService {
           entityId: id,
           details: { username: user.username },
         })
-        .catch(() => { });
+        .catch(() => {});
     }
   }
 }

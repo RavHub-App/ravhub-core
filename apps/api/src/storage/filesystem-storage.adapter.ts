@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -16,7 +16,12 @@ import { StorageAdapter, SaveResult } from './storage.interface';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { PassThrough } from 'stream';
 import { pipeline } from 'stream/promises';
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export class FilesystemStorageAdapter implements StorageAdapter {
   private base: string;
@@ -54,8 +59,8 @@ export class FilesystemStorageAdapter implements StorageAdapter {
         else fs.writeFileSync(dest, data);
       }
       return { ok: true, path: dest };
-    } catch (err) {
-      return { ok: false, message: err.message };
+    } catch (error) {
+      return { ok: false, message: getErrorMessage(error) };
     }
   }
 
@@ -76,19 +81,19 @@ export class FilesystemStorageAdapter implements StorageAdapter {
       const writeStream = fs.createWriteStream(dest);
 
       // We use a PassThrough to split the stream to both hash and file
-      const { PassThrough } = require('stream');
       const pass = new PassThrough();
 
-      pass.on('data', (chunk) => {
-        hash.update(chunk);
-        size += chunk.length;
+      pass.on('data', (chunk: Buffer | string) => {
+        const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        hash.update(chunkBuffer);
+        size += chunkBuffer.length;
       });
 
-      await pipeline(stream as any, pass, writeStream);
+      await pipeline(stream, pass, writeStream);
 
       return { ok: true, path: dest, contentHash: hash.digest('hex'), size };
-    } catch (err) {
-      return { ok: false, message: err.message };
+    } catch (error) {
+      return { ok: false, message: getErrorMessage(error) };
     }
   }
 
@@ -130,7 +135,8 @@ export class FilesystemStorageAdapter implements StorageAdapter {
     try {
       if (!fs.existsSync(fullPath)) return null;
       return fs.readFileSync(fullPath);
-    } catch (err) {
+    } catch (_error) {
+      void _error;
       return null;
     }
   }
@@ -157,7 +163,8 @@ export class FilesystemStorageAdapter implements StorageAdapter {
 
       walk(dest, prefix);
       return results;
-    } catch (err) {
+    } catch (_error) {
+      void _error;
       return [];
     }
   }
@@ -170,7 +177,8 @@ export class FilesystemStorageAdapter implements StorageAdapter {
       if (!fs.existsSync(dest)) return null;
       const stat = fs.statSync(dest);
       return { size: stat.size, mtime: stat.mtime };
-    } catch (err) {
+    } catch (_error) {
+      void _error;
       return null;
     }
   }
@@ -180,7 +188,8 @@ export class FilesystemStorageAdapter implements StorageAdapter {
       const dest = path.join(this.base, key);
       if (fs.existsSync(dest)) fs.unlinkSync(dest);
       return true;
-    } catch (err) {
+    } catch (_error) {
+      void _error;
       return false;
     }
   }

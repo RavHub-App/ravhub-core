@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -22,11 +22,21 @@ import * as yaml from 'js-yaml';
 export function initPackages(context: PluginContext) {
   const { storage } = context;
 
+  const toHelmRepoAlias = (repoName: string) => {
+    const normalized = repoName
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^[.-]+|[.-]+$/g, '');
+
+    return normalized || 'repo';
+  };
+
   const listVersions = async (repo: Repository, name: string) => {
     const versions = new Set<string>();
 
-    const tryLoad = async (repoIdOrName: string) => {
-      const indexKey = buildKey('helm', repoIdOrName, 'index.yaml');
+    const tryLoad = async (...keyParts: string[]) => {
+      const indexKey = buildKey('helm', ...keyParts);
       try {
         const content = await storage.get(indexKey);
         if (content) {
@@ -42,8 +52,13 @@ export function initPackages(context: PluginContext) {
       }
     };
 
-    await tryLoad(repo.id);
-    await tryLoad(repo.name);
+    await tryLoad(repo.id, 'index.yaml');
+    await tryLoad(repo.name, 'index.yaml');
+
+    if (repo.type === 'proxy') {
+      await tryLoad(repo.id, 'proxy', 'file', 'index.yaml');
+      await tryLoad(repo.name, 'proxy', 'file', 'index.yaml');
+    }
 
     return { ok: true, versions: Array.from(versions) };
   };
@@ -51,7 +66,8 @@ export function initPackages(context: PluginContext) {
   const getInstallCommand = async (repo: Repository, pkg: any) => {
     const host = process.env.API_HOST || 'localhost:3000';
     const proto = process.env.API_PROTOCOL || 'http';
-    const repoUrl = `${proto}://${host}/repository/${repo.name}`;
+    const repoUrl = `${proto}://${host}/repository/${encodeURIComponent(repo.name)}`;
+    const repoAlias = toHelmRepoAlias(repo.name);
     const name = pkg?.name || 'chart';
     const version = pkg?.version || '0.1.0';
 
@@ -59,8 +75,8 @@ export function initPackages(context: PluginContext) {
       {
         label: 'helm install',
         language: 'bash',
-        command: `helm repo add ${repo.name} ${repoUrl}
-helm install my-release ${repo.name}/${name} --version ${version}`,
+        command: `helm repo add ${repoAlias} ${repoUrl}
+      helm install my-release ${repoAlias}/${name} --version ${version}`,
       },
       {
         label: 'helm dependency',

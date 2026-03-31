@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -28,7 +28,7 @@ import { Response } from 'express';
 
 @Controller('plugins')
 export class PluginsController {
-  constructor(private readonly service: PluginsService) { }
+  constructor(private readonly service: PluginsService) {}
 
   @Get()
   list() {

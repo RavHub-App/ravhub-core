@@ -25,6 +25,8 @@ pnpm-debug.log*
 # Testing
 coverage
 .nyc_output
+/data
+/playwright-report
 
 # IDEs
 .vscode/*

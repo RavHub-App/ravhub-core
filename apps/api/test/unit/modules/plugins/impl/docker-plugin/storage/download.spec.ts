@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -146,6 +146,49 @@ describe('DockerPlugin Download Storage', () => {
       expect(result.ok).toBe(true);
       expect(result.url).toBe('http://up/blob');
       expect(mockProxyFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return structured 404 when manifest and blob are missing upstream', async () => {
+      const proxyRepo = { type: 'proxy', config: { proxyUrl: 'up' } };
+      mockStorage.exists.mockResolvedValue(false);
+      mockProxyFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          message: 'manifest missing',
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          message: 'blob missing',
+        });
+
+      const result = await getBlob(proxyRepo as any, 'img', 'sha256:123');
+
+      expect(result).toEqual({
+        ok: false,
+        status: 404,
+        message: 'blob missing',
+      });
+    });
+
+    it('should return structured upstream errors for digest fetch failures', async () => {
+      const proxyRepo = { type: 'proxy', config: { proxyUrl: 'up' } };
+      mockStorage.exists.mockResolvedValue(false);
+      mockProxyFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        message: 'upstream failed',
+      });
+
+      const result = await getBlob(proxyRepo as any, 'img', 'sha256:123');
+
+      expect(result).toEqual({
+        ok: false,
+        status: 500,
+        message: 'upstream failed',
+      });
+      expect(mockProxyFetch).toHaveBeenCalledTimes(1);
     });
   });
 });

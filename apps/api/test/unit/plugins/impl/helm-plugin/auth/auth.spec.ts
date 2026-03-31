@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -18,7 +18,7 @@ describe('Helm Plugin Auth (Unit)', () => {
   it('should authenticate user with username', async () => {
     const res = await authenticate({}, { username: 'testuser' });
     expect(res.ok).toBeTruthy();
-    expect(res.user.name).toBe('testuser');
+    expect(res.user?.name).toBe('testuser');
   });
 
   it('should allow anonymous by default', async () => {

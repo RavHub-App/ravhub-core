@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -12,17 +12,24 @@
  * GNU Affero General Public License for more details.
  */
 
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job, JobType } from '../../entities/job.entity';
 import { randomUUID } from 'crypto';
 
 @Injectable()
-export class JobService implements OnModuleInit {
+export class JobService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JobService.name);
   private readonly instanceId = randomUUID();
   private processingInterval: NodeJS.Timeout | null = null;
+  private cleanupInterval: NodeJS.Timeout | null = null;
+  private staleLockInterval: NodeJS.Timeout | null = null;
 
   constructor(
     @InjectRepository(Job)
@@ -30,10 +37,31 @@ export class JobService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
+    if (process.env.DISABLE_STARTUP_TASKS === 'true') {
+      return;
+    }
+
     this.logger.log(
       `Job service initialized with instance ID: ${this.instanceId}`,
     );
     this.startJobProcessor();
+  }
+
+  onModuleDestroy() {
+    if (this.processingInterval) {
+      clearInterval(this.processingInterval);
+      this.processingInterval = null;
+    }
+
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
+    if (this.staleLockInterval) {
+      clearInterval(this.staleLockInterval);
+      this.staleLockInterval = null;
+    }
   }
 
   async createJob(type: JobType, payload: any, maxAttempts = 3): Promise<Job> {
@@ -191,7 +219,7 @@ export class JobService implements OnModuleInit {
       });
     }, 30 * 1000);
 
-    setInterval(
+    this.cleanupInterval = setInterval(
       () => {
         this.cleanupOldJobs()
           .then((count) => {
@@ -204,7 +232,7 @@ export class JobService implements OnModuleInit {
       60 * 60 * 1000,
     );
 
-    setInterval(
+    this.staleLockInterval = setInterval(
       () => {
         this.releaseStaleLocks()
           .then((count) => {

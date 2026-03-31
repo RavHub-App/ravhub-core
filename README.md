@@ -228,21 +228,21 @@ pnpm --filter api test:e2e
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a Pull Request.
+RavHub Core is public and community-visible, but the source code is maintained by the project author.
 
-```bash
-# Fork the repo, then:
-git checkout -b feature/amazing-feature
-git commit -m 'feat: add amazing feature'
-git push origin feature/amazing-feature
-# Open a Pull Request
-```
+- Issues, bug reports, reproduction cases, documentation reports, and product feedback are welcome.
+- Source code pull requests are not currently accepted for `ravhub-core`.
+- If you want a feature in core, open an issue or discussion and the maintainer may implement it directly.
+
+Read the [Contributing Guide](CONTRIBUTING.md) before opening issues or proposing changes.
 
 ---
 
 ## 📄 License
 
 This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+`ravhub-core` is the public AGPL community edition. Proprietary enterprise functionality is licensed and distributed separately and is not included in this repository.
 
 ---
 
@@ -372,7 +372,13 @@ pnpm --filter api test:e2e
 
 ## 🤝 Contribuir
 
-¡Las contribuciones son bienvenidas! Por favor, lee nuestra [Guía de Contribución](CONTRIBUTING.md) antes de enviar un Pull Request.
+RavHub Core es público y visible para la comunidad, pero el código fuente lo mantiene el autor del proyecto.
+
+- Son bienvenidos los issues, reportes de bugs, casos de reproducción, observaciones sobre documentación y feedback de producto.
+- Actualmente no se aceptan pull requests de código fuente para `ravhub-core`.
+- Si quieres una funcionalidad en el core, abre un issue o una discusión y el mantenedor podrá implementarla directamente.
+
+Lee la [Guía de Contribución](CONTRIBUTING.md) antes de abrir un issue o proponer un cambio.
 
 ---
 
@@ -380,11 +386,13 @@ pnpm --filter api test:e2e
 
 Este proyecto está licenciado bajo la Licencia GNU Affero General Public License v3.0 - ver el archivo [LICENSE](LICENSE) para más detalles.
 
+`ravhub-core` es la edición pública comunitaria bajo AGPL. La funcionalidad enterprise propietaria se licencia y distribuye por separado y no forma parte de este repositorio.
+
 ---
 
 <div align="center">
 
-**Made with ❤️ by the RavHub Team**
+**Maintained by the project author**
 
 [⬆ Back to top](#-ravhub)
 

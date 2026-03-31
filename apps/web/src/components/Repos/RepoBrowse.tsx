@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -12,7 +12,7 @@
  * GNU Affero General Public License for more details.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Typography, Card, CardContent, Box, CircularProgress, Input, IconButton, Tooltip, Button, List, ListItem, ListItemButton, ListItemContent, Chip } from '@mui/joy';
 import SearchIcon from '@mui/icons-material/Search';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
@@ -29,6 +29,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import axios from 'axios';
 import { FileIcon, defaultStyles } from 'react-file-icon';
 import { useNotification } from '../NotificationSystem';
+import { copyTextToClipboard } from '../../utils/clipboard';
 import ConfirmationModal from '../ConfirmationModal';
 
 interface RepoBrowseProps {
@@ -75,27 +76,7 @@ export default function RepoBrowse({ repoId }: RepoBrowseProps) {
         color: 'primary',
     });
 
-    const fetchPackages = () => {
-        setLoading(true);
-        axios.get(`/api/repository/${repoId}/packages`)
-            .then(res => {
-                const data = res?.data;
-                let list: Package[] = [];
-                if (Array.isArray(data)) list = data;
-                else if (Array.isArray(data?.packages)) list = data.packages;
-
-                setPackages(list);
-                buildTree(list);
-            })
-            .catch(err => {
-                console.warn('Failed to fetch packages', err);
-                setPackages([]);
-                setTree([]);
-            })
-            .finally(() => setLoading(false));
-    };
-
-    const buildTree = (pkgs: Package[]) => {
+    const buildTree = useCallback((pkgs: Package[]) => {
         const root: TreeNode[] = [];
 
         pkgs.forEach(pkg => {
@@ -147,11 +128,31 @@ export default function RepoBrowse({ repoId }: RepoBrowseProps) {
         };
 
         setTree(sortTree(root));
-    };
+    }, []);
+
+    const fetchPackages = useCallback(() => {
+        setLoading(true);
+        axios.get(`/api/repository/${repoId}/packages`)
+            .then(res => {
+                const data = res?.data;
+                let list: Package[] = [];
+                if (Array.isArray(data)) list = data;
+                else if (Array.isArray(data?.packages)) list = data.packages;
+
+                setPackages(list);
+                buildTree(list);
+            })
+            .catch(err => {
+                console.warn('Failed to fetch packages', err);
+                setPackages([]);
+                setTree([]);
+            })
+            .finally(() => setLoading(false));
+    }, [buildTree, repoId]);
 
     useEffect(() => {
         fetchPackages();
-    }, [repoId]);
+    }, [fetchPackages]);
 
     const toggleNode = (path: number[]) => {
         const newTree = [...tree];
@@ -213,8 +214,7 @@ export default function RepoBrowse({ repoId }: RepoBrowseProps) {
 
     const getFileIcon = (name: string) => {
         const ext = name.split('.').pop();
-        // @ts-ignore
-        const style = ext && defaultStyles[ext];
+        const style = ext ? defaultStyles[ext as keyof typeof defaultStyles] : undefined;
         if (style) {
             return <Box sx={{ width: 20, display: 'flex' }}><FileIcon extension={ext} {...style} /></Box>;
         }
@@ -372,9 +372,9 @@ export default function RepoBrowse({ repoId }: RepoBrowseProps) {
 
     const filteredTree = filterTree(tree, search);
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        notify('Copied to clipboard');
+    const copyToClipboard = async (text: string) => {
+        const copied = await copyTextToClipboard(text);
+        notify(copied ? 'Copied to clipboard' : 'Failed to copy to clipboard');
     };
 
     return (

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -25,9 +25,7 @@ export class ArtifactIndexService {
   private pendingArtifacts: Array<{ repo: any; result: any; userId?: string }> =
     [];
 
-  constructor(
-    @Optional() private readonly redisService: RedisService,
-  ) { }
+  constructor(@Optional() private readonly redisService: RedisService) {}
 
   async indexArtifact(
     repo: RepositoryEntity,
@@ -89,7 +87,9 @@ export class ArtifactIndexService {
           }
 
           await artifactRepo.save(existing);
-          this.logger.debug(`Updated artifact index: ${packageName}@${version}`);
+          this.logger.debug(
+            `Updated artifact index: ${packageName}@${version}`,
+          );
         } else {
           const artifact = artifactRepo.create({
             repositoryId: repo.id,

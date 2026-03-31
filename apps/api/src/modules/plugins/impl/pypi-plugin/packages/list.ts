@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -13,52 +13,23 @@
  */
 
 import { PluginContext, Repository } from '../utils/types';
-import { buildKey } from '../utils/key-utils';
+import {
+  buildPypiInstallMetadata,
+  collectPypiPackageVersions,
+} from './list-support';
 
 export function initPackages(context: PluginContext) {
   const { storage } = context;
 
   const listVersions = async (repo: Repository, name: string) => {
-    const versions = new Set<string>();
-
-    // Check ID-based keys
-    const prefixId = buildKey('pypi', repo.id, name);
-    try {
-      const keys = await storage.list(prefixId);
-      for (const key of keys) {
-        // key format: pypi/<repo.id>/<name>/<version>
-        const parts = key.split('/');
-        if (parts.length >= 4) {
-          versions.add(parts[3]);
-        }
-      }
-    } catch (e) {
-      /* ignore */
-    }
-
-    // Check Name-based keys (fallback)
-    const prefixName = buildKey('pypi', repo.name, name);
-    try {
-      const keys = await storage.list(prefixName);
-      for (const key of keys) {
-        const parts = key.split('/');
-        if (parts.length >= 4) {
-          versions.add(parts[3]);
-        }
-      }
-    } catch (e) {
-      /* ignore */
-    }
-
-    return { ok: true, versions: Array.from(versions) };
+    const versions = await collectPypiPackageVersions(storage, repo, name);
+    return { ok: true, versions };
   };
 
   const getInstallCommand = async (repo: Repository, pkg: any) => {
-    const host = process.env.API_HOST || 'localhost:3000';
-    const proto = process.env.API_PROTOCOL || 'http';
-    const indexUrl = `${proto}://${host}/repository/${repo.name}/simple`;
     const name = pkg?.name || 'package';
     const version = pkg?.version || '0.0.1';
+    const { host, indexUrl, sourceName } = buildPypiInstallMetadata(repo);
 
     return [
       {
@@ -69,7 +40,7 @@ export function initPackages(context: PluginContext) {
       {
         label: 'poetry',
         language: 'bash',
-        command: `poetry add ${name}==${version} --source ${repo.name}`,
+        command: `poetry add ${name}==${version} --source "${sourceName}"`,
       },
       {
         label: 'pip.conf',

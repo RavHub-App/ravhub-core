@@ -16,6 +16,10 @@ ADMIN_USER="e2e-admin-pypi"
 ADMIN_PASS="password123"
 AUTH_TOKEN=""
 USER_ID=""
+LIMITED_USER="e2e-limited-pypi"
+LIMITED_PASS="password123"
+LIMITED_TOKEN=""
+LIMITED_USER_ID=""
 
 # Detect containers
 API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-app|distributed-chat-api|api' | head -n1 || echo "distributed-chat-api-1")
@@ -29,7 +33,6 @@ echo "Starting PyPI E2E Test..."
 
 cleanup() {
     echo "Cleaning up..."
-    kill $MOCK_PID 2>/dev/null || true
     docker exec $API_CONTAINER sh -lc "pkill -f e2e-pypi-basic-upstream" >/dev/null 2>&1 || true
     rm -rf $TEMP_DIR
     
@@ -47,6 +50,11 @@ cleanup() {
     if [ ! -z "$USER_ID" ] && [ ! -z "$AUTH_TOKEN" ]; then
         echo "Deleting test user $ADMIN_USER..."
         curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$USER_ID" > /dev/null
+    fi
+
+    if [ ! -z "$LIMITED_USER_ID" ] && [ ! -z "$AUTH_TOKEN" ]; then
+      echo "Deleting test user $LIMITED_USER..."
+      curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$LIMITED_USER_ID" > /dev/null
     fi
 }
 if [ "$SKIP_CLEANUP" != "1" ]; then trap cleanup EXIT; fi
@@ -92,6 +100,25 @@ if [ -z "$AUTH_TOKEN" ]; then
     exit 1
 fi
 
+LIMITED_HASHED_PASS=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$LIMITED_PASS', 10));")
+docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
+INSERT INTO users (id, username, passwordhash)
+VALUES (gen_random_uuid(), '$LIMITED_USER', '$LIMITED_HASHED_PASS')
+ON CONFLICT (username) DO NOTHING;
+" > /dev/null
+
+LIMITED_LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"$LIMITED_USER\",\"password\":\"$LIMITED_PASS\"}")
+
+LIMITED_TOKEN=$(echo "$LIMITED_LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+LIMITED_USER_ID=$(echo "$LIMITED_LOGIN_RES" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+
+if [ -z "$LIMITED_TOKEN" ]; then
+    echo -e "${RED}Limited user authentication failed${NC}"
+    exit 1
+fi
+
 create_repo() {
     local DATA="$1"
     local RES=$(curl -s -X POST "$API_URL/repositories" \
@@ -101,15 +128,103 @@ create_repo() {
     echo "$RES" | grep -o '"id":"[^"]*"' | cut -d'"' -f4
 }
 
+create_real_wheel() {
+  local package_name="$1"
+  local package_version="$2"
+  local wheel_dir="$TEMP_DIR/wheels"
+  local wheel_file="$wheel_dir/${package_name//-/_}-${package_version}-py3-none-any.whl"
+
+  mkdir -p "$wheel_dir"
+
+  python3 - "$package_name" "$package_version" "$wheel_file" <<'PY'
+import sys
+import zipfile
+
+package_name, package_version, wheel_file = sys.argv[1:4]
+module_name = package_name.replace('-', '_')
+dist_info = f"{module_name}-{package_version}.dist-info"
+
+with zipfile.ZipFile(wheel_file, 'w', compression=zipfile.ZIP_DEFLATED) as wheel:
+  wheel.writestr(
+    f"{module_name}/__init__.py",
+    f"__version__ = \"{package_version}\"\n",
+  )
+  wheel.writestr(
+    f"{dist_info}/WHEEL",
+    "Wheel-Version: 1.0\n"
+    "Generator: ravhub-e2e\n"
+    "Root-Is-Purelib: true\n"
+    "Tag: py3-none-any\n",
+  )
+  wheel.writestr(
+    f"{dist_info}/METADATA",
+    "Metadata-Version: 2.1\n"
+    f"Name: {package_name}\n"
+    f"Version: {package_version}\n"
+    "Summary: Real wheel for E2E validation\n",
+  )
+  wheel.writestr(f"{dist_info}/RECORD", "")
+
+print(wheel_file)
+PY
+}
+
+verify_real_wheel() {
+  local wheel_file="$1"
+  local package_name="$2"
+  local package_version="$3"
+
+  python3 - "$wheel_file" "$package_name" "$package_version" <<'PY'
+import sys
+import zipfile
+
+wheel_file, package_name, package_version = sys.argv[1:4]
+with zipfile.ZipFile(wheel_file) as wheel:
+  metadata_files = [name for name in wheel.namelist() if name.endswith('.dist-info/METADATA')]
+  if not metadata_files:
+    raise SystemExit(1)
+  metadata = wheel.read(metadata_files[0]).decode('utf-8')
+  if f"Name: {package_name}" not in metadata:
+    raise SystemExit(1)
+  if f"Version: {package_version}" not in metadata:
+    raise SystemExit(1)
+PY
+}
+
+upload_real_package() {
+  local repo_name="$1"
+  local package_name="$2"
+  local package_version="$3"
+  local wheel_file
+  local wheel_base64
+  local wheel_name
+
+  wheel_file=$(create_real_wheel "$package_name" "$package_version")
+  wheel_name=$(basename "$wheel_file")
+  wheel_base64=$(base64 -w 0 "$wheel_file")
+
+  curl -s -w "\n%{http_code}" -X POST "$REPOS_URL/$repo_name/upload" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
+    -d "{\"name\":\"$package_name\",\"version\":\"$package_version\",\"filename\":\"$wheel_name\",\"encoding\":\"base64\",\"content\":\"$wheel_base64\"}"
+}
+
+download_and_verify_wheel() {
+  local url="$1"
+  local output_file="$2"
+  local package_name="$3"
+  local package_version="$4"
+
+  curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$url" -o "$output_file"
+  verify_real_wheel "$output_file" "$package_name" "$package_version"
+}
+
 # 1. Hosted Repo
 echo "Creating PyPI Hosted repository..."
 HOSTED_ID=$(create_repo '{"name":"pypi-hosted","type":"hosted","manager":"pypi"}')
 
 echo "Uploading package to Hosted..."
-UPLOAD_RES=$(curl -s -w "\n%{http_code}" -X POST "$REPOS_URL/pypi-hosted/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d '{"name":"my-pkg","version":"1.0.0","content":"hosted-content"}')
+UPLOAD_RES=$(upload_real_package "pypi-hosted" "my-pkg" "1.0.0")
 
 HTTP_CODE=$(echo "$UPLOAD_RES" | tail -n1)
 BODY=$(echo "$UPLOAD_RES" | head -n -1)
@@ -121,49 +236,51 @@ if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
 fi
 
 echo "Verifying download..."
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-hosted/my-pkg/1.0.0")
-echo "Download content: $CONTENT"
+download_and_verify_wheel "$REPOS_URL/pypi-hosted/my-pkg/1.0.0" "$TEMP_DIR/my-pkg-1.0.0.whl" "my-pkg" "1.0.0"
 
-if [[ "$CONTENT" == *"hosted-content"* ]]; then
+if [ -s "$TEMP_DIR/my-pkg-1.0.0.whl" ]; then
     echo -e "${GREEN}PyPI Hosted Test Passed${NC}"
 else
     echo -e "${RED}PyPI Hosted Test Failed${NC}"
     exit 1
 fi
 
-# 2. Proxy Test (Mocking upstream)
-echo "--- PyPI Proxy Test ---"
-cat <<JS > $TEMP_DIR/mock-server.js
-const http = require('http');
-const server = http.createServer((req, res) => {
-  console.log(req.method, req.url);
-  if (req.url === '/upstream-pkg/1.0.0') {
-    res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
-    res.end('upstream-content');
-  } else {
-    res.writeHead(404);
-    res.end();
-  }
-});
-server.listen(9998, '0.0.0.0');
-JS
+LIMITED_UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$REPOS_URL/pypi-hosted/upload" -H "Content-Type: application/json" -H "Authorization: Bearer $LIMITED_TOKEN" -d '{"name":"blocked-pkg","version":"1.0.0","filename":"blocked-pkg-1.0.0.whl","encoding":"base64","content":"Zm9v"}')
+ANON_UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$REPOS_URL/pypi-hosted/upload" -H "Content-Type: application/json" -d '{"name":"blocked-pkg","version":"1.0.0","filename":"blocked-pkg-1.0.0.whl","encoding":"base64","content":"Zm9v"}')
+if [ "$LIMITED_UPLOAD_CODE" -lt 400 ] || [ "$ANON_UPLOAD_CODE" -lt 400 ]; then
+  echo -e "${RED}PyPI Permission Test Failed (limited=$LIMITED_UPLOAD_CODE anon=$ANON_UPLOAD_CODE)${NC}"
+  exit 1
+fi
+echo -e "${GREEN}PyPI Permission Test Passed${NC}"
 
-node $TEMP_DIR/mock-server.js > $TEMP_DIR/mock.log 2>&1 &
-MOCK_PID=$!
-sleep 2
+# 2. Proxy Test (real upstream hosted)
+echo "--- PyPI Proxy Test ---"
+echo "Uploading upstream package to Hosted..."
+UPLOAD_RES=$(upload_real_package "pypi-hosted" "upstream-pkg" "1.0.0")
+HTTP_CODE=$(echo "$UPLOAD_RES" | tail -n1)
+if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
+    echo -e "${RED}Upstream package upload failed${NC}"
+    exit 1
+fi
 
 echo "Creating PyPI Proxy repository..."
-PROXY_ID=$(create_repo "{\"name\":\"pypi-proxy\",\"type\":\"proxy\",\"manager\":\"pypi\",\"config\":{\"url\":\"http://172.17.0.1:9998\",\"cacheMaxAgeDays\":7}}")
+PROXY_ID=$(create_repo "{\"name\":\"pypi-proxy\",\"type\":\"proxy\",\"manager\":\"pypi\",\"config\":{\"url\":\"http://localhost:3000/repository/pypi-hosted\",\"cacheMaxAgeDays\":7}}")
 
 
 echo "Verifying proxy download..."
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-proxy/upstream-pkg/1.0.0")
-if [[ "$CONTENT" == *"upstream-content"* ]]; then
+download_and_verify_wheel "$REPOS_URL/pypi-proxy/upstream-pkg/1.0.0" "$TEMP_DIR/upstream-pkg-1.0.0.whl" "upstream-pkg" "1.0.0"
+if [ -s "$TEMP_DIR/upstream-pkg-1.0.0.whl" ]; then
     echo -e "${GREEN}PyPI Proxy Test Passed${NC}"
 else
     echo -e "${RED}PyPI Proxy Test Failed${NC}"
     exit 1
 fi
+SIMPLE_INDEX=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-proxy/simple/upstream-pkg/")
+echo "$SIMPLE_INDEX" | grep -q "upstream-pkg" || { echo -e "${RED}PyPI Proxy Simple Index Warmup Failed${NC}"; exit 1; }
+curl -s -X PUT "$API_URL/repositories/$PROXY_ID" -H "Content-Type: application/json" -H "Authorization: Bearer $AUTH_TOKEN" -d '{"name":"pypi-proxy","type":"proxy","manager":"pypi","config":{"url":"http://localhost:9/repository/pypi-hosted","cacheMaxAgeDays":7}}' > /dev/null
+CACHED_SIMPLE_INDEX=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-proxy/simple/upstream-pkg/")
+echo "$CACHED_SIMPLE_INDEX" | grep -q "upstream-pkg" || { echo -e "${RED}PyPI Proxy Cache Test Failed${NC}"; exit 1; }
+echo -e "${GREEN}PyPI Proxy Cache Test Passed${NC}"
 
 # 3. Group Test
 echo "--- PyPI Group Test ---"
@@ -171,8 +288,8 @@ echo "Creating PyPI Group repository..."
 GROUP_ID=$(create_repo "{\"name\":\"pypi-group\",\"type\":\"group\",\"manager\":\"pypi\",\"config\":{\"members\":[\"$HOSTED_ID\",\"$PROXY_ID\"]}}")
 
 echo "Verifying group download (from hosted)..."
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-group/my-pkg/1.0.0")
-if [[ "$CONTENT" == *"hosted-content"* ]]; then
+download_and_verify_wheel "$REPOS_URL/pypi-group/my-pkg/1.0.0" "$TEMP_DIR/group-my-pkg-1.0.0.whl" "my-pkg" "1.0.0"
+if [ -s "$TEMP_DIR/group-my-pkg-1.0.0.whl" ]; then
     echo -e "${GREEN}PyPI Group Read (Hosted) Passed${NC}"
 else
     echo -e "${RED}PyPI Group Read (Hosted) Failed${NC}"
@@ -180,8 +297,8 @@ else
 fi
 
 echo "Verifying group download (from proxy)..."
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-group/upstream-pkg/1.0.0")
-if [[ "$CONTENT" == *"upstream-content"* ]]; then
+download_and_verify_wheel "$REPOS_URL/pypi-group/upstream-pkg/1.0.0" "$TEMP_DIR/group-upstream-pkg-1.0.0.whl" "upstream-pkg" "1.0.0"
+if [ -s "$TEMP_DIR/group-upstream-pkg-1.0.0.whl" ]; then
     echo -e "${GREEN}PyPI Group Read (Proxy) Passed${NC}"
 else
     echo -e "${RED}PyPI Group Read (Proxy) Failed${NC}"
@@ -196,13 +313,15 @@ HOSTED_ID_2=$(create_repo '{"name":"pypi-hosted-2","type":"hosted","manager":"py
 echo "Testing 'first' policy..."
 GROUP_WRITE_ID=$(create_repo "{\"name\":\"pypi-group-write\",\"type\":\"group\",\"manager\":\"pypi\",\"config\":{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"first\"}}")
 
-curl -s -X POST "$REPOS_URL/pypi-group-write/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d '{"name":"pkg-first","version":"1.0.0","content":"first-content"}' > /dev/null
+UPLOAD_RES=$(upload_real_package "pypi-group-write" "pkg-first" "1.0.0")
+HTTP_CODE=$(echo "$UPLOAD_RES" | tail -n1)
+if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
+  echo -e "${RED}PyPI Group Write 'first' upload failed${NC}"
+  exit 1
+fi
 
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-hosted/pkg-first/1.0.0")
-if [[ "$CONTENT" == *"first-content"* ]]; then
+download_and_verify_wheel "$REPOS_URL/pypi-hosted/pkg-first/1.0.0" "$TEMP_DIR/pkg-first-1.0.0.whl" "pkg-first" "1.0.0"
+if [ -s "$TEMP_DIR/pkg-first-1.0.0.whl" ]; then
     echo -e "${GREEN}PyPI Group Write 'first' Passed${NC}"
 else
     echo -e "${RED}PyPI Group Write 'first' Failed${NC}"
@@ -212,13 +331,15 @@ fi
 echo "Testing 'preferred' policy..."
 GROUP_PREF_ID=$(create_repo "{\"name\":\"pypi-group-pref\",\"type\":\"group\",\"manager\":\"pypi\",\"config\":{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"preferred\",\"preferredWriter\":\"$HOSTED_ID_2\"}}")
 
-curl -s -X POST "$REPOS_URL/pypi-group-pref/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d '{"name":"pkg-pref","version":"1.0.0","content":"pref-content"}' > /dev/null
+UPLOAD_RES=$(upload_real_package "pypi-group-pref" "pkg-pref" "1.0.0")
+HTTP_CODE=$(echo "$UPLOAD_RES" | tail -n1)
+if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
+  echo -e "${RED}PyPI Group Write 'preferred' upload failed${NC}"
+  exit 1
+fi
 
-CONTENT=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-hosted-2/pkg-pref/1.0.0")
-if [[ "$CONTENT" == *"pref-content"* ]]; then
+download_and_verify_wheel "$REPOS_URL/pypi-hosted-2/pkg-pref/1.0.0" "$TEMP_DIR/pkg-pref-1.0.0.whl" "pkg-pref" "1.0.0"
+if [ -s "$TEMP_DIR/pkg-pref-1.0.0.whl" ]; then
     echo -e "${GREEN}PyPI Group Write 'preferred' Passed${NC}"
 else
     echo -e "${RED}PyPI Group Write 'preferred' Failed${NC}"
@@ -228,15 +349,17 @@ fi
 echo "Testing 'mirror' policy..."
 GROUP_MIRROR_ID=$(create_repo "{\"name\":\"pypi-group-mirror\",\"type\":\"group\",\"manager\":\"pypi\",\"config\":{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"mirror\"}}")
 
-curl -s -X POST "$REPOS_URL/pypi-group-mirror/upload" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -d '{"name":"pkg-mirror","version":"1.0.0","content":"mirror-content"}' > /dev/null
+UPLOAD_RES=$(upload_real_package "pypi-group-mirror" "pkg-mirror" "1.0.0")
+HTTP_CODE=$(echo "$UPLOAD_RES" | tail -n1)
+if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
+  echo -e "${RED}PyPI Group Write 'mirror' upload failed${NC}"
+  exit 1
+fi
 
-CONTENT1=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-hosted/pkg-mirror/1.0.0")
-CONTENT2=$(curl -s -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/pypi-hosted-2/pkg-mirror/1.0.0")
+download_and_verify_wheel "$REPOS_URL/pypi-hosted/pkg-mirror/1.0.0" "$TEMP_DIR/pkg-mirror-hosted.whl" "pkg-mirror" "1.0.0"
+download_and_verify_wheel "$REPOS_URL/pypi-hosted-2/pkg-mirror/1.0.0" "$TEMP_DIR/pkg-mirror-hosted-2.whl" "pkg-mirror" "1.0.0"
 
-if [[ "$CONTENT1" == *"mirror-content"* ]] && [[ "$CONTENT2" == *"mirror-content"* ]]; then
+if [ -s "$TEMP_DIR/pkg-mirror-hosted.whl" ] && [ -s "$TEMP_DIR/pkg-mirror-hosted-2.whl" ]; then
     echo -e "${GREEN}PyPI Group Write 'mirror' Passed${NC}"
 else
     echo -e "${RED}PyPI Group Write 'mirror' Failed${NC}"
@@ -292,5 +415,7 @@ else
     exit 1
 fi
 
-echo "PyPI E2E Test Completed"
+docker exec $API_CONTAINER sh -lc "pkill -f e2e-pypi-basic-upstream" >/dev/null 2>&1 || true
+
+echo -e "${GREEN}All PyPI Tests Passed${NC}"
 

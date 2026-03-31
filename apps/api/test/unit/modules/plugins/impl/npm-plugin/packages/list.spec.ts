@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -55,6 +55,30 @@ describe('NpmPlugin Packages', () => {
       expect(result.ok).toBe(true);
       expect(result.versions).toEqual([]);
     });
+
+    it('should list versions from cached proxy metadata', async () => {
+      const packageJson = JSON.stringify({
+        versions: { '3.0.0': {}, '3.1.0': {} },
+      });
+
+      mockStorage.get.mockImplementation(async (key: string) => {
+        if (key === 'npm/r1/proxy/test-package/package.json') {
+          return Buffer.from(packageJson);
+        }
+        return null;
+      });
+
+      const repo: Repository = {
+        id: 'r1',
+        name: 'npm-proxy',
+        type: 'proxy',
+      } as any;
+      const result = await packageMethods.listVersions(repo, 'test-package');
+
+      expect(result.ok).toBe(true);
+      expect(result.versions).toContain('3.0.0');
+      expect(result.versions).toContain('3.1.0');
+    });
   });
 
   describe('getInstallCommand', () => {
@@ -70,6 +94,19 @@ describe('NpmPlugin Packages', () => {
       expect(commands[1].label).toBe('yarn');
       expect(commands[2].label).toBe('pnpm');
       expect(commands[3].label).toBe('.npmrc');
+    });
+
+    it('should encode repository name in registry URLs', async () => {
+      const repo: Repository = { name: 'npm repo#beta' } as any;
+      const pkg = { name: 'test-package', version: '1.0.0' };
+
+      const commands = await packageMethods.getInstallCommand(repo, pkg);
+
+      for (const command of commands) {
+        expect(command.command).toContain(
+          'http://localhost:3000/repository/npm%20repo%23beta',
+        );
+      }
     });
   });
 });

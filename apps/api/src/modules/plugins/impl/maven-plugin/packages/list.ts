@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -13,108 +13,31 @@
  */
 
 import { PluginContext, Repository } from '../utils/types';
-import { buildKey } from '../utils/key-utils';
+import {
+  collectMavenPackageVersions,
+  parseMavenPackageCoordinates,
+  resolveMavenInstallCoordinates,
+} from './list-support';
 
 export function initPackages(context: PluginContext) {
   const { storage } = context;
 
   const listVersions = async (repo: Repository, name: string) => {
-    // name is groupId:artifactId OR groupId/artifactId
-    let groupId: string;
-    let artifactId: string;
-
-    if (name.includes(':')) {
-      [groupId, artifactId] = name.split(':');
-    } else {
-      const parts = name.split('/');
-      artifactId = parts.pop()!;
-      groupId = parts.join('/');
-    }
-
-    if (!groupId || !artifactId)
+    const coordinates = parseMavenPackageCoordinates(name);
+    if (!coordinates)
       return { ok: false, message: 'Invalid package name format' };
+    const versions = await collectMavenPackageVersions(
+      storage,
+      repo,
+      coordinates.artifactPath,
+    );
 
-    const groupPath = groupId.replace(/\./g, '/');
-    const artifactPath = `${groupPath}/${artifactId}`;
-    const versions = new Set<string>();
-
-    const tryLoad = async (repoIdOrName: string) => {
-      // Try standard hosted path
-      const prefix = buildKey('maven', repoIdOrName, artifactPath);
-      // Try proxy cache path
-      const proxyPrefix = buildKey(
-        'maven',
-        repoIdOrName,
-        'proxy',
-        artifactPath,
-      );
-
-      const prefixes = [prefix, proxyPrefix];
-
-      for (const pfx of prefixes) {
-        try {
-          const keys = await storage.list(pfx);
-          for (const key of keys) {
-            // key: maven/<repo>/group/artifact/version/file
-            // OR: maven/<repo>/proxy/group/artifact/version/file
-            // storage.list returns keys relative to storage root, e.g. maven/repo/group/artifact/version/file
-            // pfx is maven/repo/group/artifact
-
-            // Ensure we are looking at files UNDER this prefix
-            if (!key.startsWith(pfx)) continue;
-
-            // Remove prefix to get relative path: /version/file
-            let suffix = key.slice(pfx.length);
-            if (suffix.startsWith('/')) suffix = suffix.slice(1);
-
-            const parts = suffix.split('/');
-            if (parts.length > 0) {
-              const version = parts[0];
-              // Filter out metadata files at the artifact root level
-              if (
-                version &&
-                version !== 'maven-metadata.xml' &&
-                !version.endsWith('.xml') &&
-                !version.endsWith('.asc') &&
-                !version.endsWith('.sha1') &&
-                !version.endsWith('.md5')
-              ) {
-                // Check if it looks like a version directory (should contain files)
-                // But storage.list returns files, so if we see version/file, then version is a directory.
-                if (parts.length > 1) {
-                  versions.add(version);
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.error(`[MavenPlugin] listVersions error:`, e);
-        }
-      }
-    };
-
-    await tryLoad(repo.id);
-    await tryLoad(repo.name);
-
-    return { ok: true, versions: Array.from(versions) };
+    return { ok: true, versions };
   };
 
   const getInstallCommand = async (repo: Repository, pkg: any) => {
     const name = String(pkg?.name || '');
-    let groupId = 'com.example';
-    let artifactId = 'artifact';
-
-    if (name.includes(':')) {
-      const parts = name.split(':');
-      if (parts[0]) groupId = parts[0];
-      if (parts[1]) artifactId = parts[1];
-    } else {
-      const parts = name.split('/');
-      if (parts.length > 0) {
-        artifactId = parts.pop()!;
-        if (parts.length > 0) groupId = parts.join('.');
-      }
-    }
+    const { groupId, artifactId } = resolveMavenInstallCoordinates(name);
 
     const version = pkg?.version || '1.0.0';
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -30,17 +30,13 @@ import { JobService } from '../jobs/job.service';
 import { StorageService } from '../storage/storage.service';
 import { AuditService } from '../audit/audit.service';
 import { RedlockService } from '../redis/redlock.service';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 const { minimatch } = require('minimatch');
-
-const execAsync = promisify(exec);
 
 @Injectable()
 export class CleanupService {
   private readonly logger = new Logger(CleanupService.name);
+  private createJobsInterval: NodeJS.Timeout | null = null;
+  private processJobsInterval: NodeJS.Timeout | null = null;
 
   constructor(
     @InjectRepository(CleanupPolicy)
@@ -147,7 +143,7 @@ export class CleanupService {
         return this.cleanupDockerBlobs(policy);
       }
 
-      throw new Error(`Unknown cleanup target: ${policy.target}`);
+      throw new Error('Unknown cleanup target');
     });
   }
 
@@ -272,7 +268,7 @@ export class CleanupService {
           freedMB: (freedBytes / 1024 / 1024).toFixed(2),
         },
       })
-      .catch(() => {});
+      .catch(() => undefined);
 
     return { deleted: artifactsToDelete.length, freedBytes };
   }
@@ -337,49 +333,58 @@ export class CleanupService {
     }
 
     try {
+      const policyId = String(job.payload.policyId);
       this.logger.log(
         `Processing cleanup job ${job.id} (${job.payload.policyName})`,
       );
 
-      const result = await this.execute(job.payload.policyId);
+      const result = await this.execute(policyId);
 
       await this.jobService.completeJob(job.id, result);
       this.logger.log(
         `✓ Completed cleanup job ${job.id}: deleted ${result.deleted} items, freed ${(result.freedBytes / 1024 / 1024).toFixed(2)} MB`,
       );
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to process cleanup job ${job.id}:`, error);
-      await this.jobService.failJob(job.id, error.message);
+      await this.jobService.failJob(job.id, errorMessage);
     }
   }
 
   startCleanupScheduler(): void {
+    if (process.env.DISABLE_STARTUP_TASKS === 'true') {
+      return;
+    }
+
     this.logger.log('Starting cleanup scheduler and job processor');
 
     this.createJobsForPendingPolicies().catch((error) => {
       this.logger.error('Failed to create jobs for pending policies:', error);
     });
 
-    setInterval(
-      async () => {
-        try {
-          await this.redlockService.runWithLock(
+    this.createJobsInterval = setInterval(
+      () => {
+        void this.redlockService
+          .runWithLock(
             'cleanup:scheduler:create-jobs',
             55 * 60 * 1000,
             async () => {
               await this.createJobsForPendingPolicies();
             },
-          );
-        } catch (error) {
-          const isLockError =
-            error.name === 'LockError' || error.message?.includes('Lock');
-          if (!isLockError) {
-            this.logger.error(
-              'Failed to create jobs for pending policies:',
-              error,
-            );
-          }
-        }
+          )
+          .catch((error: unknown) => {
+            const errorName = error instanceof Error ? error.name : '';
+            const errorMessage = error instanceof Error ? error.message : '';
+            const isLockError =
+              errorName === 'LockError' || errorMessage.includes('Lock');
+            if (!isLockError) {
+              this.logger.error(
+                'Failed to create jobs for pending policies:',
+                error,
+              );
+            }
+          });
       },
       60 * 60 * 1000,
     );
@@ -388,7 +393,7 @@ export class CleanupService {
       this.logger.error('Failed to process cleanup jobs:', error);
     });
 
-    setInterval(
+    this.processJobsInterval = setInterval(
       () => {
         this.processCleanupJobs().catch((error) => {
           this.logger.error('Failed to process cleanup jobs:', error);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -11,6 +11,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU Affero General Public License for more details.
  */
+
 export function readBody(req: any): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const bufs: any[] = [];
@@ -34,7 +35,7 @@ export function buildPublicUrl(repo: any, path: string, res?: any): string {
     return `${proto}://${customHost}${path.startsWith('/') ? '' : '/'}${path}`;
   }
 
-  // If no custom host, return relative path. 
+  // If no custom host, return relative path.
   // Docker clients handle relative Location headers by prepending the current host:port.
   return path.startsWith('/') ? path : `/${path}`;
 }
@@ -63,9 +64,15 @@ export function sendAuthChallenge(
   const service = customHost ? host : `${host}:${port}`;
 
   // realm must be the full token URL.
-  // CRITICAL: If no custom host, we must use a resolvable host (not 0.0.0.0) 
-  const displayHost = customHost ? host : (host === '0.0.0.0' ? 'localhost' : host);
-  const realm = customHost ? `${proto}://${host}/v2/token` : `${proto}://${displayHost}:${port}/v2/token`;
+  // CRITICAL: If no custom host, we must use a resolvable host (not 0.0.0.0)
+  const displayHost = customHost
+    ? host
+    : host === '0.0.0.0'
+      ? 'localhost'
+      : host;
+  const realm = customHost
+    ? `${proto}://${host}/v2/token`
+    : `${proto}://${displayHost}:${port}/v2/token`;
 
   const challengeHeader = `Bearer realm="${realm}",service="${service}",scope="repository:${name}:${action}"`;
 

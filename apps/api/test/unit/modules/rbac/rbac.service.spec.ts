@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -21,240 +21,244 @@ import { AuditService } from 'src/modules/audit/audit.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('RbacService', () => {
-    let service: RbacService;
-    let roleRepo: any;
-    let permRepo: any;
-    let auditService: any;
+  let service: RbacService;
+  let roleRepo: any;
+  let permRepo: any;
+  let auditService: any;
 
-    beforeEach(async () => {
-        roleRepo = {
-            find: jest.fn(),
-            findOne: jest.fn(),
-            create: jest.fn(),
-            save: jest.fn(),
-            remove: jest.fn(),
-        };
+  beforeEach(async () => {
+    roleRepo = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    };
 
-        permRepo = {
-            find: jest.fn(),
-        };
+    permRepo = {
+      find: jest.fn(),
+    };
 
-        auditService = {
-            logSuccess: jest.fn().mockResolvedValue(undefined),
-        };
+    auditService = {
+      logSuccess: jest.fn().mockResolvedValue(undefined),
+    };
 
-        const module: TestingModule = await Test.createTestingModule({
-            providers: [
-                RbacService,
-                {
-                    provide: getRepositoryToken(Role),
-                    useValue: roleRepo,
-                },
-                {
-                    provide: getRepositoryToken(Permission),
-                    useValue: permRepo,
-                },
-                {
-                    provide: AuditService,
-                    useValue: auditService,
-                },
-            ],
-        }).compile();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RbacService,
+        {
+          provide: getRepositoryToken(Role),
+          useValue: roleRepo,
+        },
+        {
+          provide: getRepositoryToken(Permission),
+          useValue: permRepo,
+        },
+        {
+          provide: AuditService,
+          useValue: auditService,
+        },
+      ],
+    }).compile();
 
-        service = module.get<RbacService>(RbacService);
-        jest.clearAllMocks();
+    service = module.get<RbacService>(RbacService);
+    jest.clearAllMocks();
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('getRoles', () => {
+    it('should return all roles with permissions', async () => {
+      const roles = [
+        { id: '1', name: 'admin', permissions: [] },
+        { id: '2', name: 'user', permissions: [] },
+      ];
+      roleRepo.find.mockResolvedValue(roles);
+
+      const result = await service.getRoles();
+
+      expect(result).toEqual(roles);
+      expect(roleRepo.find).toHaveBeenCalledWith({
+        relations: ['permissions'],
+      });
+    });
+  });
+
+  describe('getRole', () => {
+    it('should return a specific role', async () => {
+      const role = { id: '1', name: 'admin', permissions: [] };
+      roleRepo.findOne.mockResolvedValue(role);
+
+      const result = await service.getRole('1');
+
+      expect(result).toEqual(role);
+      expect(roleRepo.findOne).toHaveBeenCalledWith({
+        where: { id: '1' },
+        relations: ['permissions'],
+      });
     });
 
-    it('should be defined', () => {
-        expect(service).toBeDefined();
+    it('should throw NotFoundException if role not found', async () => {
+      roleRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getRole('999')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('createRole', () => {
+    it('should create a role without permissions', async () => {
+      const roleData = { name: 'moderator', description: 'Moderator role' };
+      const createdRole = { id: '3', ...roleData, permissions: [] };
+
+      roleRepo.create.mockReturnValue(createdRole);
+      roleRepo.save.mockResolvedValue(createdRole);
+
+      const result = await service.createRole(roleData);
+
+      expect(result).toEqual(createdRole);
+      expect(roleRepo.create).toHaveBeenCalledWith({
+        name: 'moderator',
+        description: 'Moderator role',
+      });
+      expect(roleRepo.save).toHaveBeenCalled();
+      expect(auditService.logSuccess).toHaveBeenCalledWith({
+        action: 'role.create',
+        entityType: 'role',
+        entityId: '3',
+        details: { name: 'moderator', permissions: undefined },
+      });
     });
 
-    describe('getRoles', () => {
-        it('should return all roles with permissions', async () => {
-            const roles = [
-                { id: '1', name: 'admin', permissions: [] },
-                { id: '2', name: 'user', permissions: [] },
-            ];
-            roleRepo.find.mockResolvedValue(roles);
+    it('should create a role with permissions', async () => {
+      const permissions = [
+        { id: '1', key: 'repo.read' },
+        { id: '2', key: 'repo.write' },
+      ];
+      const roleData = {
+        name: 'editor',
+        permissions: ['repo.read', 'repo.write'],
+      };
+      const createdRole = { id: '4', name: 'editor', permissions };
 
-            const result = await service.getRoles();
+      roleRepo.create.mockReturnValue({ id: '4', name: 'editor' });
+      permRepo.find.mockResolvedValue(permissions);
+      roleRepo.save.mockResolvedValue(createdRole);
 
-            expect(result).toEqual(roles);
-            expect(roleRepo.find).toHaveBeenCalledWith({ relations: ['permissions'] });
-        });
+      const result = await service.createRole(roleData);
+
+      expect(result).toEqual(createdRole);
+      expect(permRepo.find).toHaveBeenCalled();
     });
 
-    describe('getRole', () => {
-        it('should return a specific role', async () => {
-            const role = { id: '1', name: 'admin', permissions: [] };
-            roleRepo.findOne.mockResolvedValue(role);
+    it('should handle audit logging failure gracefully', async () => {
+      const roleData = { name: 'test' };
+      const createdRole = { id: '5', name: 'test' };
 
-            const result = await service.getRole('1');
+      roleRepo.create.mockReturnValue(createdRole);
+      roleRepo.save.mockResolvedValue(createdRole);
+      auditService.logSuccess.mockRejectedValue(new Error('Audit failed'));
 
-            expect(result).toEqual(role);
-            expect(roleRepo.findOne).toHaveBeenCalledWith({
-                where: { id: '1' },
-                relations: ['permissions'],
-            });
-        });
+      const result = await service.createRole(roleData);
 
-        it('should throw NotFoundException if role not found', async () => {
-            roleRepo.findOne.mockResolvedValue(null);
+      expect(result).toEqual(createdRole);
+    });
+  });
 
-            await expect(service.getRole('999')).rejects.toThrow(NotFoundException);
-        });
+  describe('updateRole', () => {
+    it('should update role name and description', async () => {
+      const existingRole = { id: '1', name: 'admin', permissions: [] };
+      const updateData = { name: 'super-admin', description: 'Super admin' };
+      const updatedRole = { ...existingRole, ...updateData };
+
+      roleRepo.findOne.mockResolvedValue(existingRole);
+      roleRepo.save.mockResolvedValue(updatedRole);
+
+      const result = await service.updateRole('1', updateData);
+
+      expect(result).toEqual(updatedRole);
+      expect(roleRepo.save).toHaveBeenCalled();
     });
 
-    describe('createRole', () => {
-        it('should create a role without permissions', async () => {
-            const roleData = { name: 'moderator', description: 'Moderator role' };
-            const createdRole = { id: '3', ...roleData, permissions: [] };
+    it('should update role permissions', async () => {
+      const existingRole = { id: '1', name: 'admin', permissions: [] };
+      const permissions = [{ id: '1', key: 'repo.read' }];
+      const updateData = { permissions: ['repo.read'] };
 
-            roleRepo.create.mockReturnValue(createdRole);
-            roleRepo.save.mockResolvedValue(createdRole);
+      roleRepo.findOne.mockResolvedValue(existingRole);
+      permRepo.find.mockResolvedValue(permissions);
+      roleRepo.save.mockResolvedValue({ ...existingRole, permissions });
 
-            const result = await service.createRole(roleData);
+      const result = await service.updateRole('1', updateData);
 
-            expect(result).toEqual(createdRole);
-            expect(roleRepo.create).toHaveBeenCalledWith({
-                name: 'moderator',
-                description: 'Moderator role',
-            });
-            expect(roleRepo.save).toHaveBeenCalled();
-            expect(auditService.logSuccess).toHaveBeenCalledWith({
-                action: 'role.create',
-                entityType: 'role',
-                entityId: '3',
-                details: { name: 'moderator', permissions: undefined },
-            });
-        });
-
-        it('should create a role with permissions', async () => {
-            const permissions = [
-                { id: '1', key: 'repo.read' },
-                { id: '2', key: 'repo.write' },
-            ];
-            const roleData = {
-                name: 'editor',
-                permissions: ['repo.read', 'repo.write'],
-            };
-            const createdRole = { id: '4', name: 'editor', permissions };
-
-            roleRepo.create.mockReturnValue({ id: '4', name: 'editor' });
-            permRepo.find.mockResolvedValue(permissions);
-            roleRepo.save.mockResolvedValue(createdRole);
-
-            const result = await service.createRole(roleData);
-
-            expect(result).toEqual(createdRole);
-            expect(permRepo.find).toHaveBeenCalled();
-        });
-
-        it('should handle audit logging failure gracefully', async () => {
-            const roleData = { name: 'test' };
-            const createdRole = { id: '5', name: 'test' };
-
-            roleRepo.create.mockReturnValue(createdRole);
-            roleRepo.save.mockResolvedValue(createdRole);
-            auditService.logSuccess.mockRejectedValue(new Error('Audit failed'));
-
-            const result = await service.createRole(roleData);
-
-            expect(result).toEqual(createdRole);
-        });
+      expect(result.permissions).toEqual(permissions);
     });
 
-    describe('updateRole', () => {
-        it('should update role name and description', async () => {
-            const existingRole = { id: '1', name: 'admin', permissions: [] };
-            const updateData = { name: 'super-admin', description: 'Super admin' };
-            const updatedRole = { ...existingRole, ...updateData };
+    it('should clear permissions when empty array provided', async () => {
+      const existingRole = {
+        id: '1',
+        name: 'admin',
+        permissions: [{ id: '1', key: 'repo.read' }],
+      };
+      const updateData = { permissions: [] };
 
-            roleRepo.findOne.mockResolvedValue(existingRole);
-            roleRepo.save.mockResolvedValue(updatedRole);
+      roleRepo.findOne.mockResolvedValue(existingRole);
+      roleRepo.save.mockResolvedValue({ ...existingRole, permissions: [] });
 
-            const result = await service.updateRole('1', updateData);
+      const result = await service.updateRole('1', updateData);
 
-            expect(result).toEqual(updatedRole);
-            expect(roleRepo.save).toHaveBeenCalled();
-        });
-
-        it('should update role permissions', async () => {
-            const existingRole = { id: '1', name: 'admin', permissions: [] };
-            const permissions = [{ id: '1', key: 'repo.read' }];
-            const updateData = { permissions: ['repo.read'] };
-
-            roleRepo.findOne.mockResolvedValue(existingRole);
-            permRepo.find.mockResolvedValue(permissions);
-            roleRepo.save.mockResolvedValue({ ...existingRole, permissions });
-
-            const result = await service.updateRole('1', updateData);
-
-            expect(result.permissions).toEqual(permissions);
-        });
-
-        it('should clear permissions when empty array provided', async () => {
-            const existingRole = {
-                id: '1',
-                name: 'admin',
-                permissions: [{ id: '1', key: 'repo.read' }],
-            };
-            const updateData = { permissions: [] };
-
-            roleRepo.findOne.mockResolvedValue(existingRole);
-            roleRepo.save.mockResolvedValue({ ...existingRole, permissions: [] });
-
-            const result = await service.updateRole('1', updateData);
-
-            expect(result.permissions).toEqual([]);
-        });
-
-        it('should throw NotFoundException if role not found', async () => {
-            roleRepo.findOne.mockResolvedValue(null);
-
-            await expect(service.updateRole('999', { name: 'test' })).rejects.toThrow(
-                NotFoundException,
-            );
-        });
+      expect(result.permissions).toEqual([]);
     });
 
-    describe('deleteRole', () => {
-        it('should delete a role', async () => {
-            const role = { id: '1', name: 'admin', permissions: [] };
-            roleRepo.findOne.mockResolvedValue(role);
-            roleRepo.remove.mockResolvedValue(role);
+    it('should throw NotFoundException if role not found', async () => {
+      roleRepo.findOne.mockResolvedValue(null);
 
-            const result = await service.deleteRole('1');
+      await expect(service.updateRole('999', { name: 'test' })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 
-            expect(result).toEqual({ ok: true });
-            expect(roleRepo.remove).toHaveBeenCalledWith(role);
-            expect(auditService.logSuccess).toHaveBeenCalledWith({
-                action: 'role.delete',
-                entityType: 'role',
-                entityId: '1',
-                details: { name: 'admin' },
-            });
-        });
+  describe('deleteRole', () => {
+    it('should delete a role', async () => {
+      const role = { id: '1', name: 'admin', permissions: [] };
+      roleRepo.findOne.mockResolvedValue(role);
+      roleRepo.remove.mockResolvedValue(role);
 
-        it('should throw NotFoundException if role not found', async () => {
-            roleRepo.findOne.mockResolvedValue(null);
+      const result = await service.deleteRole('1');
 
-            await expect(service.deleteRole('999')).rejects.toThrow(NotFoundException);
-        });
+      expect(result).toEqual({ ok: true });
+      expect(roleRepo.remove).toHaveBeenCalledWith(role);
+      expect(auditService.logSuccess).toHaveBeenCalledWith({
+        action: 'role.delete',
+        entityType: 'role',
+        entityId: '1',
+        details: { name: 'admin' },
+      });
     });
 
-    describe('getPermissions', () => {
-        it('should return all permissions', async () => {
-            const permissions = [
-                { id: '1', key: 'repo.read', description: 'Read repositories' },
-                { id: '2', key: 'repo.write', description: 'Write repositories' },
-            ];
-            permRepo.find.mockResolvedValue(permissions);
+    it('should throw NotFoundException if role not found', async () => {
+      roleRepo.findOne.mockResolvedValue(null);
 
-            const result = await service.getPermissions();
-
-            expect(result).toEqual(permissions);
-            expect(permRepo.find).toHaveBeenCalled();
-        });
+      await expect(service.deleteRole('999')).rejects.toThrow(
+        NotFoundException,
+      );
     });
+  });
+
+  describe('getPermissions', () => {
+    it('should return all permissions', async () => {
+      const permissions = [
+        { id: '1', key: 'repo.read', description: 'Read repositories' },
+        { id: '2', key: 'repo.write', description: 'Write repositories' },
+      ];
+      permRepo.find.mockResolvedValue(permissions);
+
+      const result = await service.getPermissions();
+
+      expect(result).toEqual(permissions);
+      expect(permRepo.find).toHaveBeenCalled();
+    });
+  });
 });

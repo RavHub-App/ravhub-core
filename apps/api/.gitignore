@@ -18,6 +18,10 @@ lerna-debug.log*
 # Tests
 /coverage
 /.nyc_output
+coverage_report.txt
+npm_coverage.txt
+lint_results.txt
+test_output.txt
 
 # Plugins (runtime deployment)
 /src/plugins
@@ -54,6 +58,7 @@ pids
 *.pid
 *.seed
 *.pid.lock
+test-e2e-*.sqlite
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

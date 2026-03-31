@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -48,7 +48,8 @@ export const AppDataSource = new DataSource({
   password,
   database,
   entities: Object.values(Entities),
-  synchronize: false,
+  synchronize: process.env.TYPEORM_SYNC === 'true',
+  dropSchema: process.env.TYPEORM_DROP_SCHEMA === 'true',
   logging: false,
   migrations: [
     Migration1701163200000,

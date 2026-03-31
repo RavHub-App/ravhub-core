@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -70,6 +70,82 @@ describe('ComposerPlugin Metadata', () => {
       const buf = Buffer.from(JSON.stringify({ foo: 'bar' }));
       const res = await metadataMethods.processMetadata(repo, 'x', buf, 'up');
       expect(JSON.parse(res.toString()).foo).toBe('bar');
+    });
+
+    it('should resolve relative dist urls against upstream metadata url', async () => {
+      const repo = {
+        name: 'composer-proxy',
+        type: 'proxy',
+        config: { cacheMaxAgeDays: 7 },
+      } as any;
+
+      const processed = await metadataMethods.processMetadata(
+        repo,
+        'p2/acme/package.json',
+        JSON.stringify({
+          packages: {
+            'acme/package': {
+              '1.2.3': {
+                version: '1.2.3',
+                dist: {
+                  url: '../dist/acme-package-1.2.3.zip',
+                },
+              },
+            },
+          },
+        }),
+        'https://packagist.org',
+      );
+
+      const json = JSON.parse(processed.toString());
+      const encodedTarget = Buffer.from(
+        'https://packagist.org/p2/dist/acme-package-1.2.3.zip',
+      ).toString('base64');
+
+      expect(json.packages['acme/package']['1.2.3'].dist.url).toBe(
+        `https://my-registry.com/repository/composer-proxy/dist/${encodedTarget}/acme/package/1.2.3.zip`,
+      );
+    });
+
+    it('should encode repository names in rewritten metadata urls', async () => {
+      const repo = {
+        name: 'composer proxy#beta',
+        type: 'proxy',
+        config: { cacheMaxAgeDays: 7 },
+      } as any;
+
+      const processed = await metadataMethods.processMetadata(
+        repo,
+        '/packages.json',
+        JSON.stringify({
+          'providers-url': '/p/%package%$%hash%.json',
+          packages: {
+            'acme/package': {
+              '1.2.3': {
+                version: '1.2.3',
+                dist: {
+                  url: 'https://packagist.org/dist/acme-package-1.2.3.zip',
+                },
+              },
+            },
+          },
+        }),
+        'https://packagist.org',
+      );
+
+      const json = JSON.parse(processed.toString());
+      const expectedBase =
+        'https://my-registry.com/repository/composer%20proxy%23beta';
+      const encodedTarget = Buffer.from(
+        'https://packagist.org/dist/acme-package-1.2.3.zip',
+      ).toString('base64');
+
+      expect(json['providers-url']).toBe(
+        `${expectedBase}/p/%package%$%hash%.json`,
+      );
+      expect(json.packages['acme/package']['1.2.3'].dist.url).toBe(
+        `${expectedBase}/dist/${encodedTarget}/acme/package/1.2.3.zip`,
+      );
     });
   });
 });

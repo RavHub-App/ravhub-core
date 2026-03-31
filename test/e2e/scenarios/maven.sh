@@ -1,487 +1,227 @@
 #!/bin/bash
 set -e
 
-# Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
 API_URL="http://localhost:3000"
-REPOS_URL="http://localhost:3000/repository"
+REPOS_URL="$API_URL/repository"
 TEMP_DIR="/tmp/e2e-maven"
-mkdir -p $TEMP_DIR
-
-# Auth variables
+ARTIFACT_DIR="$TEMP_DIR/artifacts"
 ADMIN_USER="e2e-admin-maven"
 ADMIN_PASS="password123"
 AUTH_TOKEN=""
 USER_ID=""
+LIMITED_USER="e2e-limited-maven"
+LIMITED_PASS="password123"
+LIMITED_TOKEN=""
+LIMITED_USER_ID=""
+RUN_ID="e2e-maven-$(date +%s)-$$"
+REPO_IDS=()
+UP_USER="up-user"
+UP_PASS="up-pass"
+UP_PORT="18081"
+SNAPSHOT_TS="20251213.000000"
+SNAPSHOT_BUILD="1"
 
-# Detect containers
+mkdir -p "$ARTIFACT_DIR"
+
 API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-app|distributed-chat-api|api' | head -n1 || echo "distributed-chat-api-1")
 POSTGRES_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-postgres|postgres' | head -n1 || echo "distributed-chat-postgres-1")
 
-RUN_ID="e2e-maven-$(date +%s)-$$"
-
-REPO_IDS=()
-
-HOSTED_ID=""
-PROXY_ID=""
-PROXY_AUTH_ID=""
-GROUP_ID=""
-
-UP_USER="up-user"
-UP_PASS="up-pass"
-UPSTREAM_PORT="18081"
-
-echo "Starting Maven E2E Test..."
+run_sql() { docker exec "$POSTGRES_CONTAINER" psql -U postgres -d ravhub -c "$1" > /dev/null; }
 
 cleanup() {
   echo "Cleaning up..."
-
-  # Stop upstream server inside API container (best-effort)
-  docker exec $API_CONTAINER sh -lc "pkill -f e2e-maven-basic-upstream" >/dev/null 2>&1 || true
-
-  if [ ! -z "$AUTH_TOKEN" ]; then
-    for id in "${REPO_IDS[@]}"; do
-      if [ ! -z "$id" ]; then
-        echo "Deleting repo ($id)..."
-        curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories/$id" > /dev/null || true
-      fi
+  docker exec "$API_CONTAINER" sh -lc "pkill -f e2e-maven-basic-upstream || true; rm -rf /tmp/e2e-maven-upstream" > /dev/null 2>&1 || true
+  if [ -n "$AUTH_TOKEN" ]; then
+    for repo_id in "${REPO_IDS[@]}"; do
+      [ -n "$repo_id" ] && curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories/$repo_id" > /dev/null || true
     done
   fi
-
-  if [ ! -z "$USER_ID" ] && [ ! -z "$AUTH_TOKEN" ]; then
-    echo "Deleting test user $ADMIN_USER ($USER_ID)..."
-    curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$USER_ID" > /dev/null
-  fi
-  
-  rm -rf $TEMP_DIR
+  [ -n "$USER_ID" ] && [ -n "$AUTH_TOKEN" ] && curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$USER_ID" > /dev/null || true
+  [ -n "$LIMITED_USER_ID" ] && [ -n "$AUTH_TOKEN" ] && curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$LIMITED_USER_ID" > /dev/null || true
+  rm -rf "$TEMP_DIR"
 }
 if [ "$SKIP_CLEANUP" != "1" ]; then trap cleanup EXIT; fi
 
-# 0. Setup Auth
-echo "Setting up authentication..."
-
-# Generate bcrypt hash using node (available in environment)
-echo "Generating password hash..."
-HASHED_PASS=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));")
-
-# Insert user into DB if not exists
-echo "Inserting admin user into DB..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
-INSERT INTO users (id, username, passwordhash)
-VALUES (gen_random_uuid(), '$ADMIN_USER', '$HASHED_PASS')
-ON CONFLICT (username) DO NOTHING;
-"
-
-# Ensure permissions exist and are assigned to admin
-echo "Ensuring permissions..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
-INSERT INTO roles (id, name, description) VALUES (gen_random_uuid(), 'admin', 'Administrator') ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO permissions (id, key, description) VALUES 
-(gen_random_uuid(), 'repo.read', 'Read access'),
-(gen_random_uuid(), 'repo.write', 'Write access'),
-(gen_random_uuid(), 'repo.manage', 'Manage access')
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r, permissions p
-WHERE r.name = 'admin' AND p.key IN ('repo.read', 'repo.write', 'repo.manage')
-ON CONFLICT DO NOTHING;
-"
-
-# Assign admin role
-echo "Assigning admin role..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
-INSERT INTO user_roles (user_id, role_id)
-SELECT u.id, r.id
-FROM users u, roles r
-WHERE u.username = '$ADMIN_USER' AND r.name = 'admin'
-ON CONFLICT DO NOTHING;
-"
-
-echo "Starting Maven E2E Test..."
-
-cleanup() {
-  echo "Cleaning up..."
-
-  # Stop upstream server inside API container (best-effort)
-  docker exec $API_CONTAINER sh -lc "pkill -f e2e-maven-basic-upstream" >/dev/null 2>&1 || true
-
-  if [ ! -z "$AUTH_TOKEN" ]; then
-    for id in "${REPO_IDS[@]}"; do
-      if [ ! -z "$id" ]; then
-        echo "Deleting repo ($id)..."
-        curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/repositories/$id" > /dev/null || true
-      fi
-    done
-  fi
-
-  if [ ! -z "$USER_ID" ] && [ ! -z "$AUTH_TOKEN" ]; then
-    echo "Deleting test user $ADMIN_USER ($USER_ID)..."
-    curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$USER_ID" > /dev/null || true
-  fi
-
-  rm -rf $TEMP_DIR || true
+setup_auth() {
+  local hashed_pass login_response
+  hashed_pass=$(docker exec -w /workspace/apps/api "$API_CONTAINER" node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));")
+  run_sql "INSERT INTO users (id, username, passwordhash) VALUES (gen_random_uuid(), '$ADMIN_USER', '$hashed_pass') ON CONFLICT (username) DO NOTHING; INSERT INTO roles (id, name, description) VALUES (gen_random_uuid(), 'admin', 'Administrator') ON CONFLICT (name) DO NOTHING; INSERT INTO permissions (id, key, description) VALUES (gen_random_uuid(), 'repo.read', 'Read access'), (gen_random_uuid(), 'repo.write', 'Write access'), (gen_random_uuid(), 'repo.manage', 'Manage access') ON CONFLICT (key) DO NOTHING; INSERT INTO role_permissions (role_id, permission_id) SELECT r.id, p.id FROM roles r, permissions p WHERE r.name = 'admin' AND p.key IN ('repo.read', 'repo.write', 'repo.manage') ON CONFLICT DO NOTHING; INSERT INTO user_roles (user_id, role_id) SELECT u.id, r.id FROM users u, roles r WHERE u.username = '$ADMIN_USER' AND r.name = 'admin' ON CONFLICT DO NOTHING;"
+  login_response=$(curl -s -X POST "$API_URL/auth/login" -H "Content-Type: application/json" -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
+  AUTH_TOKEN=$(echo "$login_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+  USER_ID=$(echo "$login_response" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
+  hashed_pass=$(docker exec -w /workspace/apps/api "$API_CONTAINER" node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$LIMITED_PASS', 10));")
+  run_sql "INSERT INTO users (id, username, passwordhash) VALUES (gen_random_uuid(), '$LIMITED_USER', '$hashed_pass') ON CONFLICT (username) DO NOTHING;"
+  login_response=$(curl -s -X POST "$API_URL/auth/login" -H "Content-Type: application/json" -d "{\"username\":\"$LIMITED_USER\",\"password\":\"$LIMITED_PASS\"}")
+  LIMITED_TOKEN=$(echo "$login_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+  LIMITED_USER_ID=$(echo "$login_response" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
+  [ -n "$AUTH_TOKEN" ] || { echo -e "${RED}Authentication failed${NC}"; echo "$login_response"; exit 1; }
+  [ -n "$LIMITED_TOKEN" ] || { echo -e "${RED}Limited authentication failed${NC}"; exit 1; }
 }
-if [ "$SKIP_CLEANUP" != "1" ]; then trap cleanup EXIT; fi
 
 create_repo() {
-  local name="$1"
-  local type="$2"
-  local manager="$3"
-  local config_json="$4"
-
-  local body
-  body=$(curl -sS -X POST "$API_URL/repositories" \
-    -H "Authorization: Bearer $AUTH_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"name\":\"$name\",\"type\":\"$type\",\"manager\":\"$manager\",\"config\":$config_json}")
-
-  local id
-  id=$(echo "$body" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
-  if [ -z "$id" ]; then
-    echo -e "${RED}Failed to create repo $name: $body${NC}" >&2
-    return 1
-  fi
+  local name="$1" type="$2" config_json="$3" body id
+  body=$(curl -sS -X POST "$API_URL/repositories" -H "Authorization: Bearer $AUTH_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$name\",\"type\":\"$type\",\"manager\":\"maven\",\"config\":$config_json}")
+  id=$(echo "$body" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
+  [ -n "$id" ] || { echo -e "${RED}Failed to create repo $name: $body${NC}"; exit 1; }
+  REPO_IDS+=("$id")
   echo "$id"
 }
 
-put_artifact() {
-  local repo_id="$1"
-  local repo_path="$2"
-  local file_path="$3"
-
-  local code
-  code=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT \
-    -H "Authorization: Bearer $AUTH_TOKEN" \
-    -H "Content-Type: application/octet-stream" \
-    --data-binary "@$file_path" \
-    "$REPOS_URL/$repo_id/$repo_path")
-
-
-  if [ "$code" != "200" ]; then
-    echo -e "${RED}PUT failed ($code) -> $repo_id/$repo_path${NC}"
-    exit 1
-  fi
+get_artifact() {
+  local repo_id="$1" repo_path="$2" output_file="$3" code
+  code=$(curl -sS -o "$output_file" -w "%{http_code}" -H "Authorization: Bearer $AUTH_TOKEN" "$REPOS_URL/$repo_id/$repo_path")
+  [ "$code" = "200" ] || { echo -e "${RED}GET failed ($code) -> $repo_id/$repo_path${NC}"; exit 1; }
 }
 
-get_artifact() {
-  local repo_id="$1"
-  local repo_path="$2"
-  local out_file="$3"
+put_artifact() {
+  local repo_id="$1" repo_path="$2" file_path="$3" code
+  code=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT -H "Authorization: Bearer $AUTH_TOKEN" -H "Content-Type: application/octet-stream" --data-binary "@$file_path" "$REPOS_URL/$repo_id/$repo_path")
+  [ "$code" = "200" ] || { echo -e "${RED}PUT failed ($code) -> $repo_id/$repo_path${NC}"; exit 1; }
+}
 
-  local code
-  code=$(curl -sS -o "$out_file" -w "%{http_code}" -H "Authorization: Bearer $AUTH_TOKEN" \
-    "$REPOS_URL/$repo_id/$repo_path")
-  if [ "$code" != "200" ]; then
-    echo -e "${RED}GET failed ($code) -> $repo_id/$repo_path${NC}"
-    exit 1
-  fi
+put_artifact_status() {
+  local repo_id="$1" repo_path="$2" file_path="$3" token="$4"
+  if [ -n "$token" ]; then curl -sS -o /dev/null -w "%{http_code}" -X PUT -H "Authorization: Bearer $token" -H "Content-Type: application/octet-stream" --data-binary "@$file_path" "$REPOS_URL/$repo_id/$repo_path"; return; fi
+  curl -sS -o /dev/null -w "%{http_code}" -X PUT -H "Content-Type: application/octet-stream" --data-binary "@$file_path" "$REPOS_URL/$repo_id/$repo_path"
 }
 
 upload_via_group() {
-  local repo_id="$1"
-  local repo_path="$2"
-  local file_path="$3"
-
-  local content
+  local repo_id="$1" repo_path="$2" file_path="$3" content response
   content=$(base64 -w0 "$file_path")
-
-  local res
-  res=$(curl -sS -X POST "$REPOS_URL/$repo_id/upload" \
-    -H "Authorization: Bearer $AUTH_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"path\":\"$repo_path\",\"content\":\"$content\"}")
-
-  if echo "$res" | grep -q '"ok":true'; then
-    echo "✓ Uploaded via group to $repo_id ($repo_path)"
-  else
-    echo -e "${RED}Upload via group failed: $res${NC}"
-    exit 1
-  fi
+  response=$(curl -sS -X POST "$REPOS_URL/$repo_id/upload" -H "Authorization: Bearer $AUTH_TOKEN" -H "Content-Type: application/json" -d "{\"path\":\"$repo_path\",\"encoding\":\"base64\",\"content\":\"$content\"}")
+  echo "$response" | grep -q '"ok":true' || { echo -e "${RED}Group upload failed: $response${NC}"; exit 1; }
 }
 
-# 0. Setup Auth (reuse the same technique as docker.sh)
-echo "Setting up authentication..."
+create_real_maven_artifact() {
+  local artifact_id="$1" version="$2" class_name="$3" target_dir source_dir classes_dir
+  target_dir="$ARTIFACT_DIR/$artifact_id-$version"
+  source_dir="$target_dir/src/main/java/com/acme"
+  classes_dir="$target_dir/classes"
+  mkdir -p "$source_dir" "$classes_dir"
+  cat > "$source_dir/$class_name.java" <<EOF
+package com.acme;
 
-echo "Generating password hash..."
-HASHED_PASS=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$ADMIN_PASS', 10));")
-
-echo "Inserting admin user into DB..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
-INSERT INTO users (id, username, passwordhash)
-VALUES (gen_random_uuid(), '$ADMIN_USER', '$HASHED_PASS')
-ON CONFLICT (username) DO NOTHING;
-" > /dev/null
-
-echo "Ensuring permissions..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
-INSERT INTO roles (id, name, description) VALUES (gen_random_uuid(), 'admin', 'Administrator') ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO permissions (id, key, description) VALUES 
-(gen_random_uuid(), 'repo.read', 'Read access'),
-(gen_random_uuid(), 'repo.write', 'Write access'),
-(gen_random_uuid(), 'repo.manage', 'Manage access')
-ON CONFLICT (key) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r, permissions p
-WHERE r.name = 'admin' AND p.key IN ('repo.read', 'repo.write', 'repo.manage')
-ON CONFLICT DO NOTHING;
-" > /dev/null
-
-echo "Assigning admin role..."
-docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
-INSERT INTO user_roles (user_id, role_id)
-SELECT u.id, r.id
-FROM users u, roles r
-WHERE u.username = '$ADMIN_USER' AND r.name = 'admin'
-ON CONFLICT DO NOTHING;
-" > /dev/null
-
-LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
-
-AUTH_TOKEN=$(echo "$LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-USER_ID=$(echo "$LOGIN_RES" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
-
-if [ -z "$AUTH_TOKEN" ]; then
-  echo -e "${RED}Failed to authenticate: $LOGIN_RES${NC}"
-  exit 1
-fi
-
-# 1) Proxy público (Maven Central)
-echo "Creating Maven Proxy repository (Maven Central)..."
-PROXY_ID=$(create_repo "$RUN_ID-proxy" "proxy" "maven" '{"proxyUrl":"https://repo1.maven.org/maven2","cacheMaxAgeDays":7}')
-REPO_IDS+=("$PROXY_ID")
-
-echo "[Proxy] Fetching junit pom via proxy..."
-OUT_POM="$TEMP_DIR/junit-4.12.pom"
-get_artifact "$PROXY_ID" "junit/junit/4.12/junit-4.12.pom" "$OUT_POM"
-if grep -q "<artifactId>junit</artifactId>" "$OUT_POM"; then
-  echo -e "${GREEN}Maven Proxy Test Passed${NC}"
-else
-  echo -e "${RED}Maven Proxy Test Failed${NC}"
-  exit 1
-fi
-
-# 2) Hosted (deploy via PUT + checksum on-demand)
-echo "Creating Maven Hosted repository..."
-HOSTED_ID=$(create_repo "$RUN_ID-hosted" "hosted" "maven" '{"allowRedeploy":true}')
-REPO_IDS+=("$HOSTED_ID")
-
-echo "[Hosted] Creating a test POM and deploying via PUT..."
-mkdir -p "$TEMP_DIR/maven"
-cat > "$TEMP_DIR/maven/demo-1.0.0.pom" <<XML
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <groupId>com.acme</groupId>
-  <artifactId>demo</artifactId>
-  <version>1.0.0</version>
-</project>
-XML
-
-PUT_PATH="com/acme/demo/1.0.0/demo-1.0.0.pom"
-put_artifact "$HOSTED_ID" "$PUT_PATH" "$TEMP_DIR/maven/demo-1.0.0.pom"
-
-echo "[Hosted] Fetching deployed POM..."
-get_artifact "$HOSTED_ID" "$PUT_PATH" "$TEMP_DIR/demo-1.0.0.pom"
-if grep -q "<artifactId>demo</artifactId>" "$TEMP_DIR/demo-1.0.0.pom"; then
-  echo -e "${GREEN}Maven Hosted Read Test Passed${NC}"
-else
-  echo -e "${RED}Maven Hosted Read Test Failed${NC}"
-  exit 1
-fi
-
-echo "[Hosted] Fetching checksum on-demand (.sha1)..."
-get_artifact "$HOSTED_ID" "$PUT_PATH.sha1" "$TEMP_DIR/demo-1.0.0.pom.sha1"
-if [ -s "$TEMP_DIR/demo-1.0.0.pom.sha1" ]; then
-  echo -e "${GREEN}Maven Hosted Checksum Test Passed${NC}"
-else
-  echo -e "${RED}Maven Hosted Checksum Test Failed${NC}"
-  exit 1
-fi
-
-# 3) Group read/write (hosted member, writePolicy:first)
-echo "Creating Maven Group repository (members: hosted, writePolicy:first)..."
-GROUP_ID=$(create_repo "$RUN_ID-group" "group" "maven" "{\"members\":[\"$HOSTED_ID\"],\"writePolicy\":\"first\"}")
-REPO_IDS+=("$GROUP_ID")
-
-echo "[Group] Fetching POM via group..."
-get_artifact "$GROUP_ID" "$PUT_PATH" "$TEMP_DIR/group-demo-1.0.0.pom"
-if grep -q "<groupId>com.acme</groupId>" "$TEMP_DIR/group-demo-1.0.0.pom"; then
-  echo -e "${GREEN}Maven Group Read Test Passed${NC}"
-else
-  echo -e "${RED}Maven Group Read Test Failed${NC}"
-  exit 1
-fi
-
-echo "[GroupWrite] Uploading a new version via group upload API..."
-cat > "$TEMP_DIR/maven/demo-1.0.1.pom" <<XML
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <groupId>com.acme</groupId>
-  <artifactId>demo</artifactId>
-  <version>1.0.1</version>
-</project>
-XML
-
-PUT_PATH_2="com/acme/demo/1.0.1/demo-1.0.1.pom"
-upload_via_group "$GROUP_ID" "$PUT_PATH_2" "$TEMP_DIR/maven/demo-1.0.1.pom"
-
-echo "[GroupWrite] Fetching v1.0.1 via group..."
-get_artifact "$GROUP_ID" "$PUT_PATH_2" "$TEMP_DIR/group-demo-1.0.1.pom"
-if grep -q "<version>1.0.1</version>" "$TEMP_DIR/group-demo-1.0.1.pom"; then
-  echo -e "${GREEN}Maven Group Write Test Passed${NC}"
-else
-  echo -e "${RED}Maven Group Write Test Failed${NC}"
-  exit 1
-fi
-
-# 3b) Group Write 'preferred'
-echo "[GroupWrite] Testing 'preferred' policy..."
-HOSTED_ID_2=$(create_repo "$RUN_ID-hosted-2" "hosted" "maven" '{"allowRedeploy":true}')
-REPO_IDS+=("$HOSTED_ID_2")
-
-GROUP_PREF_ID=$(create_repo "$RUN_ID-group-pref" "group" "maven" "{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"preferred\",\"preferredWriter\":\"$HOSTED_ID_2\"}")
-REPO_IDS+=("$GROUP_PREF_ID")
-
-cat > "$TEMP_DIR/maven/demo-pref.pom" <<XML
-<project><groupId>com.acme</groupId><artifactId>demo-pref</artifactId><version>1.0.0</version></project>
-XML
-upload_via_group "$GROUP_PREF_ID" "com/acme/demo-pref/1.0.0/demo-pref-1.0.0.pom" "$TEMP_DIR/maven/demo-pref.pom"
-
-# Verify in hosted-2
-get_artifact "$HOSTED_ID_2" "com/acme/demo-pref/1.0.0/demo-pref-1.0.0.pom" "$TEMP_DIR/check-pref.pom"
-if grep -q "demo-pref" "$TEMP_DIR/check-pref.pom"; then
-  echo -e "${GREEN}Maven Group Write 'preferred' Passed${NC}"
-else
-  echo -e "${RED}Maven Group Write 'preferred' Failed${NC}"
-  exit 1
-fi
-
-# 3c) Group Write 'mirror'
-echo "[GroupWrite] Testing 'mirror' policy..."
-GROUP_MIRROR_ID=$(create_repo "$RUN_ID-group-mirror" "group" "maven" "{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"mirror\"}")
-REPO_IDS+=("$GROUP_MIRROR_ID")
-
-cat > "$TEMP_DIR/maven/demo-mirror.pom" <<XML
-<project><groupId>com.acme</groupId><artifactId>demo-mirror</artifactId><version>1.0.0</version></project>
-XML
-upload_via_group "$GROUP_MIRROR_ID" "com/acme/demo-mirror/1.0.0/demo-mirror-1.0.0.pom" "$TEMP_DIR/maven/demo-mirror.pom"
-
-# Verify in BOTH
-get_artifact "$HOSTED_ID" "com/acme/demo-mirror/1.0.0/demo-mirror-1.0.0.pom" "$TEMP_DIR/check-mirror-1.pom"
-get_artifact "$HOSTED_ID_2" "com/acme/demo-mirror/1.0.0/demo-mirror-1.0.0.pom" "$TEMP_DIR/check-mirror-2.pom"
-
-if grep -q "demo-mirror" "$TEMP_DIR/check-mirror-1.pom" && grep -q "demo-mirror" "$TEMP_DIR/check-mirror-2.pom"; then
-  echo -e "${GREEN}Maven Group Write 'mirror' Passed${NC}"
-else
-  echo -e "${RED}Maven Group Write 'mirror' Failed${NC}"
-  exit 1
-fi
-
-# 4) Proxy-Auth upstream (Basic) + SNAPSHOT resolution
-echo "[ProxyAuth] Starting Basic upstream inside API container..."
-docker exec $API_CONTAINER sh -lc "mkdir -p /tmp/e2e-maven-upstream" >/dev/null
-
-docker exec -d $API_CONTAINER sh -lc "node -e '
-  const http = require(\"http\");
-  const USER = process.env.UP_USER || \"$UP_USER\";
-  const PASS = process.env.UP_PASS || \"$UP_PASS\";
-  const PORT = parseInt(process.env.UP_PORT || \"$UPSTREAM_PORT\", 10);
-
-  function unauthorized(res) {
-    res.writeHead(401, { \"WWW-Authenticate\": \"Basic realm=\\\"up\\\"\" });
-    res.end(\"Unauthorized\");
-  }
-
-  const snapshotMeta = \`<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<metadata>
-  <groupId>com.acme</groupId>
-  <artifactId>snapdemo</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
-  <versioning>
-    <snapshot>
-      <timestamp>20251213.000000</timestamp>
-      <buildNumber>1</buildNumber>
-    </snapshot>
-    <snapshotVersions>
-      <snapshotVersion>
-        <extension>pom</extension>
-        <value>1.0.0-20251213.000000-1</value>
-        <updated>20251213000000</updated>
-      </snapshotVersion>
-    </snapshotVersions>
-  </versioning>
-</metadata>\`;
-
-  const server = http.createServer((req, res) => {
-    const auth = req.headers.authorization || \"\";
-    if (!auth.startsWith(\"Basic \")) return unauthorized(res);
-    const decoded = Buffer.from(auth.slice(6).trim(), \"base64\").toString(\"utf8\");
-    const idx = decoded.indexOf(\":\");
-    const u = idx >= 0 ? decoded.slice(0, idx) : decoded;
-    const p = idx >= 0 ? decoded.slice(idx + 1) : \"\";
-    if (u !== USER || p !== PASS) return unauthorized(res);
-
-    // Release POM
-    if (req.url === \"/com/acme/authdemo/1.0.0/authdemo-1.0.0.pom\") {
-      res.writeHead(200, { \"Content-Type\": \"application/xml\" });
-      return res.end(\"<project><modelVersion>4.0.0</modelVersion><groupId>com.acme</groupId><artifactId>authdemo</artifactId><version>1.0.0</version></project>\");
+public final class $class_name {
+    public static String version() {
+        return "$version";
     }
+}
+EOF
+  cat > "$target_dir/$artifact_id-$version.pom" <<EOF
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"><modelVersion>4.0.0</modelVersion><groupId>com.acme</groupId><artifactId>$artifact_id</artifactId><version>$version</version><packaging>jar</packaging></project>
+EOF
+  javac -d "$classes_dir" "$source_dir/$class_name.java"
+  jar --create --file "$target_dir/$artifact_id-$version.jar" -C "$classes_dir" . >/dev/null
+  echo "$target_dir"
+}
 
-    // SNAPSHOT metadata
-    if (req.url === \"/com/acme/snapdemo/1.0.0-SNAPSHOT/maven-metadata.xml\") {
-      res.writeHead(200, { \"Content-Type\": \"application/xml\" });
-      return res.end(snapshotMeta);
-    }
+verify_pom() { grep -q "<artifactId>$2</artifactId>" "$1" && grep -q "<version>$3</version>" "$1" || { echo -e "${RED}Invalid POM: $1${NC}"; exit 1; }; }
+verify_jar() { jar tf "$1" | grep -q "com/acme/$2.class" || { echo -e "${RED}Invalid JAR: $1${NC}"; exit 1; }; }
+verify_sha1() { [ "$(sha1sum "$1" | awk '{print $1}')" = "$(tr -d '[:space:]' < "$2")" ] || { echo -e "${RED}Checksum mismatch for $1${NC}"; exit 1; }; }
 
-    // SNAPSHOT resolved POM
-    if (req.url === \"/com/acme/snapdemo/1.0.0-SNAPSHOT/snapdemo-1.0.0-20251213.000000-1.pom\") {
-      res.writeHead(200, { \"Content-Type\": \"application/xml\" });
-      return res.end(\"<project><modelVersion>4.0.0</modelVersion><groupId>com.acme</groupId><artifactId>snapdemo</artifactId><version>1.0.0-SNAPSHOT</version></project>\");
-    }
+download_and_verify_release() {
+  local repo_id="$1" artifact_id="$2" version="$3" class_name="$4" prefix base
+  prefix="$TEMP_DIR/$repo_id-$artifact_id-$version"
+  base="com/acme/$artifact_id/$version/$artifact_id-$version"
+  get_artifact "$repo_id" "$base.pom" "$prefix.pom"
+  get_artifact "$repo_id" "$base.jar" "$prefix.jar"
+  verify_pom "$prefix.pom" "$artifact_id" "$version"
+  verify_jar "$prefix.jar" "$class_name"
+}
 
-    res.writeHead(404);
-    return res.end(\"Not found\");
-  });
+stage_upstream_files() {
+  local auth_artifact snapshot_artifact auth_dir snapshot_dir server_file metadata_file
+  auth_artifact=$(create_real_maven_artifact "authdemo" "1.0.0" "AuthDemo")
+  snapshot_artifact=$(create_real_maven_artifact "snapdemo" "1.0.0-SNAPSHOT" "SnapDemo")
+  auth_dir="$TEMP_DIR/upstream/com/acme/authdemo/1.0.0"
+  snapshot_dir="$TEMP_DIR/upstream/com/acme/snapdemo/1.0.0-SNAPSHOT"
+  mkdir -p "$auth_dir" "$snapshot_dir"
+  cp "$auth_artifact/authdemo-1.0.0.pom" "$auth_dir/authdemo-1.0.0.pom"
+  cp "$auth_artifact/authdemo-1.0.0.jar" "$auth_dir/authdemo-1.0.0.jar"
+  cp "$snapshot_artifact/snapdemo-1.0.0-SNAPSHOT.pom" "$snapshot_dir/snapdemo-1.0.0-$SNAPSHOT_TS-$SNAPSHOT_BUILD.pom"
+  cp "$snapshot_artifact/snapdemo-1.0.0-SNAPSHOT.jar" "$snapshot_dir/snapdemo-1.0.0-$SNAPSHOT_TS-$SNAPSHOT_BUILD.jar"
+  metadata_file="$snapshot_dir/maven-metadata.xml"
+  cat > "$metadata_file" <<EOF
+<?xml version="1.0" encoding="UTF-8"?><metadata><groupId>com.acme</groupId><artifactId>snapdemo</artifactId><version>1.0.0-SNAPSHOT</version><versioning><snapshot><timestamp>$SNAPSHOT_TS</timestamp><buildNumber>$SNAPSHOT_BUILD</buildNumber></snapshot><snapshotVersions><snapshotVersion><extension>pom</extension><value>1.0.0-$SNAPSHOT_TS-$SNAPSHOT_BUILD</value><updated>20251213000000</updated></snapshotVersion><snapshotVersion><extension>jar</extension><value>1.0.0-$SNAPSHOT_TS-$SNAPSHOT_BUILD</value><updated>20251213000000</updated></snapshotVersion></snapshotVersions></versioning></metadata>
+EOF
+  server_file="$TEMP_DIR/upstream-server.js"
+  cat > "$server_file" <<EOF
+const fs = require('fs'); const path = require('path'); const http = require('http'); const root = '/tmp/e2e-maven-upstream'; const user = '$UP_USER'; const pass = '$UP_PASS'; const port = $UP_PORT; const unauthorized = (res) => { res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="up"' }); res.end('Unauthorized'); }; http.createServer((req, res) => { const auth = req.headers.authorization || ''; if (!auth.startsWith('Basic ')) return unauthorized(res); const decoded = Buffer.from(auth.slice(6).trim(), 'base64').toString('utf8'); if (decoded !== user + ':' + pass) return unauthorized(res); const safePath = path.normalize(req.url).replace(/^\/+/, ''); const filePath = path.join(root, safePath); if (!filePath.startsWith(root) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) { res.writeHead(404); return res.end('Not found'); } res.writeHead(200, { 'Content-Type': filePath.endsWith('.jar') ? 'application/java-archive' : 'application/xml' }); fs.createReadStream(filePath).pipe(res); }).listen(port, '0.0.0.0', () => console.log('e2e-maven-basic-upstream listening', port)); process.title = 'e2e-maven-basic-upstream';
+EOF
+  docker exec "$API_CONTAINER" sh -lc "rm -rf /tmp/e2e-maven-upstream && mkdir -p /tmp/e2e-maven-upstream"
+  docker cp "$TEMP_DIR/upstream/." "$API_CONTAINER:/tmp/e2e-maven-upstream"
+  docker cp "$server_file" "$API_CONTAINER:/tmp/e2e-maven-upstream/server.js"
+}
 
-  server.listen(PORT, \"0.0.0.0\", () => console.log(\"e2e-maven-basic-upstream listening\", PORT));
+setup_auth
+echo "Starting Maven E2E Test..."
 
-  process.title = \"e2e-maven-basic-upstream\";
-'" >/dev/null
+PROXY_ID=$(create_repo "$RUN_ID-proxy" "proxy" '{"proxyUrl":"https://repo1.maven.org/maven2","cacheMaxAgeDays":7}')
+get_artifact "$PROXY_ID" "junit/junit/4.12/junit-4.12.pom" "$TEMP_DIR/junit-4.12.pom"
+get_artifact "$PROXY_ID" "junit/junit/4.12/junit-4.12.jar" "$TEMP_DIR/junit-4.12.jar"
+verify_pom "$TEMP_DIR/junit-4.12.pom" "junit" "4.12"
+jar tf "$TEMP_DIR/junit-4.12.jar" | grep -q 'junit/framework/Test.class' || { echo -e "${RED}Maven Proxy Test Failed${NC}"; exit 1; }
+echo -e "${GREEN}Maven Proxy Test Passed${NC}"
 
-echo "Creating Maven Proxy repository (Auth -> Basic upstream)..."
-PROXY_AUTH_ID=$(create_repo "$RUN_ID-proxy-auth" "proxy" "maven" "{\"proxyUrl\":\"http://localhost:$UPSTREAM_PORT\",\"requireAuth\":true,\"auth\":{\"type\":\"basic\",\"username\":\"$UP_USER\",\"password\":\"$UP_PASS\"},\"cacheMaxAgeDays\":7}")
-REPO_IDS+=("$PROXY_AUTH_ID")
+HOSTED_ID=$(create_repo "$RUN_ID-hosted" "hosted" '{"allowRedeploy":true}')
+GROUP_ID=$(create_repo "$RUN_ID-group" "group" "{\"members\":[\"$HOSTED_ID\"],\"writePolicy\":\"first\"}")
+DEMO_DIR=$(create_real_maven_artifact "demo" "1.0.0" "Demo")
+put_artifact "$HOSTED_ID" "com/acme/demo/1.0.0/demo-1.0.0.pom" "$DEMO_DIR/demo-1.0.0.pom"
+put_artifact "$HOSTED_ID" "com/acme/demo/1.0.0/demo-1.0.0.jar" "$DEMO_DIR/demo-1.0.0.jar"
+download_and_verify_release "$HOSTED_ID" "demo" "1.0.0" "Demo"
+get_artifact "$HOSTED_ID" "com/acme/demo/1.0.0/demo-1.0.0.jar.sha1" "$TEMP_DIR/demo-1.0.0.jar.sha1"
+verify_sha1 "$DEMO_DIR/demo-1.0.0.jar" "$TEMP_DIR/demo-1.0.0.jar.sha1"
+echo -e "${GREEN}Maven Hosted Test Passed${NC}"
 
-echo "[ProxyAuth] Fetching release POM via proxy-auth..."
-get_artifact "$PROXY_AUTH_ID" "com/acme/authdemo/1.0.0/authdemo-1.0.0.pom" "$TEMP_DIR/authdemo-1.0.0.pom"
-if grep -q "<artifactId>authdemo</artifactId>" "$TEMP_DIR/authdemo-1.0.0.pom"; then
-  echo -e "${GREEN}Maven Proxy Auth Test Passed${NC}"
-else
-  echo -e "${RED}Maven Proxy Auth Test Failed${NC}"
-  exit 1
-fi
+DENY_DIR=$(create_real_maven_artifact "demo-denied" "1.0.0" "DemoDenied")
+LIMITED_PUT_CODE=$(put_artifact_status "$HOSTED_ID" "com/acme/demo-denied/1.0.0/demo-denied-1.0.0.pom" "$DENY_DIR/demo-denied-1.0.0.pom" "$LIMITED_TOKEN")
+ANON_PUT_CODE=$(put_artifact_status "$HOSTED_ID" "com/acme/demo-denied/1.0.0/demo-denied-1.0.0.pom" "$DENY_DIR/demo-denied-1.0.0.pom" "")
+[ "$LIMITED_PUT_CODE" = "403" ] && [ "$ANON_PUT_CODE" = "401" ] || { echo -e "${RED}Maven Permission Test Failed (limited=$LIMITED_PUT_CODE anon=$ANON_PUT_CODE)${NC}"; exit 1; }
+echo -e "${GREEN}Maven Permission Test Passed${NC}"
 
-echo "[ProxyAuth] Fetching SNAPSHOT POM (should resolve via maven-metadata.xml)..."
+download_and_verify_release "$GROUP_ID" "demo" "1.0.0" "Demo"
+echo -e "${GREEN}Maven Group Read Test Passed${NC}"
+
+FIRST_DIR=$(create_real_maven_artifact "demo-first" "1.0.0" "DemoFirst")
+upload_via_group "$GROUP_ID" "com/acme/demo-first/1.0.0/demo-first-1.0.0.pom" "$FIRST_DIR/demo-first-1.0.0.pom"
+upload_via_group "$GROUP_ID" "com/acme/demo-first/1.0.0/demo-first-1.0.0.jar" "$FIRST_DIR/demo-first-1.0.0.jar"
+download_and_verify_release "$HOSTED_ID" "demo-first" "1.0.0" "DemoFirst"
+echo -e "${GREEN}Maven Group Write 'first' Passed${NC}"
+
+HOSTED_ID_2=$(create_repo "$RUN_ID-hosted-2" "hosted" '{"allowRedeploy":true}')
+GROUP_PREF_ID=$(create_repo "$RUN_ID-group-pref" "group" "{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"preferred\",\"preferredWriter\":\"$HOSTED_ID_2\"}")
+PREF_DIR=$(create_real_maven_artifact "demo-pref" "1.0.0" "DemoPref")
+upload_via_group "$GROUP_PREF_ID" "com/acme/demo-pref/1.0.0/demo-pref-1.0.0.pom" "$PREF_DIR/demo-pref-1.0.0.pom"
+upload_via_group "$GROUP_PREF_ID" "com/acme/demo-pref/1.0.0/demo-pref-1.0.0.jar" "$PREF_DIR/demo-pref-1.0.0.jar"
+download_and_verify_release "$HOSTED_ID_2" "demo-pref" "1.0.0" "DemoPref"
+echo -e "${GREEN}Maven Group Write 'preferred' Passed${NC}"
+
+GROUP_MIRROR_ID=$(create_repo "$RUN_ID-group-mirror" "group" "{\"members\":[\"$HOSTED_ID\",\"$HOSTED_ID_2\"],\"writePolicy\":\"mirror\"}")
+MIRROR_DIR=$(create_real_maven_artifact "demo-mirror" "1.0.0" "DemoMirror")
+upload_via_group "$GROUP_MIRROR_ID" "com/acme/demo-mirror/1.0.0/demo-mirror-1.0.0.pom" "$MIRROR_DIR/demo-mirror-1.0.0.pom"
+upload_via_group "$GROUP_MIRROR_ID" "com/acme/demo-mirror/1.0.0/demo-mirror-1.0.0.jar" "$MIRROR_DIR/demo-mirror-1.0.0.jar"
+download_and_verify_release "$HOSTED_ID" "demo-mirror" "1.0.0" "DemoMirror"
+download_and_verify_release "$HOSTED_ID_2" "demo-mirror" "1.0.0" "DemoMirror"
+echo -e "${GREEN}Maven Group Write 'mirror' Passed${NC}"
+
+stage_upstream_files
+docker exec -d "$API_CONTAINER" sh -lc "node /tmp/e2e-maven-upstream/server.js" > /dev/null
+PROXY_AUTH_ID=$(create_repo "$RUN_ID-proxy-auth" "proxy" "{\"proxyUrl\":\"http://localhost:$UP_PORT\",\"requireAuth\":true,\"auth\":{\"type\":\"basic\",\"username\":\"$UP_USER\",\"password\":\"$UP_PASS\"},\"cacheMaxAgeDays\":7}")
+download_and_verify_release "$PROXY_AUTH_ID" "authdemo" "1.0.0" "AuthDemo"
+echo -e "${GREEN}Maven Proxy Auth Test Passed${NC}"
+
 get_artifact "$PROXY_AUTH_ID" "com/acme/snapdemo/1.0.0-SNAPSHOT/snapdemo-1.0.0-SNAPSHOT.pom" "$TEMP_DIR/snapdemo-snapshot.pom"
-if grep -q "<artifactId>snapdemo</artifactId>" "$TEMP_DIR/snapdemo-snapshot.pom"; then
-  echo -e "${GREEN}Maven SNAPSHOT Resolution Test Passed${NC}"
-else
-  echo -e "${RED}Maven SNAPSHOT Resolution Test Failed${NC}"
-  exit 1
-fi
+get_artifact "$PROXY_AUTH_ID" "com/acme/snapdemo/1.0.0-SNAPSHOT/snapdemo-1.0.0-SNAPSHOT.jar" "$TEMP_DIR/snapdemo-snapshot.jar"
+verify_pom "$TEMP_DIR/snapdemo-snapshot.pom" "snapdemo" "1.0.0-SNAPSHOT"
+verify_jar "$TEMP_DIR/snapdemo-snapshot.jar" "SnapDemo"
+echo -e "${GREEN}Maven SNAPSHOT Resolution Test Passed${NC}"
+
+docker exec "$API_CONTAINER" sh -lc "pkill -f e2e-maven-basic-upstream || true" > /dev/null 2>&1 || true
+download_and_verify_release "$PROXY_AUTH_ID" "authdemo" "1.0.0" "AuthDemo"
+echo -e "${GREEN}Maven Proxy Cache Test Passed${NC}"
 
 echo -e "${GREEN}All Maven Tests Passed${NC}"
-
-rm -rf $TEMP_DIR

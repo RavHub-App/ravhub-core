@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -24,6 +24,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext'
+import { useNotification } from '../NotificationSystem';
+import { copyTextToClipboard } from '../../utils/clipboard';
 import { getRepoAccessUrl } from '../../utils/repo'
 import { canPerformOnRepo, hasGlobalPermission } from './repo-permissions'
 
@@ -35,17 +37,18 @@ interface RepoCardProps {
 export default function RepoCard({ repo, onDelete }: RepoCardProps) {
     const [liveStatus, setLiveStatus] = React.useState<any | null>(null);
     const [checking, setChecking] = React.useState(false);
-    const handleCopyUrl = (e: React.MouseEvent) => {
+    const { notify } = useNotification();
+    const handleCopyUrl = async (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (!accessUrl) {
-            // defensive: accessUrl should normally exist, but if routeName is missing
-            // don't copy "undefined" and warn so we can trace problematic repos
             console.warn('RepoCard: copy requested but accessUrl is undefined for', repo)
+            notify('Failed to copy URL');
             return;
         }
 
-        navigator.clipboard.writeText(accessUrl);
+        const copied = await copyTextToClipboard(accessUrl);
+        notify(copied ? 'URL copied to clipboard' : 'Failed to copy URL');
     };
 
     const handleDelete = (e: React.MouseEvent) => {
@@ -100,7 +103,7 @@ export default function RepoCard({ repo, onDelete }: RepoCardProps) {
             }
         })();
         return () => { mounted = false; };
-    }, [repo.id, repo.type, upstreamStatus]);
+    }, [repo.id, repo.name, repo.type, upstreamStatus]);
 
     return (
         <Card

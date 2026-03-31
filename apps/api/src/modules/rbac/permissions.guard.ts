@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -48,19 +48,19 @@ export class PermissionsGuard implements CanActivate {
     // This prevents early startup DB/guard races from making e2e tests skip.
     try {
       const m = String(req.method).toUpperCase();
+      const requestUrl = typeof req.url === 'string' ? String(req.url) : '';
       if (
         m === 'GET' &&
-        req.url &&
-        typeof req.url === 'string' &&
-        /(^|\/)repository(\/|$)/.test(req.url)
+        requestUrl &&
+        /(^|\/)repository(\/|$)/.test(requestUrl)
       ) {
         this.logger.debug(
           'PermissionsGuard: allowing unauthenticated GET /repository for readiness',
         );
         return true;
       }
-    } catch (err) {
-      // ignore and continue
+    } catch (_error) {
+      void _error;
     }
 
     // First, check if we have a user from JWT authentication (req.user)
@@ -135,7 +135,6 @@ export class PermissionsGuard implements CanActivate {
       }
     } else if (req.headers['x-user-id']) {
       // try to load user from db
-      let userFound = false;
       try {
         const userId = String(req.headers['x-user-id']);
         if (this.userRepo) {
@@ -144,12 +143,15 @@ export class PermissionsGuard implements CanActivate {
             relations: ['roles', 'roles.permissions'],
           });
           if (u) {
-            userFound = true;
             userRoles = (u.roles || []).map((r) => r.name);
           }
         }
-      } catch (err) {
-        this.logger.warn('PermissionsGuard: error loading user ' + err.message);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          'PermissionsGuard: error loading user ' + errorMessage,
+        );
       }
     }
 
@@ -175,8 +177,8 @@ export class PermissionsGuard implements CanActivate {
           where: { name: In(userRoles) },
           relations: ['permissions'],
         });
-      } catch (err) {
-        // fallback to empty
+      } catch (_error) {
+        void _error;
         resolvedRoles = [];
       }
       const userPerms = new Set<string>();

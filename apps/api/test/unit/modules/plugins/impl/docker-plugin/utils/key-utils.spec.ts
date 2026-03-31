@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -70,6 +70,21 @@ describe('DockerPlugin Utils - Key Utils', () => {
       const key = buildKey('', null, undefined);
       expect(key).toBe('');
     });
+
+    it('should warn and preserve malformed encoded segments', () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      const key = buildKey('docker', 'repo%ZZ', 'image');
+
+      expect(key).toBe('docker/repo%25ZZ/image');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to decode buildKey segment'),
+      );
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('tryNormalizeRepoNames', () => {
@@ -90,7 +105,11 @@ describe('DockerPlugin Utils - Key Utils', () => {
 
     it('should convert slashes to commas', () => {
       const result = tryNormalizeRepoNames('org/image');
-      expect(result.some((v) => v.includes(','))).toBe(true);
+      expect(
+        result.some(
+          (value) => typeof value === 'string' && value.includes(','),
+        ),
+      ).toBe(true);
     });
 
     it('should handle empty input', () => {
@@ -107,6 +126,21 @@ describe('DockerPlugin Utils - Key Utils', () => {
       const result = tryNormalizeRepoNames('nginx');
       const unique = new Set(result);
       expect(result.length).toBe(unique.size);
+    });
+
+    it('should warn and keep malformed repository names', () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      const result = tryNormalizeRepoNames('repo%ZZ');
+
+      expect(result).toContain('repo%ZZ');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to decode repository name'),
+      );
+
+      warnSpy.mockRestore();
     });
   });
 
@@ -144,6 +178,21 @@ describe('DockerPlugin Utils - Key Utils', () => {
     it('should handle complex mixed separators', () => {
       const result = normalizeStorageKey('docker/org,team/image');
       expect(result).toBe('docker/org/team/image');
+    });
+
+    it('should warn and keep malformed storage key segments', () => {
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      const result = normalizeStorageKey('docker/repo%ZZ/image');
+
+      expect(result).toBe('docker/repo%25ZZ/image');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to decode storage key segment'),
+      );
+
+      warnSpy.mockRestore();
     });
   });
 });

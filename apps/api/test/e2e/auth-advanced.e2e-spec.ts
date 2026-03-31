@@ -1,87 +1,92 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
  * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  */
 
 import request from 'supertest';
 import { setupTestApp, cleanupTestApp, TestContext } from './test-helpers';
 
 describe('Authentication Advanced E2E', () => {
-    let context: TestContext;
-    let authToken: string;
+  let context: TestContext;
+  let authToken: string;
 
-    beforeAll(async () => {
-        context = await setupTestApp();
+  beforeAll(async () => {
+    context = await setupTestApp();
 
-        const loginRes = await request(context.app.getHttpServer())
-            .post('/api/auth/login')
-            .send({ username: 'admin', password: 'password' });
-        authToken = loginRes.body.token;
+    const loginRes = await request(context.app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'password' });
+    authToken = loginRes.body.token;
+  });
+
+  afterAll(async () => {
+    await cleanupTestApp(context.app);
+  });
+
+  describe('🔑 Token Management', () => {
+    let refreshToken: string;
+
+    it('should get current user info', async () => {
+      const res = await request(context.app.getHttpServer())
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body.user).toHaveProperty('username', 'admin');
+      expect(res.body.user).toHaveProperty('id');
     });
 
-    afterAll(async () => {
-        await cleanupTestApp(context.app);
+    it('should login and receive refresh token', async () => {
+      const res = await request(context.app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ username: 'admin', password: 'password' })
+        .expect(201);
+
+      expect(res.body).toHaveProperty('token');
+      expect(res.body).toHaveProperty('refreshToken');
+      refreshToken = res.body.refreshToken;
     });
 
-    describe('🔑 Token Management', () => {
-        let refreshToken: string;
+    it('should refresh access token', async () => {
+      if (refreshToken) {
+        const res = await request(context.app.getHttpServer())
+          .post('/api/auth/refresh')
+          .send({ refreshToken })
+          .expect(201);
 
-        it('should get current user info', async () => {
-            const res = await request(context.app.getHttpServer())
-                .get('/api/auth/me')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
+        expect(res.body).toHaveProperty('token');
+      }
+    });
+  });
 
-            expect(res.body.user).toHaveProperty('username', 'admin');
-            expect(res.body.user).toHaveProperty('id');
-        });
+  describe('👤 User Registration', () => {
+    it('should check bootstrap status', async () => {
+      const res = await request(context.app.getHttpServer())
+        .get('/api/auth/bootstrap-status')
+        .expect(200);
 
-        it('should login and receive refresh token', async () => {
-            const res = await request(context.app.getHttpServer())
-                .post('/api/auth/login')
-                .send({ username: 'admin', password: 'password' })
-                .expect(201);
-
-            expect(res.body).toHaveProperty('token');
-            expect(res.body).toHaveProperty('refreshToken');
-            refreshToken = res.body.refreshToken;
-        });
-
-        it('should refresh access token', async () => {
-            if (refreshToken) {
-                const res = await request(context.app.getHttpServer())
-                    .post('/api/auth/refresh')
-                    .send({ refreshToken })
-                    .expect(201);
-
-                expect(res.body).toHaveProperty('token');
-            }
-        });
+      expect(res.body).toHaveProperty('bootstrapRequired');
     });
 
-    describe('👤 User Registration', () => {
-        it('should check bootstrap status', async () => {
-            const res = await request(context.app.getHttpServer())
-                .get('/api/auth/bootstrap-status')
-                .expect(200);
+    it('should allow user signup', async () => {
+      const res = await request(context.app.getHttpServer())
+        .post('/api/auth/signup')
+        .send({
+          username: `newuser-${Date.now()}`,
+          password: 'newpass123',
+        })
+        .expect(201);
 
-            expect(res.body).toHaveProperty('bootstrapRequired');
-        });
-
-        it('should allow user signup', async () => {
-            const res = await request(context.app.getHttpServer())
-                .post('/api/auth/signup')
-                .send({
-                    username: `newuser-${Date.now()}`,
-                    password: 'newpass123'
-                })
-                .expect(201);
-
-            expect(res.body).toHaveProperty('token');
-        });
+      expect(res.body).toHaveProperty('token');
     });
+  });
 });

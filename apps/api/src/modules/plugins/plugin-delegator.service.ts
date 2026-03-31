@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -28,7 +28,7 @@ export class PluginDelegatorService {
     private readonly licenseService: LicenseService,
     private readonly redlock: RedlockService,
     private readonly artifactIndex: ArtifactIndexService,
-  ) { }
+  ) {}
 
   getPluginForRepo(repo: RepositoryEntity) {
     const manager = (repo as any).manager || repo.config?.registry || 'npm';
@@ -76,7 +76,7 @@ export class PluginDelegatorService {
         if (repo.type !== 'group') {
           this.artifactIndex
             .indexArtifact(repo, result, userId, path)
-            .catch(() => { });
+            .catch(() => {});
         }
       }
 
@@ -101,7 +101,9 @@ export class PluginDelegatorService {
       if (result?.ok && result?.metadata) {
         // Only index if not a group
         if (repo.type !== 'group') {
-          this.artifactIndex.indexArtifact(repo, result, userId).catch(() => { });
+          this.artifactIndex
+            .indexArtifact(repo, result, userId)
+            .catch(() => {});
         }
       }
 

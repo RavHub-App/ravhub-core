@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -47,14 +47,21 @@ describe('StorageService (basic)', () => {
 
     const streamRes = await svc.getStream(key);
     expect(streamRes).toHaveProperty('size');
-    expect(streamRes.size).toBeGreaterThan(0);
+    const streamSize = streamRes
+      ? 'size' in streamRes
+        ? streamRes.size
+        : 'length' in streamRes
+          ? streamRes.length
+          : undefined
+      : undefined;
+    expect(streamSize ?? 0).toBeGreaterThan(0);
 
     // consume stream
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {
-      streamRes.stream.on('data', (c: Buffer) => chunks.push(Buffer.from(c)));
-      streamRes.stream.on('end', () => resolve());
-      streamRes.stream.on('error', (err) => reject(err));
+      streamRes!.stream.on('data', (c: Buffer) => chunks.push(Buffer.from(c)));
+      streamRes!.stream.on('end', () => resolve());
+      streamRes!.stream.on('error', (err) => reject(err));
     });
     const out = Buffer.concat(chunks).toString('utf8');
     expect(out).toBe(data);
@@ -67,9 +74,9 @@ describe('StorageService (basic)', () => {
     const out = await svc.getStream(key, { start: 2, end: 5 });
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {
-      out.stream.on('data', (c: Buffer) => chunks.push(Buffer.from(c)));
-      out.stream.on('end', () => resolve());
-      out.stream.on('error', (err) => reject(err));
+      out!.stream.on('data', (c: Buffer) => chunks.push(Buffer.from(c)));
+      out!.stream.on('end', () => resolve());
+      out!.stream.on('error', (err) => reject(err));
     });
     const outStr = Buffer.concat(chunks).toString('utf8');
     expect(outStr).toBe('cdef');

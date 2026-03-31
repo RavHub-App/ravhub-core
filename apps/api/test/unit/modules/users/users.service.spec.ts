@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -84,7 +84,10 @@ describe('UsersService (Unit)', () => {
 
     const res = await service.update('u1', { username: 'updated' });
 
-    expect(repo.preload).toHaveBeenCalledWith({ id: 'u1', username: 'updated' });
+    expect(repo.preload).toHaveBeenCalledWith({
+      id: 'u1',
+      username: 'updated',
+    });
     expect(repo.save).toHaveBeenCalled();
     expect(res?.username).toBe('updated');
   });

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -169,7 +169,12 @@ describe('DockerPlugin Manifest Storage', () => {
           type: 'proxy',
           config: { url: 'http://upstream' },
         };
-        const result = await putManifest(proxyRepo as any, 'img', 'tag', 'manifest');
+        const result = await putManifest(
+          proxyRepo as any,
+          'img',
+          'tag',
+          'manifest',
+        );
         expect(result.ok).toBe(false);
         expect(result.message).toContain('read-only');
         // NOTE: putManifest initially rejects proxy with "read-only" at the START.

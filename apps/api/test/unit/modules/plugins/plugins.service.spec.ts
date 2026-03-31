@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -116,6 +116,30 @@ describe('PluginsService - indexArtifact (Unit)', () => {
         size: 500,
       }),
     );
+  });
+
+  it('should warn and fallback when artifact metadata JSON is malformed', async () => {
+    const repo = { id: 'r1', name: 'repo1', manager: 'npm' };
+    const result = { id: 'pkg:1.0.0', metadata: '{invalid-json' };
+    const warnSpy = jest
+      .spyOn((service as any).logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    const context = (service as any).getPluginContext();
+    await context.indexArtifact(repo, result);
+
+    expect(mockArtifactRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        packageName: 'pkg',
+        version: '1.0.0',
+        metadata: {},
+      }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to parse artifact metadata'),
+    );
+
+    warnSpy.mockRestore();
   });
 
   it('should reload plugins', async () => {

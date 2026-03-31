@@ -22,6 +22,11 @@ ADMIN_USER="e2e-admin-helm"
 ADMIN_PASS="password123"
 AUTH_TOKEN=""
 USER_ID=""
+LIMITED_USER="e2e-limited-helm"
+LIMITED_PASS="password123"
+LIMITED_TOKEN=""
+LIMITED_USER_ID=""
+UPSTREAM_USER_ID=""
 
 # Detect containers
 API_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E 'distributed-chat-app|distributed-chat-api|api' | head -n1 || echo "distributed-chat-api-1")
@@ -116,6 +121,16 @@ cleanup() {
     curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$USER_ID" > /dev/null || true
   fi
 
+  if [ ! -z "$LIMITED_USER_ID" ] && [ ! -z "$AUTH_TOKEN" ]; then
+    echo "Deleting test user $LIMITED_USER ($LIMITED_USER_ID)..."
+    curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$LIMITED_USER_ID" > /dev/null || true
+  fi
+
+  if [ ! -z "$UPSTREAM_USER_ID" ] && [ ! -z "$AUTH_TOKEN" ]; then
+    echo "Deleting upstream user $TEST_UPSTREAM_USER ($UPSTREAM_USER_ID)..."
+    curl -s -X DELETE -H "Authorization: Bearer $AUTH_TOKEN" "$API_URL/users/$UPSTREAM_USER_ID" > /dev/null || true
+  fi
+
   rm -rf $TEMP_DIR || true
   for rname in "${HELM_REPOS[@]}"; do
     "$HELM_BIN" repo remove "$rname" >/dev/null 2>&1 || true
@@ -166,6 +181,30 @@ upload_chart() {
     echo -e "${RED}Upload failed: $res${NC}"
     exit 1
   fi
+}
+
+upload_chart_status() {
+  local repo_id="$1"
+  local tgz="$2"
+  local chart_name="$3"
+  local chart_version="$4"
+  local auth_token="$5"
+  local filename
+  filename=$(basename "$tgz")
+  local content
+  content=$(base64 -w0 "$tgz")
+
+  if [ -n "$auth_token" ]; then
+    curl -s -o /dev/null -w "%{http_code}" -X POST "$REPOS_URL/$repo_id/upload" \
+      -H "Authorization: Bearer $auth_token" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\":\"$chart_name\",\"version\":\"$chart_version\",\"filename\":\"$filename\",\"content\":\"$content\"}"
+    return 0
+  fi
+
+  curl -s -o /dev/null -w "%{http_code}" -X POST "$REPOS_URL/$repo_id/upload" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"$chart_name\",\"version\":\"$chart_version\",\"filename\":\"$filename\",\"content\":\"$content\"}"
 }
 
 helm_add_and_update() {
@@ -228,6 +267,25 @@ if [ -z "$AUTH_TOKEN" ]; then
   exit 1
 fi
 
+LIMITED_HASH=$(docker exec -w /workspace/apps/api $API_CONTAINER node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('$LIMITED_PASS', 10));")
+docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
+INSERT INTO users (id, username, passwordhash)
+VALUES (gen_random_uuid(), '$LIMITED_USER', '$LIMITED_HASH')
+ON CONFLICT (username) DO NOTHING;
+" > /dev/null
+
+LIMITED_LOGIN_RES=$(curl -s -X POST "$API_URL/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"$LIMITED_USER\",\"password\":\"$LIMITED_PASS\"}")
+
+LIMITED_TOKEN=$(echo "$LIMITED_LOGIN_RES" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+LIMITED_USER_ID=$(echo "$LIMITED_LOGIN_RES" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+
+if [ -z "$LIMITED_TOKEN" ]; then
+  echo -e "${RED}Failed to authenticate limited user: $LIMITED_LOGIN_RES${NC}"
+  exit 1
+fi
+
 echo "Creating Helm Proxy repository (Bitnami)..."
 PROXY_ID=$(create_repo "$RUN_ID-proxy" "proxy" "helm" '{"proxyUrl":"https://charts.bitnami.com/bitnami","cacheMaxAgeDays":7}')
 REPO_IDS+=("$PROXY_ID")
@@ -281,6 +339,16 @@ if [ -f "$TEMP_DIR/e2e-chart-0.1.0.tgz" ]; then
   echo -e "${GREEN}Helm Hosted Read Test Passed${NC}"
 else
   echo -e "${RED}Helm Hosted Read Test Failed${NC}"
+  exit 1
+fi
+
+LIMITED_UPLOAD_CODE=$(upload_chart_status "$HOSTED_ID" "$CHART_TGZ" "limited-chart" "9.9.0" "$LIMITED_TOKEN")
+ANON_UPLOAD_CODE=$(upload_chart_status "$HOSTED_ID" "$CHART_TGZ" "anon-chart" "9.9.1" "")
+
+if [ "$LIMITED_UPLOAD_CODE" = "403" ] && [ "$ANON_UPLOAD_CODE" = "401" ]; then
+  echo -e "${GREEN}Helm Permission Test Passed${NC}"
+else
+  echo -e "${RED}Helm Permission Test Failed (limited=$LIMITED_UPLOAD_CODE anon=$ANON_UPLOAD_CODE)${NC}"
   exit 1
 fi
 
@@ -369,6 +437,7 @@ INSERT INTO users (id, username, passwordhash)
 VALUES (gen_random_uuid(), '$TEST_UPSTREAM_USER', '$UPSTREAM_HASH')
 ON CONFLICT (username) DO NOTHING;
 " > /dev/null
+UPSTREAM_USER_ID=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -t -A -c "SELECT id FROM users WHERE username = '$TEST_UPSTREAM_USER' LIMIT 1;")
 
 echo "Assigning permissions to upstream user..."
 docker exec $POSTGRES_CONTAINER psql -U postgres -d ravhub -c "
@@ -380,8 +449,7 @@ ON CONFLICT DO NOTHING;
 " > /dev/null
 
 echo "Creating Proxy repository with auth pointing to own Hosted..."
-# Use our own hosted repository as the upstream, with authentication
-PROXY_AUTH_ID=$(create_repo "$RUN_ID-proxy-auth" "proxy" "helm" "{\"proxyUrl\":\"http://localhost:3000/repository/$HOSTED_ID/\",\"auth\":{\"username\":\"$TEST_UPSTREAM_USER\",\"password\":\"$TEST_UPSTREAM_PASS\"}}")
+PROXY_AUTH_ID=$(create_repo "$RUN_ID-proxy-auth" "proxy" "helm" "{\"proxyUrl\":\"http://localhost:3000/repository/$HOSTED_ID/\",\"auth\":{\"username\":\"$TEST_UPSTREAM_USER\",\"password\":\"$TEST_UPSTREAM_PASS\"},\"cacheMaxAgeDays\":7}")
 REPO_IDS+=("$PROXY_AUTH_ID")
 
 echo "[ProxyAuth] Fetching chart via authenticated proxy..."
@@ -392,6 +460,21 @@ if [ -f "$TEMP_DIR/e2e-chart-0.1.0.tgz" ]; then
   echo -e "${GREEN}Helm Proxy Auth Test Passed${NC}"
 else
   echo -e "${RED}Helm Proxy Auth Test Failed${NC}"
+  exit 1
+fi
+
+curl -sS -X PUT "$API_URL/repositories/$PROXY_AUTH_ID" \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"config\":{\"proxyUrl\":\"http://localhost:9/unavailable\",\"auth\":{\"username\":\"$TEST_UPSTREAM_USER\",\"password\":\"$TEST_UPSTREAM_PASS\"},\"cacheMaxAgeDays\":7}}" > /dev/null
+
+rm -f "$TEMP_DIR"/e2e-chart-0.1.0.tgz || true
+"$HELM_BIN" repo update proxy-auth >/dev/null
+"$HELM_BIN" fetch proxy-auth/e2e-chart --version 0.1.0 --destination "$TEMP_DIR"
+if [ -f "$TEMP_DIR/e2e-chart-0.1.0.tgz" ]; then
+  echo -e "${GREEN}Helm Proxy Cache Test Passed${NC}"
+else
+  echo -e "${RED}Helm Proxy Cache Test Failed${NC}"
   exit 1
 fi
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -55,30 +55,37 @@ export default function CleanupSettings() {
         color: 'primary',
     });
 
-    useEffect(() => {
-        loadPolicies();
-        loadRepositories();
-        const interval = setInterval(loadPolicies, 10000);
-        return () => clearInterval(interval);
-    }, []);
-
-    const loadPolicies = async () => {
+    async function loadPolicies() {
         try {
             const { data } = await axios.get('/api/cleanup/policies');
             setPolicies(data);
         } catch (error) {
             console.error('Failed to load cleanup policies:', error);
         }
-    };
+    }
 
-    const loadRepositories = async () => {
+    async function loadRepositories() {
         try {
             const { data } = await axios.get('/api/repositories');
             setRepositories(data);
         } catch (error) {
             console.error('Failed to load repositories:', error);
         }
-    };
+    }
+
+    useEffect(() => {
+        const initialLoad = setTimeout(() => {
+            void loadPolicies();
+            void loadRepositories();
+        }, 0);
+        const interval = setInterval(() => {
+            void loadPolicies();
+        }, 10000);
+        return () => {
+            clearTimeout(initialLoad);
+            clearInterval(interval);
+        };
+    }, []);
 
     const handleCreate = async () => {
         try {

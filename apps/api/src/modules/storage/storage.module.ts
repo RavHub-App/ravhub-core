@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -27,7 +27,12 @@ import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([StorageConfig, RepositoryEntity, Artifact, Backup]),
+    TypeOrmModule.forFeature([
+      StorageConfig,
+      RepositoryEntity,
+      Artifact,
+      Backup,
+    ]),
     forwardRef(() => AuditModule),
     forwardRef(() => LicenseModule),
     RedisModule,
@@ -36,4 +41,4 @@ import { RedisModule } from '../redis/redis.module';
   providers: [StorageService, StorageConfigService],
   exports: [StorageService, StorageConfigService],
 })
-export class StorageModule { }
+export class StorageModule {}

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -111,6 +111,96 @@ describe('DockerPlugin Proxy Fetch', () => {
       expect(mockStorage.get).toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalled();
       expect(result.body.toString()).toBe('upstream');
+    });
+
+    it('should store manifest cache using image-aware path layout', async () => {
+      const mockFetch = proxyHelperModule.default as jest.Mock;
+      mockStorage.get.mockResolvedValue(null);
+      mockStorage.getUrl = jest
+        .fn()
+        .mockResolvedValue('http://cached/manifest');
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: Buffer.from('{"schemaVersion":2}'),
+      });
+
+      const repo: Repository = {
+        id: 'r1',
+        config: { docker: { proxyUrl: 'http://up' } },
+      } as any;
+
+      const result = await proxyFetch(
+        repo,
+        'http://up/v2/library/nginx/manifests/latest',
+      );
+
+      expect(mockStorage.save).toHaveBeenCalledWith(
+        'docker/r1/library/nginx/manifests/latest',
+        Buffer.from('{"schemaVersion":2}'),
+      );
+      expect(result.storageKey).toBe(
+        'docker/r1/library/nginx/manifests/latest',
+      );
+    });
+
+    it('should store digest-addressed manifests using the same image-aware layout', async () => {
+      const mockFetch = proxyHelperModule.default as jest.Mock;
+      mockStorage.get.mockResolvedValue(null);
+      mockStorage.getUrl = jest
+        .fn()
+        .mockResolvedValue('http://cached/manifest');
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: Buffer.from('{"schemaVersion":2}'),
+      });
+
+      const repo: Repository = {
+        id: 'r1',
+        config: { docker: { proxyUrl: 'http://up' } },
+      } as any;
+
+      const digest = 'sha256:abcdef';
+      const result = await proxyFetch(
+        repo,
+        `http://up/v2/library/nginx/manifests/${digest}`,
+      );
+
+      expect(mockStorage.save).toHaveBeenCalledWith(
+        `docker/r1/library/nginx/manifests/${digest}`,
+        Buffer.from('{"schemaVersion":2}'),
+      );
+      expect(result.storageKey).toBe(
+        `docker/r1/library/nginx/manifests/${digest}`,
+      );
+    });
+
+    it('should store tags list responses using image-aware path layout', async () => {
+      const mockFetch = proxyHelperModule.default as jest.Mock;
+      mockStorage.get.mockResolvedValue(null);
+      mockStorage.getUrl = jest.fn().mockResolvedValue('http://cached/tags');
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: Buffer.from('{"name":"library/nginx","tags":["latest"]}'),
+      });
+
+      const repo: Repository = {
+        id: 'r1',
+        config: { docker: { proxyUrl: 'http://up' } },
+      } as any;
+
+      const result = await proxyFetch(
+        repo,
+        'http://up/v2/library/nginx/tags/list',
+      );
+
+      expect(mockStorage.save).toHaveBeenCalledWith(
+        'docker/r1/library/nginx/tags/list',
+        Buffer.from('{"name":"library/nginx","tags":["latest"]}'),
+      );
+      expect(result.storageKey).toBe('docker/r1/library/nginx/tags/list');
     });
   });
 

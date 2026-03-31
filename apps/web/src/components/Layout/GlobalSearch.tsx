@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 RavHub Team
+ * Copyright (C) 2026 Rubén Santibáñez Acosta
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published
@@ -90,7 +90,9 @@ export default function GlobalSearch() {
                                         repoName: repo.name,
                                     });
                                 }
-                            } catch { }
+                            } catch (_error) {
+                                continue;
+                            }
                         }
                         return allArtifacts;
                     }).catch(() => []),
