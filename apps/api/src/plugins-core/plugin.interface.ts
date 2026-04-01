@@ -81,6 +81,29 @@ export interface ListVersionsResult {
   message?: string;
 }
 
+export interface ListPackagesResult {
+  ok: boolean;
+  packages?: Array<{
+    name: string;
+    latestVersion: string;
+    updatedAt: string;
+    [k: string]: any;
+  }>;
+  message?: string;
+}
+
+export interface GetPackageResult {
+  ok: boolean;
+  name?: string;
+  artifacts?: Array<{
+    version: string;
+    createdAt?: string | null;
+    metadata?: Record<string, any>;
+    [k: string]: any;
+  }>;
+  message?: string;
+}
+
 export interface InstallInstruction {
   label: string;
   command: string;
@@ -104,6 +127,8 @@ export interface IPlugin {
     packageName: string,
     version?: string,
   ): Promise<DownloadResult>;
+  listPackages?(repo: any): Promise<ListPackagesResult>;
+  getPackage?(repo: any, packageName: string): Promise<GetPackageResult>;
   listVersions?(repo: any, packageName: string): Promise<ListVersionsResult>;
   proxyFetch?(repo: any, url: string): Promise<ProxyFetchResult>;
   authenticate?(
