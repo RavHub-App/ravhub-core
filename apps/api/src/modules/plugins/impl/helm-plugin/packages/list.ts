@@ -238,14 +238,17 @@ export function initPackages(context: PluginContext) {
     const name = pkg?.name || 'chart';
     const version = pkg?.version || '0.1.0';
     const releaseName = toHelmReleaseName(name);
+    const installCommand = [
+      `helm repo add ${repoAlias} ${repoUrl}`,
+      'helm repo update',
+      `helm install ${releaseName} ${repoAlias}/${name} --version ${version}`,
+    ].join('\n');
 
     return [
       {
         label: 'helm install',
         language: 'bash',
-        command: `helm repo add ${repoAlias} ${repoUrl}
-helm repo update
-helm install ${releaseName} ${repoAlias}/${name} --version ${version}`,
+        command: installCommand,
       },
       {
         label: 'helm dependency',

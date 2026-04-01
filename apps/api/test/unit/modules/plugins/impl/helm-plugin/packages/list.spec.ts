@@ -314,5 +314,16 @@ describe('HelmPlugin Packages', () => {
         'helm install ravhub-chart-enterprise helm-repo-beta/RavHub Chart__Enterprise --version 1.0.0',
       );
     });
+
+    it('should generate the exact guided command for ravhub public charts', async () => {
+      const repo: Repository = { name: 'ravhub-charts' } as any;
+      const pkg = { name: 'ravhub', version: '0.1.0' };
+
+      const commands = await packageMethods.getInstallCommand(repo, pkg);
+
+      expect(commands[0].command).toBe(`helm repo add ravhub-charts http://localhost:3000/repository/ravhub-charts
+helm repo update
+helm install ravhub ravhub-charts/ravhub --version 0.1.0`);
+    });
   });
 });
