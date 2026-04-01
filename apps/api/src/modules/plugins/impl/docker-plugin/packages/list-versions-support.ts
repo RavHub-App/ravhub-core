@@ -1,7 +1,7 @@
 import { buildKey } from '../utils/key-utils';
 import type { Repository } from '../utils/types';
+import { collectGroupMemberResults } from '../../../group-aggregation';
 import {
-  asRepository,
   decodeTag,
   getStringTags,
   isDigestTag,
@@ -18,7 +18,11 @@ type StorageDependencies = {
 
 type GroupDependencies = {
   getRepo?: (id: string) => Promise<Repository | null | undefined>;
-  listVersions: (repo: Repository, name: string) => Promise<ListVersionsResult>;
+  listVersions: (
+    repo: Repository,
+    name: string,
+    visited: Set<string>,
+  ) => Promise<ListVersionsResult>;
 };
 
 type ProxyFetch = (
@@ -31,31 +35,30 @@ export async function aggregateDockerGroupVersions(
   name: string,
   versions: Set<string>,
   dependencies: GroupDependencies,
+  visited = new Set<string>(),
 ): Promise<ListVersionsResult> {
-  const members: string[] = Array.isArray(repo.config?.members)
-    ? repo.config.members
-    : [];
-
-  for (const memberId of members) {
-    const childRepo = asRepository(await dependencies.getRepo?.(memberId));
-    if (!childRepo) {
-      continue;
-    }
-
-    let childResult: ListVersionsResult | null = null;
-    try {
-      childResult = await dependencies.listVersions(childRepo, name);
-    } catch (error) {
+  const childResults = await collectGroupMemberResults({
+    repo,
+    getRepo: dependencies.getRepo,
+    visited,
+    resolveMember: async (childRepo, nextVisited) => {
+      const childResult = await dependencies.listVersions(
+        childRepo,
+        name,
+        nextVisited,
+      );
+      return childResult.ok ? childResult.versions : null;
+    },
+    onMemberError: (memberId, memberRepo, error) => {
       console.warn(
-        `[LIST VERSIONS GROUP] WARNING: Failed to fetch member ${childRepo.name || childRepo.id || memberId}`,
+        `[LIST VERSIONS GROUP] WARNING: Failed to fetch member ${memberRepo.name || memberRepo.id || memberId}`,
         error,
       );
-      continue;
-    }
+    },
+  });
 
-    if (childResult.ok) {
-      childResult.versions.forEach((version) => versions.add(version));
-    }
+  for (const childVersions of childResults) {
+    childVersions.forEach((version) => versions.add(version));
   }
 
   return { ok: true, versions: Array.from(versions) };

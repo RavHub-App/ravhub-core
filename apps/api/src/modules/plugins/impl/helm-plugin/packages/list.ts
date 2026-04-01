@@ -16,6 +16,7 @@ import {
   PluginContext,
   Repository,
 } from '../../../../../plugins-core/plugin.interface';
+import { collectGroupMemberResults } from '../../../group-aggregation';
 import { buildKey } from '../utils/key-utils';
 import * as yaml from 'js-yaml';
 
@@ -93,30 +94,28 @@ export function initPackages(context: PluginContext) {
   ) => {
     const charts = new Map<string, Map<string, HelmIndexEntry>>();
 
+    if (repo.type === 'group') {
+      const memberCharts = await collectGroupMemberResults({
+        repo,
+        getRepo,
+        visited,
+        resolveMember: (memberRepo, nextVisited) =>
+          getChartEntries(memberRepo, nextVisited),
+      });
+
+      for (const memberEntry of memberCharts) {
+        mergeChartEntries(charts, memberEntry);
+      }
+
+      return charts;
+    }
+
     const visitKey = repo.id || repo.name;
     if (visitKey) {
       if (visited.has(visitKey)) {
         return charts;
       }
       visited.add(visitKey);
-    }
-
-    if (repo.type === 'group') {
-      const memberIds: string[] = Array.isArray(repo.config?.members)
-        ? repo.config.members
-        : [];
-
-      for (const memberId of memberIds) {
-        const memberRepo = await getRepo?.(memberId);
-        if (!memberRepo) {
-          continue;
-        }
-
-        const memberCharts = await getChartEntries(memberRepo, visited);
-        mergeChartEntries(charts, memberCharts);
-      }
-
-      return charts;
     }
 
     for (const indexKey of getIndexKeys(repo)) {

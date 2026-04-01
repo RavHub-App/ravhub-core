@@ -1,6 +1,6 @@
 import type { Repository } from '../utils/types';
+import { collectGroupMemberResults } from '../../../group-aggregation';
 import {
-  asRepository,
   decodeTag,
   getManifestSize,
   getRegistryHost,
@@ -17,7 +17,11 @@ type StorageDependencies = {
 
 type GroupDependencies = {
   getRepo?: (id: string) => Promise<Repository | null | undefined>;
-  getPackage: (repo: Repository, name: string) => Promise<GetPackageResult>;
+  getPackage: (
+    repo: Repository,
+    name: string,
+    visited: Set<string>,
+  ) => Promise<GetPackageResult>;
 };
 
 export async function aggregateDockerGroupArtifacts(
@@ -25,43 +29,44 @@ export async function aggregateDockerGroupArtifacts(
   name: string,
   artifactsMap: Map<string, DockerArtifactEntry>,
   dependencies: GroupDependencies,
+  visited = new Set<string>(),
 ): Promise<GetPackageResult> {
-  const members: string[] = Array.isArray(repo.config?.members)
-    ? repo.config.members
-    : [];
   if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
     console.debug(
-      `[GET PACKAGE GROUP] repo=${repo.name}, image=${name}, members=${members.length}`,
+      `[GET PACKAGE GROUP] repo=${repo.name}, image=${name}, members=${Array.isArray(repo.config?.members) ? repo.config.members.length : 0}`,
     );
   }
 
   const registry = getRegistryHost(repo);
 
-  for (const memberId of members) {
-    const childRepo = asRepository(await dependencies.getRepo?.(memberId));
-    if (!childRepo) continue;
-    if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
-      console.debug(
-        `[GET PACKAGE GROUP] fetching from member ${childRepo.name}`,
-      );
-    }
+  const childResults = await collectGroupMemberResults({
+    repo,
+    getRepo: dependencies.getRepo,
+    visited,
+    resolveMember: async (childRepo, nextVisited) => {
+      if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+        console.debug(
+          `[GET PACKAGE GROUP] fetching from member ${childRepo.name}`,
+        );
+      }
 
-    let childResult: GetPackageResult | null = null;
-    try {
-      childResult = await dependencies.getPackage(childRepo, name);
-    } catch (error) {
+      const childResult = await dependencies.getPackage(
+        childRepo,
+        name,
+        nextVisited,
+      );
+      return childResult.ok ? childResult.artifacts : null;
+    },
+    onMemberError: (memberId, memberRepo, error) => {
       console.warn(
-        `[GET PACKAGE GROUP] WARNING: Failed to fetch member ${childRepo.name || childRepo.id || memberId}`,
+        `[GET PACKAGE GROUP] WARNING: Failed to fetch member ${memberRepo.name || memberRepo.id || memberId}`,
         error,
       );
-      continue;
-    }
+    },
+  });
 
-    if (!childResult.ok) {
-      continue;
-    }
-
-    mergeDockerArtifacts(artifactsMap, childResult.artifacts, registry, name);
+  for (const childArtifacts of childResults) {
+    mergeDockerArtifacts(artifactsMap, childArtifacts, registry, name);
   }
 
   return { ok: true, name, artifacts: Array.from(artifactsMap.values()) };

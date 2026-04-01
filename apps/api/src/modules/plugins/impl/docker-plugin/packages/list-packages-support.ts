@@ -1,6 +1,6 @@
 import type { Repository } from '../utils/types';
+import { collectGroupMemberResults } from '../../../group-aggregation';
 import {
-  asRepository,
   decodeTag,
   getStringTags,
   isDigestTag,
@@ -15,72 +15,66 @@ type StorageDependencies = {
 
 type GroupDependencies = {
   getRepo?: (id: string) => Promise<Repository | null | undefined>;
-  listPackages: (repo: Repository) => Promise<ListPackagesResult>;
+  listPackages: (
+    repo: Repository,
+    visited: Set<string>,
+  ) => Promise<ListPackagesResult>;
 };
 
 export async function aggregateGroupPackages(
   repo: Repository,
   images: Map<string, DockerImageEntry>,
   dependencies: GroupDependencies,
+  visited = new Set<string>(),
 ): Promise<ListPackagesResult> {
-  const members: string[] = Array.isArray(repo.config?.members)
-    ? repo.config.members
-    : [];
-
   if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
     console.debug(
-      `[LIST PACKAGES GROUP] repo=${repo.name || repo.id || 'unknown'} (id=${repo.id}), type=${repo.type}, members=${JSON.stringify(members)}`,
+      `[LIST PACKAGES GROUP] repo=${repo.name || repo.id || 'unknown'} (id=${repo.id}), type=${repo.type}, members=${JSON.stringify(repo.config?.members || [])}`,
     );
   }
 
-  if (members.length === 0) {
+  if (!Array.isArray(repo.config?.members) || repo.config.members.length === 0) {
     console.warn(
       `[LIST PACKAGES GROUP] WARNING: Group ${repo.name || repo.id || 'unknown'} has no members configured`,
     );
     return { ok: true, packages: [] } satisfies ListPackagesResult;
   }
 
-  for (const memberId of members) {
-    const childRepo = asRepository(await dependencies.getRepo?.(memberId));
-    if (!childRepo) {
-      console.warn(
-        `[LIST PACKAGES GROUP] WARNING: Member ${memberId} not found`,
-      );
-      continue;
-    }
+  const childResults = await collectGroupMemberResults({
+    repo,
+    getRepo: dependencies.getRepo,
+    visited,
+    resolveMember: async (childRepo, nextVisited) => {
+      if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+        console.debug(
+          `[LIST PACKAGES GROUP] Fetching from member ${childRepo.name} (id=${childRepo.id}, type=${childRepo.type})`,
+        );
+      }
 
-    if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
-      console.debug(
-        `[LIST PACKAGES GROUP] Fetching from member ${childRepo.name} (id=${childRepo.id}, type=${childRepo.type})`,
-      );
-    }
+      const childResult = await dependencies.listPackages(childRepo, nextVisited);
+      const childPackageCount =
+        childResult.ok && Array.isArray(childResult.packages)
+          ? childResult.packages.length
+          : 0;
 
-    let childResult: ListPackagesResult | null = null;
-    try {
-      childResult = await dependencies.listPackages(childRepo);
-    } catch (error) {
+      if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
+        console.debug(
+          `[LIST PACKAGES GROUP] Member ${childRepo.name} returned ${childPackageCount} packages`,
+        );
+      }
+
+      return childResult.ok ? childResult.packages : null;
+    },
+    onMemberError: (memberId, memberRepo, error) => {
       console.warn(
-        `[LIST PACKAGES GROUP] WARNING: Failed to fetch member ${childRepo.name || childRepo.id || memberId}`,
+        `[LIST PACKAGES GROUP] WARNING: Failed to fetch member ${memberRepo.name || memberRepo.id || memberId}`,
         error,
       );
-      continue;
-    }
+    },
+  });
 
-    const childPackageCount =
-      childResult.ok && Array.isArray(childResult.packages)
-        ? childResult.packages.length
-        : 0;
-    if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {
-      console.debug(
-        `[LIST PACKAGES GROUP] Member ${childRepo.name} returned ${childPackageCount} packages`,
-      );
-    }
-
-    if (!childResult.ok) {
-      continue;
-    }
-
-    mergeGroupPackages(images, childResult.packages);
+  for (const childPackages of childResults) {
+    mergeGroupPackages(images, childPackages);
   }
 
   if (process.env.DEBUG_DOCKER_PLUGIN === 'true') {

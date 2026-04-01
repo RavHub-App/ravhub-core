@@ -28,9 +28,10 @@ type GetPackageDependencies = {
 };
 
 export function createGetPackage({ storage, getRepo }: GetPackageDependencies) {
-  const getPackage = async (
+  const getPackageImpl = async (
     repo: Repository,
     name: string,
+    visited = new Set<string>(),
   ): Promise<GetPackageResult> => {
     try {
       const artifactsMap = new Map<string, DockerArtifactEntry>();
@@ -38,8 +39,8 @@ export function createGetPackage({ storage, getRepo }: GetPackageDependencies) {
       if ((repo?.type || '').toString().toLowerCase() === 'group') {
         return aggregateDockerGroupArtifacts(repo, name, artifactsMap, {
           getRepo,
-          getPackage,
-        });
+          getPackage: getPackageImpl,
+        }, visited);
       }
 
       await collectDockerPackageArtifacts(storage, repo, name, artifactsMap);
@@ -50,5 +51,5 @@ export function createGetPackage({ storage, getRepo }: GetPackageDependencies) {
     }
   };
 
-  return getPackage;
+  return (repo: Repository, name: string) => getPackageImpl(repo, name);
 }

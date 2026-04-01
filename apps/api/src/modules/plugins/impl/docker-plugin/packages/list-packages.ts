@@ -31,8 +31,9 @@ export function createListPackages({
   storage,
   getRepo,
 }: ListPackagesDependencies) {
-  const listPackages = async (
+  const listPackagesImpl = async (
     repo: Repository,
+    visited = new Set<string>(),
   ): Promise<ListPackagesResult> => {
     try {
       const images = new Map();
@@ -40,8 +41,8 @@ export function createListPackages({
       if ((repo?.type || '').toString().toLowerCase() === 'group') {
         return aggregateGroupPackages(repo, images, {
           getRepo,
-          listPackages,
-        });
+          listPackages: listPackagesImpl,
+        }, visited);
       }
 
       return collectRepositoryPackages(repo, images, storage);
@@ -51,5 +52,5 @@ export function createListPackages({
     }
   };
 
-  return listPackages;
+  return (repo: Repository) => listPackagesImpl(repo);
 }

@@ -152,6 +152,45 @@ describe('HelmPlugin Packages', () => {
         }),
       ]);
     });
+
+    it('should avoid infinite recursion when group members reference each other', async () => {
+      mockGetRepo.mockImplementation(async (id: string) => {
+        if (id === 'group-2') {
+          return {
+            id: 'group-2',
+            name: 'helm-group-2',
+            type: 'group',
+            manager: 'helm',
+            config: { members: ['group-1'] },
+          } as Repository;
+        }
+
+        if (id === 'group-1') {
+          return {
+            id: 'group-1',
+            name: 'helm-group-1',
+            type: 'group',
+            manager: 'helm',
+            config: { members: ['group-2'] },
+          } as Repository;
+        }
+
+        return null;
+      });
+
+      const repo: Repository = {
+        id: 'group-1',
+        name: 'helm-group-1',
+        type: 'group',
+        manager: 'helm',
+        config: { members: ['group-2'] },
+      } as any;
+
+      const result = await packageMethods.listPackages(repo);
+
+      expect(result.ok).toBe(true);
+      expect(result.packages).toEqual([]);
+    });
   });
 
   describe('getPackage', () => {

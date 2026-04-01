@@ -38,9 +38,10 @@ export function createListVersions({
   getRepo,
   proxyFetch,
 }: ListVersionsDependencies) {
-  const listVersions = async (
+  const listVersionsImpl = async (
     repo: Repository,
     name: string,
+    visited = new Set<string>(),
   ): Promise<ListVersionsResult> => {
     try {
       const versions = new Set<string>();
@@ -48,8 +49,8 @@ export function createListVersions({
       if ((repo?.type || '').toString().toLowerCase() === 'group') {
         return aggregateDockerGroupVersions(repo, name, versions, {
           getRepo,
-          listVersions,
-        });
+          listVersions: listVersionsImpl,
+        }, visited);
       }
 
       await collectDockerManifestVersions(storage, repo, name, versions);
@@ -73,5 +74,5 @@ export function createListVersions({
     }
   };
 
-  return listVersions;
+  return (repo: Repository, name: string) => listVersionsImpl(repo, name);
 }
