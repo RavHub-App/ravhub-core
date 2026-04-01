@@ -145,6 +145,10 @@ describe('HelmPlugin Packages', () => {
       expect(commands).toHaveLength(2);
       expect(commands[0].label).toBe('helm install');
       expect(commands[0].command).toContain('helm repo add helm-repo');
+      expect(commands[0].command).toContain('helm repo update');
+      expect(commands[0].command).toContain(
+        'helm install my-chart helm-repo/my-chart --version 1.0.0',
+      );
       expect(commands[1].label).toBe('helm dependency');
     });
 
@@ -172,7 +176,18 @@ describe('HelmPlugin Packages', () => {
         'helm repo add helm-repo-beta http://localhost:3000/repository/helm%20repo%23beta',
       );
       expect(commands[0].command).toContain(
-        'helm install my-release helm-repo-beta/my-chart --version 1.0.0',
+        'helm install my-chart helm-repo-beta/my-chart --version 1.0.0',
+      );
+    });
+
+    it('should sanitize the suggested release name from the chart name', async () => {
+      const repo: Repository = { name: 'helm repo#beta' } as any;
+      const pkg = { name: 'RavHub Chart__Enterprise', version: '1.0.0' };
+
+      const commands = await packageMethods.getInstallCommand(repo, pkg);
+
+      expect(commands[0].command).toContain(
+        'helm install ravhub-chart-enterprise helm-repo-beta/RavHub Chart__Enterprise --version 1.0.0',
       );
     });
   });

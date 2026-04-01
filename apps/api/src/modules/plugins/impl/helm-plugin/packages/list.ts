@@ -43,6 +43,18 @@ export function initPackages(context: PluginContext) {
     return normalized || 'repo';
   };
 
+  const toHelmReleaseName = (chartName: string) => {
+    const normalized = chartName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 53);
+
+    return normalized || 'chart';
+  };
+
   const getIndexKeys = (repo: Repository) => {
     const keys = [
       buildKey('helm', repo.id, 'index.yaml'),
@@ -181,13 +193,15 @@ export function initPackages(context: PluginContext) {
     const repoAlias = toHelmRepoAlias(repo.name);
     const name = pkg?.name || 'chart';
     const version = pkg?.version || '0.1.0';
+    const releaseName = toHelmReleaseName(name);
 
     return [
       {
         label: 'helm install',
         language: 'bash',
         command: `helm repo add ${repoAlias} ${repoUrl}
-      helm install my-release ${repoAlias}/${name} --version ${version}`,
+helm repo update
+helm install ${releaseName} ${repoAlias}/${name} --version ${version}`,
       },
       {
         label: 'helm dependency',
