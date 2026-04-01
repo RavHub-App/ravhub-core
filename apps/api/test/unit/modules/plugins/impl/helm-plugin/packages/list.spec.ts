@@ -22,13 +22,15 @@ jest.mock('src/modules/plugins/impl/helm-plugin/utils/key-utils', () => ({
 
 describe('HelmPlugin Packages', () => {
   let mockStorage: any;
+  let mockGetRepo: jest.Mock;
   let packageMethods: ReturnType<typeof initPackages>;
 
   beforeEach(() => {
     mockStorage = {
       get: jest.fn(),
     };
-    packageMethods = initPackages({ storage: mockStorage } as any);
+    mockGetRepo = jest.fn();
+    packageMethods = initPackages({ storage: mockStorage, getRepo: mockGetRepo } as any);
     jest.clearAllMocks();
   });
 
@@ -109,6 +111,47 @@ describe('HelmPlugin Packages', () => {
         }),
       ]);
     });
+
+    it('should aggregate charts from group members', async () => {
+      const childIndexYaml = yaml.dump({
+        entries: {
+          ravhub: [{ version: '0.1.0', created: '2026-04-01T11:00:00.000Z' }],
+        },
+      });
+
+      mockGetRepo.mockResolvedValue({
+        id: 'child-1',
+        name: 'helm-private',
+        type: 'hosted',
+        manager: 'helm',
+      });
+
+      mockStorage.get.mockImplementation(async (key: string) => {
+        if (key === 'helm/child-1/index.yaml') {
+          return Buffer.from(childIndexYaml);
+        }
+
+        return null;
+      });
+
+      const repo: Repository = {
+        id: 'group-1',
+        name: 'helm-group',
+        type: 'group',
+        manager: 'helm',
+        config: { members: ['child-1'] },
+      } as any;
+
+      const result = await packageMethods.listPackages(repo);
+
+      expect(result.ok).toBe(true);
+      expect(result.packages).toEqual([
+        expect.objectContaining({
+          name: 'ravhub',
+          latestVersion: '0.1.0',
+        }),
+      ]);
+    });
   });
 
   describe('getPackage', () => {
@@ -125,6 +168,48 @@ describe('HelmPlugin Packages', () => {
       mockStorage.get.mockResolvedValue(Buffer.from(indexYaml));
 
       const repo: Repository = { id: 'r1', name: 'helm-repo' } as any;
+      const result = await packageMethods.getPackage(repo, 'ravhub');
+
+      expect(result.ok).toBe(true);
+      expect(result.artifacts).toEqual([
+        expect.objectContaining({ version: '0.2.0' }),
+        expect.objectContaining({ version: '0.1.0' }),
+      ]);
+    });
+
+    it('should return package artifacts aggregated from group members', async () => {
+      const childIndexYaml = yaml.dump({
+        entries: {
+          ravhub: [
+            { version: '0.1.0', created: '2026-04-01T10:00:00.000Z' },
+            { version: '0.2.0', created: '2026-04-01T11:00:00.000Z' },
+          ],
+        },
+      });
+
+      mockGetRepo.mockResolvedValue({
+        id: 'child-1',
+        name: 'helm-private',
+        type: 'hosted',
+        manager: 'helm',
+      });
+
+      mockStorage.get.mockImplementation(async (key: string) => {
+        if (key === 'helm/child-1/index.yaml') {
+          return Buffer.from(childIndexYaml);
+        }
+
+        return null;
+      });
+
+      const repo: Repository = {
+        id: 'group-1',
+        name: 'helm-group',
+        type: 'group',
+        manager: 'helm',
+        config: { members: ['child-1'] },
+      } as any;
+
       const result = await packageMethods.getPackage(repo, 'ravhub');
 
       expect(result.ok).toBe(true);

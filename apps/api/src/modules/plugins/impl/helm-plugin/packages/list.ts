@@ -31,7 +31,7 @@ type HelmIndex = {
 };
 
 export function initPackages(context: PluginContext) {
-  const { storage } = context;
+  const { storage, getRepo } = context;
 
   const toHelmRepoAlias = (repoName: string) => {
     const normalized = repoName
@@ -71,8 +71,53 @@ export function initPackages(context: PluginContext) {
     return keys.filter((value, index, array) => !!value && array.indexOf(value) === index);
   };
 
-  const getChartEntries = async (repo: Repository) => {
+  const mergeChartEntries = (
+    charts: Map<string, Map<string, HelmIndexEntry>>,
+    entries: Map<string, Map<string, HelmIndexEntry>>,
+  ) => {
+    for (const [chartName, versions] of entries.entries()) {
+      if (!charts.has(chartName)) {
+        charts.set(chartName, new Map<string, HelmIndexEntry>());
+      }
+
+      const targetVersions = charts.get(chartName)!;
+      for (const [version, entry] of versions.entries()) {
+        targetVersions.set(version, entry);
+      }
+    }
+  };
+
+  const getChartEntries = async (
+    repo: Repository,
+    visited = new Set<string>(),
+  ) => {
     const charts = new Map<string, Map<string, HelmIndexEntry>>();
+
+    const visitKey = repo.id || repo.name;
+    if (visitKey) {
+      if (visited.has(visitKey)) {
+        return charts;
+      }
+      visited.add(visitKey);
+    }
+
+    if (repo.type === 'group') {
+      const memberIds: string[] = Array.isArray(repo.config?.members)
+        ? repo.config.members
+        : [];
+
+      for (const memberId of memberIds) {
+        const memberRepo = await getRepo?.(memberId);
+        if (!memberRepo) {
+          continue;
+        }
+
+        const memberCharts = await getChartEntries(memberRepo, visited);
+        mergeChartEntries(charts, memberCharts);
+      }
+
+      return charts;
+    }
 
     for (const indexKey of getIndexKeys(repo)) {
       try {
