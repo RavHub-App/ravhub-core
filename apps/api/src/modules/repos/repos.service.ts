@@ -255,6 +255,57 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
     } as any;
   }
 
+  private async buildInstallCommands(repo: RepositoryEntity, plugin: any, artifact: any) {
+    if (!plugin || typeof plugin.getInstallCommand !== 'function') {
+      return [] as any[];
+    }
+
+    try {
+      const result = await plugin.getInstallCommand(repo, {
+        name: artifact.packageName || artifact.name,
+        version: artifact.version,
+      });
+
+      if (Array.isArray(result)) {
+        return result;
+      }
+
+      if (typeof result === 'string') {
+        return [{ label: 'Default', command: result, language: 'text' }];
+      }
+    } catch {
+      return [] as any[];
+    }
+
+    return [] as any[];
+  }
+
+  private async attachInstallCommands(repo: RepositoryEntity, plugin: any, artifacts: any[] = []) {
+    const enrichedArtifacts = await Promise.all(
+      artifacts.map(async (artifact) => {
+        const existingInstallCommands = Array.isArray(artifact.installCommands)
+          ? artifact.installCommands
+          : [];
+
+        const installCommands =
+          existingInstallCommands.length > 0
+            ? existingInstallCommands
+            : await this.buildInstallCommands(repo, plugin, artifact);
+
+        const installCommand =
+          artifact.installCommand || installCommands[0]?.command || null;
+
+        return {
+          ...artifact,
+          installCommands,
+          installCommand,
+        };
+      }),
+    );
+
+    return { ok: true, artifacts: enrichedArtifacts };
+  }
+
   findAll() {
     return this.repo
       .find({ relations: ['roles', 'roles.permissions'] })
@@ -467,7 +518,21 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
     const pluginInst = this.pluginManager.getPluginForRepo(repo);
     if (pluginInst && typeof (pluginInst as any).getPackage === 'function') {
       try {
-        return await (pluginInst as any).getPackage(repo, packageName);
+        const result = await (pluginInst as any).getPackage(repo, packageName);
+        if (!result?.ok || !Array.isArray(result.artifacts)) {
+          return result;
+        }
+
+        const normalizedResult = await this.attachInstallCommands(
+          repo,
+          pluginInst,
+          result.artifacts,
+        );
+
+        return {
+          ...result,
+          ...normalizedResult,
+        };
       } catch (e) {
         this.logger.warn(
           `Plugin getPackage failed for ${repo.name}: ${e.message}`,

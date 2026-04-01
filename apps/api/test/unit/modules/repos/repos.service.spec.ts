@@ -388,6 +388,40 @@ describe('ReposService (Unit)', () => {
       expect(res.artifacts[0].installCommand).toBe('npm install pkg@1.0');
     });
 
+    it('should enrich delegated package details with install commands', async () => {
+      const ent = { id: 'r1', name: 'helm-private', manager: 'helm' } as any;
+      repo.findOne.mockResolvedValue(ent);
+
+      const mockPlugin = {
+        getPackage: jest.fn().mockResolvedValue({
+          ok: true,
+          name: 'ravhub',
+          artifacts: [{ version: '0.1.0', createdAt: '2026-04-01T13:52:14.000Z' }],
+        }),
+        getInstallCommand: jest.fn().mockResolvedValue([
+          {
+            label: 'helm install',
+            language: 'bash',
+            command: 'helm install my-release helm-private/ravhub --version 0.1.0',
+          },
+        ]),
+      };
+
+      pluginManager.getPluginForRepo.mockReturnValue(mockPlugin);
+
+      const res = await service.getPackageDetails('r1', 'ravhub');
+
+      expect(res.ok).toBe(true);
+      expect(res.artifacts[0].installCommands).toEqual([
+        expect.objectContaining({
+          command: 'helm install my-release helm-private/ravhub --version 0.1.0',
+        }),
+      ]);
+      expect(res.artifacts[0].installCommand).toBe(
+        'helm install my-release helm-private/ravhub --version 0.1.0',
+      );
+    });
+
     it('should delete a package version', async () => {
       const ent = { id: 'r1', name: 'repo1' } as any;
       repo.findOne.mockResolvedValue(ent);

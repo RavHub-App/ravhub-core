@@ -464,54 +464,58 @@ export default function RepoBrowse({ repoId }: RepoBrowseProps) {
                                 {packageDetails.artifacts.length === 0 && <Typography level="body-sm">No versions found.</Typography>}
                                 {packageDetails.artifacts
                                     .filter((a: any) => !a.version?.startsWith('sha256:') && !a.version?.startsWith('sha384:') && !a.version?.startsWith('sha512:'))
-                                    .map((a: any) => (
-                                        <Card key={a.id} variant="outlined" sx={{ p: 2 }}>
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <Chip color="primary" size="lg" variant="soft">
-                                                        {a.version}
-                                                    </Chip>
-                                                    <IconButton size="sm" color="danger" variant="plain" onClick={() => deletePackageVersion(a.version)}>
-                                                        <DeleteIcon />
-                                                    </IconButton>
-                                                </Box>
+                                    .map((a: any) => {
+                                        const primaryInstallCommand = a.installCommand || a.installCommands?.[0]?.command
 
-                                                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                        <CalendarTodayIcon sx={{ fontSize: 14, color: 'text.tertiary' }} />
-                                                        <Typography level="body-xs" sx={{ color: 'text.tertiary' }}>
-                                                            {a.createdAt ? new Date(a.createdAt).toLocaleString() : 'Unknown'}
-                                                        </Typography>
-                                                    </Box>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                        <StorageIcon sx={{ fontSize: 14, color: 'text.tertiary' }} />
-                                                        <Typography level="body-xs" sx={{ color: 'text.tertiary' }}>
-                                                            {a.size ? (a.size / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown'}
-                                                        </Typography>
-                                                    </Box>
-                                                </Box>
-
-                                                {a.installCommand && (
-                                                    <Box sx={{ mt: 1, bgcolor: 'background.level1', p: 1.5, borderRadius: 'sm', display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                                                        <Typography
-                                                            level="body-xs"
-                                                            sx={{
-                                                                fontFamily: 'monospace',
-                                                                wordBreak: 'break-all',
-                                                                flex: 1,
-                                                                overflowWrap: 'anywhere'
-                                                            }}
-                                                        >
-                                                            {a.installCommand}
-                                                        </Typography>
-                                                        <IconButton size="sm" onClick={() => copyToClipboard(a.installCommand)}>
-                                                            <ContentCopyIcon fontSize="small" />
+                                        return (
+                                            <Card key={a.id} variant="outlined" sx={{ p: 2 }}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <Chip color="primary" size="lg" variant="soft">
+                                                            {a.version}
+                                                        </Chip>
+                                                        <IconButton size="sm" color="danger" variant="plain" onClick={() => deletePackageVersion(a.version)}>
+                                                            <DeleteIcon />
                                                         </IconButton>
                                                     </Box>
-                                                )}
-                                            </Box>
-                                        </Card>
-                                    ))}
+
+                                                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <CalendarTodayIcon sx={{ fontSize: 14, color: 'text.tertiary' }} />
+                                                            <Typography level="body-xs" sx={{ color: 'text.tertiary' }}>
+                                                                {a.createdAt ? new Date(a.createdAt).toLocaleString() : 'Unknown'}
+                                                            </Typography>
+                                                        </Box>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <StorageIcon sx={{ fontSize: 14, color: 'text.tertiary' }} />
+                                                            <Typography level="body-xs" sx={{ color: 'text.tertiary' }}>
+                                                                {a.size ? (a.size / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown'}
+                                                            </Typography>
+                                                        </Box>
+                                                    </Box>
+
+                                                    {primaryInstallCommand && (
+                                                        <Box sx={{ mt: 1, bgcolor: 'background.level1', p: 1.5, borderRadius: 'sm', display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                                            <Typography
+                                                                level="body-xs"
+                                                                sx={{
+                                                                    fontFamily: 'monospace',
+                                                                    wordBreak: 'break-all',
+                                                                    flex: 1,
+                                                                    overflowWrap: 'anywhere'
+                                                                }}
+                                                            >
+                                                                {primaryInstallCommand}
+                                                            </Typography>
+                                                            <IconButton size="sm" onClick={() => copyToClipboard(primaryInstallCommand)}>
+                                                                <ContentCopyIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            </Card>
+                                        )
+                                    })}
                             </Box>
                         ) : (
                             <Typography level="body-sm">{packageDetails.message}</Typography>
