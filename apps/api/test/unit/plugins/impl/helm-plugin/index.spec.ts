@@ -27,6 +27,8 @@ describe('Helm Plugin - Entry Point (Unit)', () => {
     const plugin = createPlugin(context);
     expect(plugin.metadata.key).toBe('helm');
     expect(plugin.metadata.name).toBe('Helm Charts');
+    expect(typeof plugin.listPackages).toBe('function');
+    expect(typeof plugin.getPackage).toBe('function');
   });
 
   it('should have a working ping', async () => {

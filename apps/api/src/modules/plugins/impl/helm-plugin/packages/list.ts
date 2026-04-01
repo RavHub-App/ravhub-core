@@ -19,6 +19,17 @@ import {
 import { buildKey } from '../utils/key-utils';
 import * as yaml from 'js-yaml';
 
+type HelmIndexEntry = {
+  version?: string;
+  created?: string;
+  description?: string;
+  urls?: string[];
+};
+
+type HelmIndex = {
+  entries?: Record<string, HelmIndexEntry[]>;
+};
+
 export function initPackages(context: PluginContext) {
   const { storage } = context;
 
@@ -32,35 +43,135 @@ export function initPackages(context: PluginContext) {
     return normalized || 'repo';
   };
 
-  const listVersions = async (repo: Repository, name: string) => {
-    const versions = new Set<string>();
-
-    const tryLoad = async (...keyParts: string[]) => {
-      const indexKey = buildKey('helm', ...keyParts);
-      try {
-        const content = await storage.get(indexKey);
-        if (content) {
-          const index: any = yaml.load(content.toString());
-          if (index && index.entries && index.entries[name]) {
-            index.entries[name].forEach((e: any) => {
-              if (e.version) versions.add(e.version);
-            });
-          }
-        }
-      } catch (e) {
-        /* ignore */
-      }
-    };
-
-    await tryLoad(repo.id, 'index.yaml');
-    await tryLoad(repo.name, 'index.yaml');
+  const getIndexKeys = (repo: Repository) => {
+    const keys = [
+      buildKey('helm', repo.id, 'index.yaml'),
+      buildKey('helm', repo.name, 'index.yaml'),
+    ];
 
     if (repo.type === 'proxy') {
-      await tryLoad(repo.id, 'proxy', 'file', 'index.yaml');
-      await tryLoad(repo.name, 'proxy', 'file', 'index.yaml');
+      keys.push(
+        buildKey('helm', repo.id, 'proxy', 'file', 'index.yaml'),
+        buildKey('helm', repo.name, 'proxy', 'file', 'index.yaml'),
+      );
     }
 
-    return { ok: true, versions: Array.from(versions) };
+    return keys.filter((value, index, array) => !!value && array.indexOf(value) === index);
+  };
+
+  const getChartEntries = async (repo: Repository) => {
+    const charts = new Map<string, Map<string, HelmIndexEntry>>();
+
+    for (const indexKey of getIndexKeys(repo)) {
+      try {
+        const content = await storage.get(indexKey);
+        if (!content) {
+          continue;
+        }
+
+        const index = yaml.load(content.toString()) as HelmIndex;
+        if (!index?.entries) {
+          continue;
+        }
+
+        for (const [chartName, entries] of Object.entries(index.entries)) {
+          if (!Array.isArray(entries)) {
+            continue;
+          }
+
+          if (!charts.has(chartName)) {
+            charts.set(chartName, new Map<string, HelmIndexEntry>());
+          }
+
+          const versions = charts.get(chartName)!;
+          for (const entry of entries) {
+            const version = entry?.version;
+            if (!version) {
+              continue;
+            }
+            versions.set(version, entry);
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return charts;
+  };
+
+  const selectPreferredEntry = (entries: HelmIndexEntry[]) => {
+    return [...entries].sort((left, right) => {
+      const leftCreated = left.created ? Date.parse(left.created) : NaN;
+      const rightCreated = right.created ? Date.parse(right.created) : NaN;
+
+      if (!Number.isNaN(leftCreated) && !Number.isNaN(rightCreated)) {
+        return rightCreated - leftCreated;
+      }
+
+      return String(right.version || '').localeCompare(
+        String(left.version || ''),
+        undefined,
+        { numeric: true, sensitivity: 'base' },
+      );
+    })[0];
+  };
+
+  const listPackages = async (repo: Repository) => {
+    const charts = await getChartEntries(repo);
+    const packages = Array.from(charts.entries())
+      .map(([name, versions]) => {
+        const preferred = selectPreferredEntry(Array.from(versions.values()));
+        return {
+          name,
+          latestVersion: preferred?.version || 'unknown',
+          updatedAt: preferred?.created || new Date().toISOString(),
+        };
+      })
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return { ok: true, packages };
+  };
+
+  const listVersions = async (repo: Repository, name: string) => {
+    const charts = await getChartEntries(repo);
+    const versions = charts.get(name);
+
+    return { ok: true, versions: Array.from(versions?.keys() || []) };
+  };
+
+  const getPackage = async (repo: Repository, name: string) => {
+    const charts = await getChartEntries(repo);
+    const versions = charts.get(name);
+
+    if (!versions) {
+      return { ok: true, name, artifacts: [] };
+    }
+
+    const artifacts = Array.from(versions.values())
+      .map((entry) => ({
+        version: entry.version || 'unknown',
+        createdAt: entry.created || null,
+        metadata: {
+          description: entry.description,
+          urls: entry.urls || [],
+        },
+      }))
+      .sort((left, right) => {
+        const leftCreated = left.createdAt ? Date.parse(left.createdAt) : NaN;
+        const rightCreated = right.createdAt ? Date.parse(right.createdAt) : NaN;
+
+        if (!Number.isNaN(leftCreated) && !Number.isNaN(rightCreated)) {
+          return rightCreated - leftCreated;
+        }
+
+        return String(right.version).localeCompare(String(left.version), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
+      });
+
+    return { ok: true, name, artifacts };
   };
 
   const getInstallCommand = async (repo: Repository, pkg: any) => {
@@ -89,5 +200,5 @@ export function initPackages(context: PluginContext) {
     ];
   };
 
-  return { listVersions, getInstallCommand };
+  return { listPackages, listVersions, getPackage, getInstallCommand };
 }

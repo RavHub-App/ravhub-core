@@ -85,6 +85,56 @@ describe('HelmPlugin Packages', () => {
     });
   });
 
+  describe('listPackages', () => {
+    it('should list charts with their latest version from index.yaml', async () => {
+      const indexYaml = yaml.dump({
+        entries: {
+          ravhub: [
+            { version: '0.1.0', created: '2026-04-01T10:00:00.000Z' },
+            { version: '0.2.0', created: '2026-04-01T11:00:00.000Z' },
+          ],
+        },
+      });
+
+      mockStorage.get.mockResolvedValue(Buffer.from(indexYaml));
+
+      const repo: Repository = { id: 'r1', name: 'helm-repo' } as any;
+      const result = await packageMethods.listPackages(repo);
+
+      expect(result.ok).toBe(true);
+      expect(result.packages).toEqual([
+        expect.objectContaining({
+          name: 'ravhub',
+          latestVersion: '0.2.0',
+        }),
+      ]);
+    });
+  });
+
+  describe('getPackage', () => {
+    it('should return chart artifacts with concrete versions instead of unknown', async () => {
+      const indexYaml = yaml.dump({
+        entries: {
+          ravhub: [
+            { version: '0.1.0', created: '2026-04-01T10:00:00.000Z' },
+            { version: '0.2.0', created: '2026-04-01T11:00:00.000Z' },
+          ],
+        },
+      });
+
+      mockStorage.get.mockResolvedValue(Buffer.from(indexYaml));
+
+      const repo: Repository = { id: 'r1', name: 'helm-repo' } as any;
+      const result = await packageMethods.getPackage(repo, 'ravhub');
+
+      expect(result.ok).toBe(true);
+      expect(result.artifacts).toEqual([
+        expect.objectContaining({ version: '0.2.0' }),
+        expect.objectContaining({ version: '0.1.0' }),
+      ]);
+    });
+  });
+
   describe('getInstallCommand', () => {
     it('should generate helm install commands', async () => {
       const repo: Repository = { name: 'helm-repo' } as any;

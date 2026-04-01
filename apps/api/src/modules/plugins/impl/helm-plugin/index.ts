@@ -25,7 +25,8 @@ import { initPackages } from './packages/list';
 export function createPlugin(context: PluginContext): IPlugin {
   const { upload, download, handlePut } = initStorage(context);
   const { proxyFetch } = initProxy(context);
-  const { listVersions, getInstallCommand } = initPackages(context);
+  const { listPackages, listVersions, getPackage, getInstallCommand } =
+    initPackages(context);
 
   /**
    * Ping the upstream/proxy target for a repository to test reachability.
@@ -72,7 +73,9 @@ export function createPlugin(context: PluginContext): IPlugin {
     handlePut,
     download,
     proxyFetch,
+    listPackages,
     listVersions,
+    getPackage,
     getInstallCommand,
     authenticate,
     pingUpstream,
