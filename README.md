@@ -49,33 +49,27 @@ RavHub is a **self-hosted package registry** that allows you to host, proxy, and
 
 ## � Quick Start
 
-### Using Helm (Coming Soon 🚧)
-
-_Once the public chart repository is live:_
+### Using Helm
 
 ```bash
-# Add the RavHub Helm repository
-helm repo add ravhub https://charts.ravhub.app
-helm repo update
-
-# Install RavHub
-helm install ravhub ravhub/ravhub \
+# Install RavHub from the workspace chart
+helm install ravhub ../ravhub-charts/ravhub \
   --namespace ravhub \
-  --create-namespace \
-  --set ingress.enabled=true \
-  --set ingress.host=ravhub.example.com
+  --create-namespace
 ```
 
-### Using Docker (Coming Soon 🚧)
-
-_Once the official image is published:_
+### Using Docker
 
 ```bash
-# Start the stack
+# Start the standalone Core stack
 docker compose -f docker-compose.prod.yml up -d
 
-# Access the UI at http://localhost
+# Access the UI at http://localhost:8080
 ```
+
+### Using the Parent Repository Compose
+
+If you want to run the current public stack from the parent repository, use [../docker-compose.yml](../docker-compose.yml). That stack currently includes Core, License Portal, and Docs.
 
 ### First-Time Setup
 
@@ -194,10 +188,10 @@ pnpm --filter api test:e2e
              ┌───────────────┼───────────────┐
              │               │               │
              ▼               ▼               ▼
-     ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-     │  PostgreSQL  │ │    Storage   │ │     Redis    │
-     │    (Data)    │ │  (Artifacts) │ │   (Optional) │
-     └──────────────┘ └──────────────┘ └──────────────┘
+    ┌──────────────┐ ┌──────────────┐
+    │  PostgreSQL  │ │    Storage   │
+    │    (Data)    │ │  (Artifacts) │
+    └──────────────┘ └──────────────┘
 ```
 
 ---
