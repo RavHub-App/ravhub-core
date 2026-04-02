@@ -107,22 +107,17 @@ describe('ReposService (Unit)', () => {
       expect(out[0].accessUrl).toBe('http://custom:5012');
     });
 
-    it('constructs host:port from environment when accessUrl not provided', async () => {
-      process.env.REGISTRY_HOST = 'registry.example';
-      process.env.REGISTRY_PROTOCOL = 'https';
+    it('constructs host:port from docker config when accessUrl not provided', async () => {
       const ent = {
         id: 'r2',
         name: 'r2',
         manager: 'docker',
-        config: { docker: { port: 6020 } },
+        config: { docker: { port: 6020, host: 'registry.example', protocol: 'https' } },
       } as any;
       repo.find.mockResolvedValue([ent]);
 
       const out = await service.findAll();
       expect(out[0].accessUrl).toBe('https://registry.example:6020');
-
-      delete process.env.REGISTRY_HOST;
-      delete process.env.REGISTRY_PROTOCOL;
     });
   });
 

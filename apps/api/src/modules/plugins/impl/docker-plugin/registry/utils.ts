@@ -54,7 +54,7 @@ export function sendAuthChallenge(
   const customHost = repo?.config?.docker?.host;
   const customProto = repo?.config?.docker?.protocol;
 
-  const host = customHost || process.env.REGISTRY_HOST || 'localhost';
+  const host = customHost || 'localhost';
   const proto = customProto || process.env.REGISTRY_PROTOCOL || 'http';
 
   // Get port from the request (since each repo has its own port)

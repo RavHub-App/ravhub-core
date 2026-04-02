@@ -22,8 +22,6 @@ services:
       - API_URL=http://localhost:3000
       # Public host for rewriting URLs in metadata (e.g. tarballs, NuGet resources)
       - API_HOST=localhost:5173
-      # Ensure registry challenge 'service' matches the reachable host from other containers
-      - REGISTRY_HOST=localhost
       # Frontend should call backend on host:3000 (mapped by compose '3000:3000')
       - VITE_API_URL=http://localhost:3000
       # License validation (optional in dev, required in prod)

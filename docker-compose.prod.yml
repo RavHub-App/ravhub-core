@@ -28,7 +28,6 @@ services:
       
       # System
       - LOG_LEVEL=warn
-      - REGISTRY_HOST=0.0.0.0
     volumes:
       # Persistent storage for filesystem backend
       - ravhub_storage:/data/storage

@@ -40,7 +40,7 @@ export async function startRegistryForRepo(
     const { port, needsPersistence } = await selectPort(opts?.port);
 
     const customHost = repo.config?.docker?.host;
-    const host = customHost || process.env.REGISTRY_HOST || 'localhost';
+    const host = customHost || 'localhost';
     const proto =
       repo.config?.docker?.protocol || process.env.REGISTRY_PROTOCOL || 'http';
 

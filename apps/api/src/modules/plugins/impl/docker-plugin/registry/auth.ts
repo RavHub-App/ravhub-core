@@ -96,7 +96,7 @@ export function buildChallengeHeader(
   port?: number,
 ): string {
   const proto = process.env.REGISTRY_PROTOCOL || 'http';
-  const h = host || process.env.REGISTRY_HOST || 'localhost';
+  const h = host || 'localhost';
   const p = port || 5000;
   const realm = `${proto}://${h}:${p}/v2/token`;
   const service = `${h}:${p}`;

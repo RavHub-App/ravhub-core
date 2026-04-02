@@ -21,7 +21,6 @@ services:
       - REDIS_ENABLED=true
       - JWT_SECRET=e2e-test-secret-key-change-in-production
       - LOG_LEVEL=warn
-      - REGISTRY_HOST=0.0.0.0
     volumes:
       - ravhub_storage_e2e:/data/storage
     depends_on:
