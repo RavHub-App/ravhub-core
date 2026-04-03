@@ -137,4 +137,29 @@ describe('MonitorService (Unit)', () => {
     expect(res).toHaveLength(1);
     expect(res[0].name).toBe('pkg');
   });
+
+  it('should infer helm chart version for legacy recent artifacts', async () => {
+    const mockArtifact = {
+      id: 'a2',
+      packageName: 'ravhub-0.1.0.tgz',
+      version: 'unknown',
+      path: 'ravhub-0.1.0.tgz',
+      size: '500',
+      createdAt: new Date(),
+      metadata: {},
+      repository: {
+        id: 'r2',
+        name: 'helm-private',
+        type: 'hosted',
+        manager: 'helm',
+      },
+    };
+    mockArtifactRepo.find.mockResolvedValue([mockArtifact]);
+
+    const res = await service.getRecentArtifacts(1);
+
+    expect(res).toHaveLength(1);
+    expect(res[0].name).toBe('ravhub');
+    expect(res[0].version).toBe('0.1.0');
+  });
 });

@@ -38,15 +38,18 @@ import {
 let storage: any = null;
 let getRepo: any = null;
 let redis: any = null;
+let trackUpload: any = null;
 
 export function initUpload(context: {
   storage: any;
   getRepo?: any;
   redis?: any;
+  trackUpload?: any;
 }) {
   storage = context.storage;
   getRepo = context.getRepo;
   redis = context.redis;
+  trackUpload = context.trackUpload;
 }
 
 export async function initiateUpload(repo: Repository, name: string) {
@@ -125,10 +128,13 @@ export async function finalizeUpload(
     }),
   );
   if (delegatedResult) {
+    if (delegatedResult.ok) {
+      await trackCompletedUpload(repo, name, digest);
+    }
     return delegatedResult;
   }
 
-  return await finalizeHostedUpload(
+  const result = await finalizeHostedUpload(
     storage,
     redis,
     repo,
@@ -137,4 +143,26 @@ export async function finalizeUpload(
     buffer,
     stream,
   );
+
+  if (result?.ok) {
+    await trackCompletedUpload(repo, name, digest || result.id);
+  }
+
+  return result;
+}
+
+async function trackCompletedUpload(
+  repo: Repository,
+  name: string,
+  digest?: string,
+) {
+  if (typeof trackUpload !== 'function') {
+    return;
+  }
+
+  try {
+    await trackUpload(repo, name, digest);
+  } catch {
+    return;
+  }
 }

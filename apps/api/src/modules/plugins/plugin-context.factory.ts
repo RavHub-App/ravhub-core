@@ -18,12 +18,14 @@ import { Artifact } from '../../entities/artifact.entity';
 import { RepositoryEntity } from '../../entities/repository.entity';
 import { buildKey, normalizeStorageKey } from '../../storage/key-utils';
 import type { AuditService } from '../audit/audit.service';
+import type { MonitorService } from '../monitor/monitor.service';
 
 type PluginContextDependencies = {
   storage: unknown;
   redis: unknown;
   redlock: unknown;
   auditService: AuditService;
+  monitorService: MonitorService;
   logger: Logger;
 };
 
@@ -243,6 +245,20 @@ async function indexArtifactFromPluginContext(
   }
 }
 
+async function trackRepositoryMetric(
+  dependencies: PluginContextDependencies,
+  prefix: 'downloads' | 'uploads',
+  repo: IndexedRepository,
+) {
+  try {
+    await dependencies.monitorService.increment(`${prefix}.${repo.id}`);
+  } catch (error) {
+    dependencies.logger.warn(
+      `Failed to track ${prefix} for ${repo.name}: ${String(error)}`,
+    );
+  }
+}
+
 export function createPluginContext(dependencies: PluginContextDependencies) {
   return {
     storage: dependencies.storage,
@@ -262,5 +278,9 @@ export function createPluginContext(dependencies: PluginContextDependencies) {
         userId,
         artifactPath,
       ),
+    trackDownload: async (repo: IndexedRepository) =>
+      trackRepositoryMetric(dependencies, 'downloads', repo),
+    trackUpload: async (repo: IndexedRepository) =>
+      trackRepositoryMetric(dependencies, 'uploads', repo),
   };
 }

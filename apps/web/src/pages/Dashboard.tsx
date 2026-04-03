@@ -59,6 +59,10 @@ export default function Dashboard() {
         ? Math.round(proxyMetrics.durationTotal / totalProxyReqs)
         : 0
 
+    const formatArtifactVersion = (value: unknown) => {
+        return typeof value === 'string' ? value : ''
+    }
+
 
     return (
         <Box>
@@ -291,7 +295,7 @@ export default function Dashboard() {
                                             </Typography>
                                             {artifact.version && (
                                                 <Typography level="body-xs" color="neutral" sx={{ whiteSpace: 'nowrap' }}>
-                                                    v{artifact.version}
+                                                    {formatArtifactVersion(artifact.version)}
                                                 </Typography>
                                             )}
                                         </Box>

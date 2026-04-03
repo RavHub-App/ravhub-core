@@ -166,6 +166,7 @@ export function createHelmPutHandler(context: PluginContext) {
             !req.buffer
         ) {
             const key = buildKey('helm', repo.id, filePath);
+            const chartIdentity = inferChartIdentity(filePath);
 
             try {
                 const saveResult = (await context.storage.saveStream(
@@ -175,13 +176,15 @@ export function createHelmPutHandler(context: PluginContext) {
                 await updateIndexYaml(
                     context,
                     repo,
-                    inferChartIdentity(filePath),
+                    chartIdentity,
                     filePath,
                 );
                 return {
                     ok: true,
                     id: filePath,
                     metadata: {
+                        name: chartIdentity.name,
+                        version: chartIdentity.version,
                         storageKey: key,
                         size: saveResult.size,
                         contentHash: saveResult.contentHash,

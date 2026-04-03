@@ -97,7 +97,7 @@ describe('Dashboard', () => {
         expect(screen.getAllByText('npm-hosted').length).toBeGreaterThan(0);
 
         expect(screen.getAllByText('50').length).toBeGreaterThan(0); // Downloads in activity table
-        expect(screen.getByText(/^v1.0.0$/)).toBeInTheDocument();
+        expect(screen.getByText(/^1.0.0$/)).toBeInTheDocument();
     });
 
     it('handles successful metric fetch with empty values', async () => {

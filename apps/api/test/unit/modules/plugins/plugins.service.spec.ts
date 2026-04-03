@@ -14,6 +14,7 @@
 
 import { PluginsService } from 'src/modules/plugins/plugins.service';
 import AppDataSource from 'src/data-source';
+import { MonitorService } from 'src/modules/monitor/monitor.service';
 
 jest.mock('src/data-source', () => ({
   __esModule: true,
@@ -62,6 +63,7 @@ describe('PluginsService - indexArtifact (Unit)', () => {
       mockAudit,
       mockRedis,
       mockRedlock,
+      mockMonitor as MonitorService,
     );
   });
 
@@ -177,6 +179,17 @@ describe('PluginsService - indexArtifact (Unit)', () => {
       const repo = await context.getRepo('myrepo');
       expect(repo!.name).toBe('myrepo');
     });
+
+    it('tracks downloads and uploads via monitor service', async () => {
+      const context = (service as any).getPluginContext();
+      const repo = { id: 'r1', name: 'myrepo' };
+
+      await context.trackDownload(repo);
+      await context.trackUpload(repo);
+
+      expect(mockMonitor.increment).toHaveBeenNthCalledWith(1, 'downloads.r1');
+      expect(mockMonitor.increment).toHaveBeenNthCalledWith(2, 'uploads.r1');
+    });
   });
 
   describe('listing and conformance', () => {
@@ -196,7 +209,7 @@ describe('PluginsService - indexArtifact (Unit)', () => {
     it('should check plugin conformance', () => {
       const validPlugin = {
         metadata: { key: 'p1' },
-        upload: () => {},
+        upload: () => { },
       } as any;
       const invalidPlugin = { metadata: { key: 'p2' } } as any;
 

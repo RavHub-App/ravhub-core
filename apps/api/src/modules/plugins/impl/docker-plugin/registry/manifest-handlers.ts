@@ -74,6 +74,11 @@ type ManifestPlugin = {
     name: string,
     tag: string,
   ) => Promise<void>;
+  trackUpload?: (
+    repo: Repository,
+    name: string,
+    tag: string,
+  ) => Promise<void>;
 };
 
 type ManifestContext = {
@@ -132,6 +137,14 @@ export async function handleManifestRoute(context: unknown): Promise<boolean> {
     }
     const out = await plugin.putManifest?.(repo, name, tag, manifest);
     if (out?.ok) {
+      try {
+        await plugin.trackUpload?.(repo, name, tag);
+      } catch (error) {
+        console.error(
+          '[REGISTRY] Failed to track upload:',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       const manifestDigest = out?.metadata?.digest;
       if (manifestDigest) {
         res.setHeader('Docker-Content-Digest', manifestDigest);

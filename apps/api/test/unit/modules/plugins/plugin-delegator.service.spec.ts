@@ -17,6 +17,7 @@ import { PluginsService } from 'src/modules/plugins/plugins.service';
 import { LicenseService } from 'src/modules/license/license.service';
 import { RedlockService } from 'src/modules/redis/redlock.service';
 import { ArtifactIndexService } from 'src/modules/plugins/artifact-index.service';
+import { MonitorService } from 'src/modules/monitor/monitor.service';
 
 describe('PluginDelegatorService (Unit)', () => {
   let service: PluginDelegatorService;
@@ -24,6 +25,7 @@ describe('PluginDelegatorService (Unit)', () => {
   let licenseService: jest.Mocked<LicenseService>;
   let redlockService: jest.Mocked<RedlockService>;
   let artifactIndexService: jest.Mocked<ArtifactIndexService>;
+  let monitorService: jest.Mocked<MonitorService>;
 
   beforeEach(() => {
     pluginsService = {
@@ -43,11 +45,16 @@ describe('PluginDelegatorService (Unit)', () => {
       indexArtifact: jest.fn().mockResolvedValue(undefined),
     } as any;
 
+    monitorService = {
+      increment: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
     service = new PluginDelegatorService(
       pluginsService,
       licenseService,
       redlockService,
       artifactIndexService,
+      monitorService,
     );
   });
 
@@ -106,6 +113,7 @@ describe('PluginDelegatorService (Unit)', () => {
 
       expect(result.ok).toBe(true);
       expect(mockPlugin.handlePut).toHaveBeenCalled();
+      expect(monitorService.increment).toHaveBeenCalledWith('uploads.repo1');
     });
 
     it('should throw if repository type not hosted or group', async () => {
@@ -166,7 +174,7 @@ describe('PluginDelegatorService (Unit)', () => {
       const mockPlugin = {
         upload: jest.fn().mockResolvedValue({ ok: true }),
       };
-      const repo = { manager: 'npm', name: 'test-repo' };
+      const repo = { id: 'repo-upload', manager: 'npm', name: 'test-repo' };
       pluginsService.list.mockReturnValue([{ key: 'npm' }] as any);
       pluginsService.getInstance.mockReturnValue(mockPlugin as any);
 
@@ -174,6 +182,7 @@ describe('PluginDelegatorService (Unit)', () => {
 
       expect(result.ok).toBe(true);
       expect(mockPlugin.upload).toHaveBeenCalled();
+      expect(monitorService.increment).toHaveBeenCalledWith('uploads.repo-upload');
     });
 
     it('should return error if plugin not found', async () => {
@@ -217,7 +226,7 @@ describe('PluginDelegatorService (Unit)', () => {
       const mockPlugin = {
         download: jest.fn().mockResolvedValue({ ok: true }),
       };
-      const repo = { manager: 'npm', name: 'test-repo' };
+      const repo = { id: 'repo-download', manager: 'npm', name: 'test-repo' };
       pluginsService.list.mockReturnValue([{ key: 'npm' }] as any);
       pluginsService.getInstance.mockReturnValue(mockPlugin as any);
 
@@ -225,6 +234,7 @@ describe('PluginDelegatorService (Unit)', () => {
 
       expect(result.ok).toBe(true);
       expect(mockPlugin.download).toHaveBeenCalledWith(repo, 'package', '1.0');
+      expect(monitorService.increment).toHaveBeenCalledWith('downloads.repo-download');
     });
 
     it('should return error if plugin not found', async () => {

@@ -233,6 +233,27 @@ describe('HelmPlugin Storage', () => {
 
       expect(result.ok).toBe(true);
     });
+
+    it('should include chart identity metadata for stream uploads', async () => {
+      const req = {
+        async *[Symbol.asyncIterator]() {
+          yield Buffer.from('chart data');
+        },
+      };
+
+      const result = await storageMethods.handlePut(
+        repo,
+        'ravhub-0.1.0.tgz',
+        req,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockContext.storage.saveStream).toHaveBeenCalled();
+      expect(result.metadata).toMatchObject({
+        name: 'ravhub',
+        version: '0.1.0',
+      });
+    });
   });
 
   describe('download', () => {

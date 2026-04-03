@@ -55,6 +55,7 @@ describe('DockerPlugin Upload Storage', () => {
   let mockStorage: any;
   let mockGetRepo: any;
   let mockRedis: any;
+  let mockTrackUpload: any;
 
   beforeEach(() => {
     mockStorage = {
@@ -69,6 +70,7 @@ describe('DockerPlugin Upload Storage', () => {
     mockRedis = {
       isEnabled: jest.fn().mockReturnValue(false), // Default to memory/file mode
     };
+    mockTrackUpload = jest.fn().mockResolvedValue(undefined);
 
     // Reset fs mocks
     (fs.existsSync as jest.Mock).mockReturnValue(false);
@@ -87,6 +89,7 @@ describe('DockerPlugin Upload Storage', () => {
       storage: mockStorage,
       getRepo: mockGetRepo,
       redis: mockRedis,
+      trackUpload: mockTrackUpload,
     });
     uploadTargets.clear();
     jest.clearAllMocks();
@@ -319,6 +322,7 @@ describe('DockerPlugin Upload Storage', () => {
       );
       expect(result.ok).toBe(true);
       expect(result.id).toBe(contentDigest);
+      expect(mockTrackUpload).toHaveBeenCalledWith(repo, 'img', contentDigest);
     });
 
     it('should calculate digest if not provided', async () => {
@@ -340,6 +344,7 @@ describe('DockerPlugin Upload Storage', () => {
       );
       expect(result.ok).toBe(true);
       expect(result.id).toContain('sha256:');
+      expect(mockTrackUpload).toHaveBeenCalledWith(repo, 'img', result.id);
     });
 
     it('should handle storage errors', async () => {
@@ -362,6 +367,7 @@ describe('DockerPlugin Upload Storage', () => {
       );
       expect(result.ok).toBe(false);
       expect(result.message).toContain('save-fail');
+      expect(mockTrackUpload).not.toHaveBeenCalled();
     });
 
     it('should delegate group finalize stream uploads as buffered content', async () => {

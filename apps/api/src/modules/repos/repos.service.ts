@@ -32,6 +32,39 @@ import { Artifact } from '../../entities/artifact.entity';
 import * as fs from 'fs';
 import * as path from 'path';
 
+function hasExplicitPort(host: string) {
+  if (!host) {
+    return false;
+  }
+
+  if (host.startsWith('[') && host.includes(']:')) {
+    return true;
+  }
+
+  const colonCount = (host.match(/:/g) || []).length;
+  if (colonCount === 0) {
+    return false;
+  }
+
+  if (colonCount > 1) {
+    return false;
+  }
+
+  return /:\d+$/.test(host);
+}
+
+function buildDockerAccessUrl(
+  protocol: string,
+  host: string,
+  port?: number,
+) {
+  if (!port || hasExplicitPort(host)) {
+    return `${protocol}://${host}`;
+  }
+
+  return `${protocol}://${host}:${port}`;
+}
+
 @Injectable()
 export class ReposService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ReposService.name);
@@ -202,12 +235,7 @@ export class ReposService implements OnModuleInit, OnModuleDestroy {
           ent.config?.docker?.protocol ||
           process.env.REGISTRY_PROTOCOL ||
           'http';
-
-        // If a custom host is provided, we respect exactly what the user put there (which might include a port)
-        // If no custom host, we use the default host and the auto-assigned docker port.
-        const accessUrl = customHost
-          ? `${proto}://${host}`
-          : `${proto}://${host}:${dockerPort}`;
+        const accessUrl = buildDockerAccessUrl(proto, host, dockerPort);
 
         return {
           id: ent.id,

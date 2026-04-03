@@ -125,14 +125,12 @@ export function createArtifactIndexer(context: PluginContext) {
 export function createDownloadTracker(context: PluginContext) {
   return async (repo: Repository, name: string, tag: string) => {
     try {
-      const key = buildKey(
-        'stats',
-        repo.id,
-        'downloads',
-        name,
-        tag,
-        Date.now().toString(),
-      );
+      if (context.trackDownload) {
+        await context.trackDownload(repo, `${name}:${tag}`);
+        return;
+      }
+
+      const key = buildKey('stats', repo.id, 'downloads', name, tag, Date.now().toString());
       await context.storage.save(
         key,
         Buffer.from(
@@ -147,6 +145,16 @@ export function createDownloadTracker(context: PluginContext) {
       );
     } catch (error) {
       console.error('[TRACK DOWNLOAD ERROR]', error);
+    }
+  };
+}
+
+export function createUploadTracker(context: PluginContext) {
+  return async (repo: Repository, name: string, tag: string) => {
+    try {
+      await context.trackUpload?.(repo, `${name}:${tag}`);
+    } catch (error) {
+      console.error('[TRACK UPLOAD ERROR]', error);
     }
   };
 }

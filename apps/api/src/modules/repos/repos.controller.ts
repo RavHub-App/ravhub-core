@@ -815,7 +815,13 @@ export class ReposController {
       const plugin = this.pluginManager.getPluginForRepo(r);
       if (plugin) {
         if (typeof plugin.download === 'function') {
-          const result = await plugin.download(r, path);
+          const result = await this.pluginManager.download(
+            r,
+            path,
+            undefined,
+            new Set(),
+            req?.user?.id,
+          );
           if (result.ok && result.url) {
             if (result.url.startsWith('file://')) {
               const p = result.url.replace('file://', '');

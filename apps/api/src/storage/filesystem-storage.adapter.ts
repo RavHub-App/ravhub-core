@@ -16,11 +16,21 @@ import { StorageAdapter, SaveResult } from './storage.interface';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { PassThrough } from 'stream';
-import { pipeline } from 'stream/promises';
+import { once } from 'events';
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function waitForWritableEvent(
+  stream: fs.WriteStream,
+  event: 'drain' | 'finish',
+  errorPromise: Promise<never>,
+) {
+  await Promise.race([
+    once(stream, event),
+    errorPromise,
+  ]);
 }
 
 export class FilesystemStorageAdapter implements StorageAdapter {
@@ -68,8 +78,11 @@ export class FilesystemStorageAdapter implements StorageAdapter {
     key: string,
     stream: NodeJS.ReadableStream,
   ): Promise<SaveResult & { contentHash?: string; size?: number }> {
+    let writeStream: fs.WriteStream | null = null;
+    let dest = '';
+
     try {
-      const dest = path.join(this.base, key);
+      dest = path.join(this.base, key);
       const dir = path.dirname(dest);
       if (!this.knownDirs.has(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -78,21 +91,35 @@ export class FilesystemStorageAdapter implements StorageAdapter {
 
       const hash = crypto.createHash('sha256');
       let size = 0;
-      const writeStream = fs.createWriteStream(dest);
+      writeStream = fs.createWriteStream(dest);
+      const writeStreamError = new Promise<never>((_, reject) => {
+        writeStream!.once('error', reject);
+      });
+      writeStreamError.catch(() => undefined);
 
-      // We use a PassThrough to split the stream to both hash and file
-      const pass = new PassThrough();
-
-      pass.on('data', (chunk: Buffer | string) => {
+      for await (const chunk of stream as AsyncIterable<Buffer | string>) {
         const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         hash.update(chunkBuffer);
         size += chunkBuffer.length;
-      });
 
-      await pipeline(stream, pass, writeStream);
+        if (!writeStream.write(chunkBuffer)) {
+          await waitForWritableEvent(writeStream, 'drain', writeStreamError);
+        }
+      }
+
+      writeStream.end();
+      await waitForWritableEvent(writeStream, 'finish', writeStreamError);
 
       return { ok: true, path: dest, contentHash: hash.digest('hex'), size };
     } catch (error) {
+      if (writeStream && !writeStream.destroyed) {
+        writeStream.destroy();
+      }
+
+      if (dest && fs.existsSync(dest)) {
+        fs.rmSync(dest, { force: true });
+      }
+
       return { ok: false, message: getErrorMessage(error) };
     }
   }

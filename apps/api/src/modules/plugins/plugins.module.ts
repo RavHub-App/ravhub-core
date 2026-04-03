@@ -24,9 +24,10 @@ import { UpstreamPingService } from './upstream-ping.service';
 import { ArtifactIndexService } from './artifact-index.service';
 import { PluginDelegatorService } from './plugin-delegator.service';
 import { ProxyCacheJobService } from './proxy-cache-job.service';
+import { MonitorModule } from '../monitor/monitor.module';
 
 @Module({
-  imports: [AuditModule, forwardRef(() => LicenseModule), StorageModule],
+  imports: [AuditModule, forwardRef(() => LicenseModule), StorageModule, MonitorModule],
   providers: [
     PluginsService,
     ProxyCacheService,
@@ -47,4 +48,4 @@ import { ProxyCacheJobService } from './proxy-cache-job.service';
     ProxyCacheJobService,
   ],
 })
-export class PluginsModule {}
+export class PluginsModule { }

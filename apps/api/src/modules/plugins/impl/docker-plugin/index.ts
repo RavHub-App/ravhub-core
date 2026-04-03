@@ -79,6 +79,7 @@ import {
   createRegistryStarter,
   createRepoResolver,
   createTokenRequestHandler,
+  createUploadTracker,
 } from './plugin-support';
 
 /**
@@ -89,11 +90,12 @@ export function createDockerPlugin(context: PluginContext) {
   const getRepo = createRepoResolver(context);
   const indexArtifact = createArtifactIndexer(context);
   const trackDownload = createDownloadTracker(context);
+  const trackUpload = createUploadTracker(context);
   const handleTokenRequest = createTokenRequestHandler();
 
   // Initialize all modules with their dependencies
   initProxyFetch({ ...context, indexArtifact });
-  initUpload({ storage, getRepo, redis });
+  initUpload({ storage, getRepo, redis, trackUpload });
   initDownload({ storage, proxyFetch, getRepo });
   initManifest({ storage, getRepo, getBlob, proxyFetch, indexArtifact });
   initPackages({ storage, getRepo, proxyFetch });
@@ -149,6 +151,7 @@ export function createDockerPlugin(context: PluginContext) {
     // Ping upstream/proxy target to check reachability
     pingUpstream,
     trackDownload,
+    trackUpload,
     getRepo,
     indexArtifact,
 

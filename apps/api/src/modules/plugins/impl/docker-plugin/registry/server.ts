@@ -19,6 +19,35 @@ import type { Repository } from '../utils/types';
 // Storage for active registry servers
 const registryServers = new Map<string, any>();
 
+function hasExplicitPort(host: string) {
+  if (!host) {
+    return false;
+  }
+
+  if (host.startsWith('[') && host.includes(']:')) {
+    return true;
+  }
+
+  const colonCount = (host.match(/:/g) || []).length;
+  if (colonCount === 0) {
+    return false;
+  }
+
+  if (colonCount > 1) {
+    return false;
+  }
+
+  return /:\d+$/.test(host);
+}
+
+function buildAccessUrl(protocol: string, host: string, port: number) {
+  if (hasExplicitPort(host)) {
+    return `${protocol}://${host}`;
+  }
+
+  return `${protocol}://${host}:${port}`;
+}
+
 /**
  * Start a Docker registry server for a repository
  */
@@ -43,13 +72,7 @@ export async function startRegistryForRepo(
     const host = customHost || 'localhost';
     const proto =
       repo.config?.docker?.protocol || process.env.REGISTRY_PROTOCOL || 'http';
-
-    // Same logic as in frontend-facing services:
-    // If a custom host (manual override) is provided, we use it exactly as is (it may or may not include a port).
-    // If no custom host, we use the auto-selected port.
-    const accessUrl = customHost
-      ? `${proto}://${host}`
-      : `${proto}://${host}:${port}`;
+    const accessUrl = buildAccessUrl(proto, host, port);
 
     // Create a small HTTP server and wire the minimal registry endpoints
     const http = require('http');

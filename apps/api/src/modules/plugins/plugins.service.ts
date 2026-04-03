@@ -21,6 +21,7 @@ import { AuditService } from '../audit/audit.service';
 import { RedisService } from '../redis/redis.service';
 import { RedlockService } from '../redis/redlock.service';
 import { createPluginContext } from './plugin-context.factory';
+import { MonitorService } from '../monitor/monitor.service';
 
 import npmPlugin from './impl/npm-plugin';
 import pypiPlugin from './impl/pypi-plugin';
@@ -45,7 +46,8 @@ export class PluginsService implements OnModuleInit {
     private readonly auditService: AuditService,
     private readonly redis: RedisService,
     private readonly redlock: RedlockService,
-  ) {}
+    private readonly monitorService: MonitorService,
+  ) { }
 
   async onModuleInit() {
     if (!AppDataSource.isInitialized) {
@@ -155,6 +157,7 @@ export class PluginsService implements OnModuleInit {
       redis: this.redis.getClient(),
       redlock: this.redlock,
       auditService: this.auditService,
+      monitorService: this.monitorService,
       logger: this.logger,
     });
   }

@@ -61,6 +61,8 @@ export interface PluginContext {
     result: any,
     userId?: string,
   ) => Promise<void>;
+  trackDownload?: (repo: Repository, packageName?: string) => Promise<void>;
+  trackUpload?: (repo: Repository, packageName?: string) => Promise<void>;
   redis?: any;
 }
 

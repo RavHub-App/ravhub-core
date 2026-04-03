@@ -18,6 +18,7 @@ import { LicenseService } from '../license/license.service';
 import { RedlockService } from '../redis/redlock.service';
 import { RepositoryEntity } from '../../entities/repository.entity';
 import { ArtifactIndexService } from './artifact-index.service';
+import { MonitorService } from '../monitor/monitor.service';
 
 @Injectable()
 export class PluginDelegatorService {
@@ -28,7 +29,32 @@ export class PluginDelegatorService {
     private readonly licenseService: LicenseService,
     private readonly redlock: RedlockService,
     private readonly artifactIndex: ArtifactIndexService,
-  ) {}
+    private readonly monitorService: MonitorService,
+  ) { }
+
+  private async trackMetric(prefix: 'downloads' | 'uploads', repoId?: string) {
+    if (!repoId) {
+      return;
+    }
+
+    try {
+      await this.monitorService.increment(`${prefix}.${repoId}`);
+    } catch {
+      this.logger.warn(`Failed to track ${prefix} for repository ${repoId}`);
+    }
+  }
+
+  private isSuccessfulDownloadLike(result: any) {
+    if (!result || result.ok === false) {
+      return false;
+    }
+
+    if (typeof result.status === 'number' && result.status >= 400) {
+      return false;
+    }
+
+    return true;
+  }
 
   getPluginForRepo(repo: RepositoryEntity) {
     const manager = (repo as any).manager || repo.config?.registry || 'npm';
@@ -76,8 +102,12 @@ export class PluginDelegatorService {
         if (repo.type !== 'group') {
           this.artifactIndex
             .indexArtifact(repo, result, userId, path)
-            .catch(() => {});
+            .catch(() => { });
         }
+      }
+
+      if (result?.ok) {
+        await this.trackMetric('uploads', repo.id);
       }
 
       return result;
@@ -103,8 +133,12 @@ export class PluginDelegatorService {
         if (repo.type !== 'group') {
           this.artifactIndex
             .indexArtifact(repo, result, userId)
-            .catch(() => {});
+            .catch(() => { });
         }
+      }
+
+      if (result?.ok) {
+        await this.trackMetric('uploads', repo.id);
       }
 
       return result;
@@ -127,7 +161,12 @@ export class PluginDelegatorService {
       return { ok: false, message: 'Plugin does not support download' };
     }
 
-    return plugin.download(repo, name, version);
+    const result = await plugin.download(repo, name, version);
+    if (this.isSuccessfulDownloadLike(result)) {
+      await this.trackMetric('downloads', repo.id);
+    }
+
+    return result;
   }
 
   async listVersions(
@@ -157,7 +196,12 @@ export class PluginDelegatorService {
       return { ok: false, message: 'Plugin does not support proxyFetch' };
     }
 
-    return plugin.proxyFetch(repo, url);
+    const result = await plugin.proxyFetch(repo, url);
+    if (this.isSuccessfulDownloadLike(result)) {
+      await this.trackMetric('downloads', repo.id);
+    }
+
+    return result;
   }
 
   async authenticate(

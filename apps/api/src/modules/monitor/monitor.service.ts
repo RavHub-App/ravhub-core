@@ -20,9 +20,76 @@ import { RepositoryEntity } from '../../entities/repository.entity';
 import { Artifact } from '../../entities/artifact.entity';
 import AppDataSource from '../../data-source';
 
+type RecentArtifactDisplay = {
+  name?: string;
+  version?: string;
+};
+
+function parseHelmChartIdentity(value?: string | null): RecentArtifactDisplay {
+  if (!value) {
+    return {};
+  }
+
+  const match = value.match(/^(.+)-((?:\d+\.){2}\d+(?:[-+][A-Za-z0-9.-]+)?)\.tgz$/);
+  if (!match) {
+    return {};
+  }
+
+  return {
+    name: match[1],
+    version: match[2],
+  };
+}
+
+function firstResolvedHelmIdentity(
+  ...candidates: Array<string | null | undefined>
+): RecentArtifactDisplay {
+  for (const candidate of candidates) {
+    const resolved = parseHelmChartIdentity(candidate);
+    if (resolved.name || resolved.version) {
+      return resolved;
+    }
+  }
+
+  return {};
+}
+
+function resolveRecentArtifactDisplay(artifact: Artifact): RecentArtifactDisplay {
+  const manager = artifact.repository?.manager || artifact.manager;
+  const metadata = artifact.metadata || {};
+  const explicitName = metadata.name || artifact.packageName;
+  const explicitVersion = metadata.version || artifact.version;
+
+  if (manager !== 'helm') {
+    return {
+      name: explicitName,
+      version: explicitVersion,
+    };
+  }
+
+  if (explicitVersion && explicitVersion !== 'unknown') {
+    return {
+      name: explicitName,
+      version: explicitVersion,
+    };
+  }
+
+  const inferredIdentity = firstResolvedHelmIdentity(
+    artifact.packageName,
+    artifact.path,
+    metadata.path,
+    metadata.storageKey,
+  );
+
+  return {
+    name: inferredIdentity.name || explicitName,
+    version: inferredIdentity.version || explicitVersion,
+  };
+}
+
 @Injectable()
 export class MonitorService {
-  constructor(@InjectRepository(Metric) private repo: Repository<Metric>) {}
+  constructor(@InjectRepository(Metric) private repo: Repository<Metric>) { }
 
   async getBasicMetrics() {
     // sample: compute simple metrics
@@ -204,9 +271,8 @@ export class MonitorService {
       });
 
       return artifacts.map((a) => ({
+        ...resolveRecentArtifactDisplay(a),
         id: a.id,
-        name: a.packageName,
-        version: a.version,
         repository: {
           id: a.repository?.id,
           name: a.repository?.name,
