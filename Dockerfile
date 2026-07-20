@@ -2,8 +2,8 @@ FROM node:22-slim AS build-api
 
 WORKDIR /workspace
 
-# Install pnpm and NestJS CLI globally (only once)
-RUN npm install -g pnpm@latest @nestjs/cli
+# Install pnpm v11 (latest) and NestJS CLI globally (only once)
+RUN npm install -g pnpm@11 @nestjs/cli
 
 # Install small utilities used by nest/watch script inside the container and postgresql-client for pg_dump
 RUN apt-get update && apt-get install -y procps postgresql-client nginx --no-install-recommends && rm -rf /var/lib/apt/lists/*
@@ -15,7 +15,7 @@ COPY apps/web/package.json ./apps/web/package.json
 
 # Install all workspace dependencies using pnpm (single install for entire workspace)
 # This installs dependencies for both api and web packages
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy rest of repo (source code)
 COPY apps/api ./apps/api
@@ -23,7 +23,7 @@ COPY scripts ./scripts
 
 # Reinstall after copying repo to ensure workspace packages (and types) are available for the apps/api runtime.
 # This avoids cases where a cached layer didn't include certain subpackage changes.
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Set working directory to the API app
 WORKDIR /workspace/apps/api
@@ -48,14 +48,14 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
-# Install dependencies with approved builds for pnpm 10+ compatibility
-RUN npm install -g pnpm@latest && pnpm install
+# Install workspace dependencies
+RUN npm install -g pnpm@11 && CI=true pnpm install
 
 # Copy rest of source code
 COPY apps/web ./apps/web
 
 # Reinstall to link workspace packages
-RUN pnpm install
+RUN CI=true pnpm install
 
 # Build web
 RUN pnpm --filter web build
@@ -72,7 +72,7 @@ WORKDIR /workspace
 
 # Install dependencies and setup non-root user permissions
 RUN apt-get update && apt-get install -y procps postgresql-client nginx --no-install-recommends \
-    && npm install -g pnpm@latest \
+    && npm install -g pnpm@11 \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /data/storage /var/log/nginx /var/lib/nginx /workspace/api /workspace/web \
     && sed -i 's|/run/nginx.pid|/tmp/nginx.pid|g' /etc/nginx/nginx.conf \
@@ -97,6 +97,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Environment variables
 ENV NODE_ENV=production
+ENV CI=true
 ENV PORT=3000
 ENV FRONTEND_PORT=80
 ENV STORAGE_PATH=/data/storage
