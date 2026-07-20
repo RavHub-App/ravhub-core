@@ -24,5 +24,8 @@
   "dependencies": {
     "axios": "^1.13.2",
     "form-data": "^4.0.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@nestjs/core", "esbuild", "sqlite3", "unrs-resolver"]
   }
 }
