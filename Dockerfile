@@ -13,9 +13,9 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
-# Install all workspace dependencies using pnpm (single install for entire workspace)
+# Install all workspace dependencies using pnpm v11 (single install for entire workspace)
 # This installs dependencies for both api and web packages
-RUN pnpm install
+RUN npm install -g pnpm@11 && CI=true pnpm install
 
 # Copy rest of repo (source code)
 COPY apps/api ./apps/api
@@ -23,7 +23,7 @@ COPY scripts ./scripts
 
 # Reinstall after copying repo to ensure workspace packages (and types) are available for the apps/api runtime.
 # This avoids cases where a cached layer didn't include certain subpackage changes.
-RUN pnpm install
+RUN CI=true pnpm install
 
 # Set working directory to the API app
 WORKDIR /workspace/apps/api
