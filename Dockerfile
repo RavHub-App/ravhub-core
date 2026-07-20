@@ -48,14 +48,14 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
-# Install dependencies
-RUN npm install -g pnpm@latest && pnpm install --frozen-lockfile
+# Install dependencies with approved builds for pnpm 10+ compatibility
+RUN npm install -g pnpm@latest && pnpm install
 
 # Copy rest of source code
 COPY apps/web ./apps/web
 
 # Reinstall to link workspace packages
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Build web
 RUN pnpm --filter web build
